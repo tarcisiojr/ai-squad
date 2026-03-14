@@ -1,0 +1,16 @@
+# Ferramentas disponíveis para o agente dev-web
+tools:
+  - name: html
+    description: "Criação e edição de HTML"
+  - name: css
+    description: "Estilização com CSS/SCSS"
+  - name: javascript
+    description: "Programação JavaScript"
+  - name: typescript
+    description: "Programação TypeScript"
+  - name: react
+    description: "Componentes React"
+  - name: jest
+    description: "Testes com Jest"
+  - name: playwright
+    description: "Testes E2E com Playwright"

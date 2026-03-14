@@ -1,0 +1,206 @@
+"""Testes de integração para fluxo completo."""
+
+import importlib
+import inspect
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
+from src.models import DemandState, AgentStatus
+from src.orchestrator.engine import OrchestrationEngine
+from src.orchestrator.state import StateManager
+from src.barramento.cli import CLIMessageBus
+from src.factory import PlatformConfig, PlatformFactory
+from src.adapters.interface import AIAgentAdapter
+from src.barramento.interface import MessageBus
+
+
+# Mock adapter para testes de integração
+class IntegrationMockAdapter(AIAgentAdapter):
+    """Adapter mock que simula execução de agentes."""
+
+    def __init__(self):
+        self._status = AgentStatus.IDLE
+        self._callback = None
+
+    async def run(self, prompt: str, context: dict) -> str:
+        self._status = AgentStatus.RUNNING
+        resultado = f"Resultado para: {context.get('agent_name', 'unknown')}"
+        self._status = AgentStatus.DONE
+        return resultado
+
+    async def ask(self, question: str) -> str:
+        return "resposta integração"
+
+    def status(self) -> AgentStatus:
+        return self._status
+
+    def on_human_needed(self, callback):
+        self._callback = callback
+
+
+class TestFluxoCompleto:
+    """Teste de integração: fluxo completo idle → done."""
+
+    @pytest.mark.asyncio
+    async def test_ciclo_completo_com_cli_bus(self, tmp_path):
+        """Verifica fluxo completo com CLIMessageBus + mock adapter."""
+        adapter = IntegrationMockAdapter()
+        bus = CLIMessageBus()
+        state_mgr = StateManager(state_dir=str(tmp_path / "state"))
+
+        engine = OrchestrationEngine(adapter, bus, state_mgr)
+
+        demand_id = "integ-001"
+
+        # Verifica estado inicial
+        assert engine.get_state(demand_id) == DemandState.IDLE
+
+        # Executa transições manuais (simulando ciclo)
+        engine.transition(demand_id, DemandState.PO_WORKING)
+        assert engine.get_state(demand_id) == DemandState.PO_WORKING
+
+        # PO produz resultado
+        resultado = await engine.dispatch_agent(
+            demand_id, "po", "Nova feature", {"repo": "test"}
+        )
+        assert "po" in resultado
+
+        engine.transition(demand_id, DemandState.AWAITING_PLAN_APPROVAL)
+        engine.transition(demand_id, DemandState.DEV_WORKING)
+
+        # Dev produz resultado
+        resultado_dev = await engine.dispatch_agent(
+            demand_id, "dev-orchestrator", "Implementar", {}
+        )
+        assert "dev-orchestrator" in resultado_dev
+
+        engine.transition(demand_id, DemandState.AWAITING_PR_APPROVAL)
+        engine.transition(demand_id, DemandState.CI_RUNNING)
+        engine.transition(demand_id, DemandState.QA_VALIDATING)
+
+        # QA valida
+        await engine.dispatch_agent(demand_id, "qa", "Validar", {})
+
+        engine.transition(demand_id, DemandState.DONE)
+        assert engine.get_state(demand_id) == DemandState.DONE
+
+    @pytest.mark.asyncio
+    async def test_estado_persiste_entre_instancias(self, tmp_path):
+        """Verifica que estado sobrevive recriação do engine."""
+        state_dir = str(tmp_path / "state")
+
+        # Primeira instância
+        adapter1 = IntegrationMockAdapter()
+        bus1 = CLIMessageBus()
+        state_mgr1 = StateManager(state_dir=state_dir)
+        engine1 = OrchestrationEngine(adapter1, bus1, state_mgr1)
+
+        engine1.transition("demand-persist", DemandState.PO_WORKING)
+        engine1.transition("demand-persist", DemandState.AWAITING_PLAN_APPROVAL)
+
+        # Segunda instância (simula reinício)
+        adapter2 = IntegrationMockAdapter()
+        bus2 = CLIMessageBus()
+        state_mgr2 = StateManager(state_dir=state_dir)
+        engine2 = OrchestrationEngine(adapter2, bus2, state_mgr2)
+
+        assert engine2.get_state("demand-persist") == DemandState.AWAITING_PLAN_APPROVAL
+
+
+class TestTrocaDeProvider:
+    """Teste de integração: troca de provider via platform.yaml."""
+
+    def test_troca_messaging_provider(self, tmp_path):
+        """Verifica que trocar messaging_provider no config funciona."""
+        factory = PlatformFactory()
+        factory.register_message_bus("cli", CLIMessageBus)
+
+        config = PlatformConfig(
+            ai_provider="claude-code",
+            messaging_provider="cli",
+        )
+
+        bus = factory.create_message_bus(config)
+        assert isinstance(bus, CLIMessageBus)
+        assert isinstance(bus, MessageBus)
+
+    def test_troca_ai_provider(self, tmp_path):
+        """Verifica que trocar ai_provider no config funciona."""
+        factory = PlatformFactory()
+        factory.register_ai_adapter("mock", IntegrationMockAdapter)
+
+        config = PlatformConfig(
+            ai_provider="mock",
+            messaging_provider="cli",
+        )
+
+        adapter = factory.create_ai_adapter(config)
+        assert isinstance(adapter, IntegrationMockAdapter)
+        assert isinstance(adapter, AIAgentAdapter)
+
+    def test_config_completa_via_yaml(self, tmp_path):
+        """Verifica carregamento completo via YAML e instanciação."""
+        import yaml
+
+        config_file = tmp_path / "platform.yaml"
+        config_file.write_text(
+            yaml.dump(
+                {
+                    "ai_provider": "mock",
+                    "messaging_provider": "cli",
+                    "agent_timeout": 120,
+                }
+            )
+        )
+
+        config = PlatformConfig.from_yaml(config_file)
+        factory = PlatformFactory()
+        factory.register_message_bus("cli", CLIMessageBus)
+        factory.register_ai_adapter("mock", IntegrationMockAdapter)
+
+        bus = factory.create_message_bus(config)
+        adapter = factory.create_ai_adapter(config)
+
+        assert isinstance(bus, MessageBus)
+        assert isinstance(adapter, AIAgentAdapter)
+        assert config.agent_timeout == 120
+
+
+class TestDesacoplamento:
+    """Testes de validação de desacoplamento."""
+
+    def test_orchestrator_nao_importa_implementacao_concreta(self):
+        """Verifica que o orquestrador não importa implementações concretas."""
+        modulo = importlib.import_module("src.orchestrator.engine")
+        source = inspect.getsource(modulo)
+
+        # Não deve importar implementações concretas
+        assert "from src.barramento.cli" not in source
+        assert "from src.barramento.telegram" not in source
+        assert "from src.adapters.claude_code" not in source
+        assert "CLIMessageBus" not in source
+        assert "TelegramMessageBus" not in source
+        assert "ClaudeCodeAdapter" not in source
+
+    def test_factory_eh_unico_ponto_de_conhecimento(self):
+        """Verifica que apenas factory e testes conhecem implementações."""
+        modulos_core = [
+            "src.orchestrator.engine",
+            "src.orchestrator.state",
+            "src.models",
+            "src.barramento.interface",
+            "src.adapters.interface",
+            "src.registry.registry",
+        ]
+
+        for nome_modulo in modulos_core:
+            modulo = importlib.import_module(nome_modulo)
+            source = inspect.getsource(modulo)
+            # Módulos core não devem importar implementações concretas
+            assert "ClaudeCodeAdapter" not in source, (
+                f"{nome_modulo} importa ClaudeCodeAdapter"
+            )
+            assert "TelegramMessageBus" not in source, (
+                f"{nome_modulo} importa TelegramMessageBus"
+            )

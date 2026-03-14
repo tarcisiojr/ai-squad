@@ -1,0 +1,21 @@
+# Configuração centralizada da plataforma
+ai_provider: claude-code
+messaging_provider: cli
+
+# Timeout padrão para execução de agentes (segundos)
+agent_timeout: 300
+
+# Diretório para persistência de estado
+state_dir: state/
+
+# Configurações por persona
+personas:
+  po:
+    name: "PO Agent"
+    avatar: "📋"
+  dev-orchestrator:
+    name: "Dev Orchestrator"
+    avatar: "🔧"
+  qa:
+    name: "QA Agent"
+    avatar: "🧪"
