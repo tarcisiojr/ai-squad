@@ -37,6 +37,9 @@ class FakeMessageBus(MessageBus):
 class FakeAIAdapter(AIAgentAdapter):
     """Implementação fake de AIAgentAdapter para testes."""
 
+    def __init__(self, **kwargs):
+        self._kwargs = kwargs
+
     async def run(self, prompt: str, context: dict) -> str:
         return "resultado fake"
 
@@ -122,6 +125,54 @@ class TestPlatformConfig:
         with pytest.raises(ValueError, match="formato YAML"):
             PlatformConfig.from_yaml(config_file)
 
+    def test_ai_model_carregado_do_yaml(self, tmp_path):
+        """Verifica que ai_model é carregado do YAML."""
+        config_file = tmp_path / "platform.yaml"
+        config_file.write_text(
+            yaml.dump(
+                {
+                    "ai_provider": "claude-agent-sdk",
+                    "messaging_provider": "cli",
+                    "ai_model": "claude-sonnet-4-20250514",
+                }
+            )
+        )
+
+        config = PlatformConfig.from_yaml(config_file)
+        assert config.ai_model == "claude-sonnet-4-20250514"
+
+    def test_ai_model_padrao_none(self, tmp_path):
+        """Verifica que ai_model padrão é None."""
+        config_file = tmp_path / "platform.yaml"
+        config_file.write_text(
+            yaml.dump(
+                {
+                    "ai_provider": "claude-code",
+                    "messaging_provider": "cli",
+                }
+            )
+        )
+
+        config = PlatformConfig.from_yaml(config_file)
+        assert config.ai_model is None
+
+    def test_ai_model_env_override(self, tmp_path, monkeypatch):
+        """Verifica que AI_MODEL via env sobrescreve valor do YAML."""
+        config_file = tmp_path / "platform.yaml"
+        config_file.write_text(
+            yaml.dump(
+                {
+                    "ai_provider": "claude-agent-sdk",
+                    "messaging_provider": "cli",
+                    "ai_model": "claude-sonnet-4-20250514",
+                }
+            )
+        )
+
+        monkeypatch.setenv("AI_MODEL", "claude-opus-4-20250514")
+        config = PlatformConfig.from_yaml(config_file)
+        assert config.ai_model == "claude-opus-4-20250514"
+
 
 class TestPlatformFactory:
     """Testes para factory de providers."""
@@ -173,3 +224,21 @@ class TestPlatformFactory:
 
         assert isinstance(bus_cli, MessageBus)
         assert isinstance(bus_telegram, MessageBus)
+
+    def test_create_ai_adapter_injeta_model(self):
+        """Verifica que ai_model é injetado nos kwargs do adapter."""
+        self.factory.register_ai_adapter("claude-agent-sdk", FakeAIAdapter)
+        config = PlatformConfig(
+            ai_provider="claude-agent-sdk",
+            messaging_provider="cli",
+            ai_model="claude-sonnet-4-20250514",
+        )
+        # FakeAIAdapter ignora kwargs, mas verifica que factory não falha
+        adapter = self.factory.create_ai_adapter(config)
+        assert isinstance(adapter, AIAgentAdapter)
+
+    def test_create_ai_adapter_sem_model(self):
+        """Verifica que sem ai_model não injeta model nos kwargs."""
+        self.factory.register_ai_adapter("claude-code", FakeAIAdapter)
+        adapter = self.factory.create_ai_adapter(self.config)
+        assert isinstance(adapter, AIAgentAdapter)

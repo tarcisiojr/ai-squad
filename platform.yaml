@@ -1,6 +1,9 @@
 # Configuração centralizada da plataforma
-ai_provider: claude-code
+ai_provider: claude-agent-sdk
 messaging_provider: cli
+
+# Modelo de IA (opcional, usa padrão do SDK se ausente)
+ai_model: claude-sonnet-4-20250514
 
 # Timeout padrão para execução de agentes (segundos)
 agent_timeout: 300

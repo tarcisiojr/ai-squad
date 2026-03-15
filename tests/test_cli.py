@@ -1,0 +1,230 @@
+"""Testes para comandos CLI do ai-dev-team."""
+
+import os
+from unittest.mock import patch, MagicMock
+
+import pytest
+from click.testing import CliRunner
+
+from src.cli.main import cli
+
+
+@pytest.fixture
+def runner():
+    """Cria CliRunner para testes."""
+    return CliRunner()
+
+
+@pytest.fixture
+def mock_manager(tmp_path):
+    """Cria TeamManager com diretório temporário."""
+    from src.cli.team_manager import TeamManager
+
+    manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+    return manager
+
+
+class TestCLICreate:
+    """Testes para o comando create."""
+
+    def test_create_com_sucesso(self, runner, tmp_path):
+        """Verifica criação de time via CLI."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+
+        with patch("src.cli.main._get_manager") as mock:
+            from src.cli.team_manager import TeamManager
+
+            manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+            mock.return_value = manager
+
+            result = runner.invoke(cli, ["create", "test-team", "--repo", str(repo)])
+
+        assert result.exit_code == 0
+        assert "test-team" in result.output
+        assert "criado" in result.output
+
+    def test_create_repo_inexistente(self, runner, tmp_path):
+        """Verifica erro quando repo não existe."""
+        with patch("src.cli.main._get_manager") as mock:
+            from src.cli.team_manager import TeamManager
+
+            manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+            mock.return_value = manager
+
+            result = runner.invoke(cli, ["create", "test", "--repo", "/inexistente"])
+
+        assert result.exit_code != 0
+        assert "não encontrado" in result.output
+
+    def test_create_time_duplicado(self, runner, tmp_path):
+        """Verifica erro quando time já existe."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+
+        with patch("src.cli.main._get_manager") as mock:
+            from src.cli.team_manager import TeamManager
+
+            manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+            mock.return_value = manager
+
+            runner.invoke(cli, ["create", "dup", "--repo", str(repo)])
+            result = runner.invoke(cli, ["create", "dup", "--repo", str(repo)])
+
+        assert result.exit_code != 0
+        assert "já existe" in result.output
+
+
+class TestCLIList:
+    """Testes para o comando list."""
+
+    def test_list_sem_times(self, runner, tmp_path):
+        """Verifica mensagem quando não há times."""
+        with patch("src.cli.main._get_manager") as mock:
+            from src.cli.team_manager import TeamManager
+
+            manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+            mock.return_value = manager
+
+            result = runner.invoke(cli, ["list"])
+
+        assert result.exit_code == 0
+        assert "Nenhum time" in result.output
+
+    def test_list_com_times(self, runner, tmp_path):
+        """Verifica listagem de times existentes."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+
+        with patch("src.cli.main._get_manager") as mock, \
+             patch("src.cli.main._get_container_status", return_value="stopped"):
+            from src.cli.team_manager import TeamManager
+
+            manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+            manager.create("time-a", str(repo))
+            mock.return_value = manager
+
+            result = runner.invoke(cli, ["list"])
+
+        assert result.exit_code == 0
+        assert "time-a" in result.output
+
+
+class TestCLIStart:
+    """Testes para o comando start."""
+
+    def test_start_sem_nome(self, runner):
+        """Verifica erro quando nome não é fornecido."""
+        result = runner.invoke(cli, ["start"])
+        assert result.exit_code != 0
+
+    def test_start_env_nao_preenchido(self, runner, tmp_path):
+        """Verifica erro quando .env tem placeholders."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+
+        with patch("src.cli.main._get_manager") as mock:
+            from src.cli.team_manager import TeamManager
+
+            manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+            manager.create("test", str(repo))
+            mock.return_value = manager
+
+            result = runner.invoke(cli, ["start", "test"])
+
+        assert result.exit_code == 0  # Não faz sys.exit, apenas mostra erro
+        assert "não preenchidas" in result.output
+
+    def test_start_time_inexistente(self, runner, tmp_path):
+        """Verifica erro quando time não existe."""
+        with patch("src.cli.main._get_manager") as mock:
+            from src.cli.team_manager import TeamManager
+
+            manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+            mock.return_value = manager
+
+            result = runner.invoke(cli, ["start", "inexistente"])
+
+        assert "não encontrado" in result.output
+
+
+class TestCLIStop:
+    """Testes para o comando stop."""
+
+    def test_stop_sem_nome(self, runner):
+        """Verifica erro quando nome não é fornecido."""
+        result = runner.invoke(cli, ["stop"])
+        assert result.exit_code != 0
+
+    def test_stop_time_inexistente(self, runner, tmp_path):
+        """Verifica erro quando time não existe."""
+        with patch("src.cli.main._get_manager") as mock:
+            from src.cli.team_manager import TeamManager
+
+            manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+            mock.return_value = manager
+
+            result = runner.invoke(cli, ["stop", "inexistente"])
+
+        assert "não encontrado" in result.output
+
+
+class TestCLIStatus:
+    """Testes para o comando status."""
+
+    def test_status_time_inexistente(self, runner, tmp_path):
+        """Verifica erro quando time não existe."""
+        with patch("src.cli.main._get_manager") as mock:
+            from src.cli.team_manager import TeamManager
+
+            manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+            mock.return_value = manager
+
+            result = runner.invoke(cli, ["status", "inexistente"])
+
+        assert result.exit_code != 0
+
+    def test_status_sem_demandas(self, runner, tmp_path):
+        """Verifica status quando não há demandas."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+
+        with patch("src.cli.main._get_manager") as mock, \
+             patch("src.cli.main._get_container_status", return_value="stopped"):
+            from src.cli.team_manager import TeamManager
+
+            manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+            manager.create("test", str(repo))
+            mock.return_value = manager
+
+            result = runner.invoke(cli, ["status", "test"])
+
+        assert result.exit_code == 0
+        assert "Nenhuma demanda" in result.output
+
+
+class TestCLIBuild:
+    """Testes para o comando build."""
+
+    def test_build_chama_docker(self, runner, tmp_path):
+        """Verifica que build executa docker build."""
+        dockerfile = tmp_path / "Dockerfile"
+        dockerfile.write_text("FROM python:3.11-slim")
+
+        with patch("src.cli.main._find_dockerfile_dir", return_value=tmp_path), \
+             patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0)
+            result = runner.invoke(cli, ["build"])
+
+        assert result.exit_code == 0
+        assert "construída" in result.output.lower() or "Construindo" in result.output
+
+
+class TestCLIVersion:
+    """Testes para a flag --version."""
+
+    def test_version(self, runner):
+        """Verifica exibição da versão."""
+        result = runner.invoke(cli, ["--version"])
+        assert result.exit_code == 0
+        assert "0.1.0" in result.output

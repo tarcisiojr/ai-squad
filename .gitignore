@@ -1,0 +1,4 @@
+*.pyc
+.coverage
+.env
+ai_dev_template.egg-info

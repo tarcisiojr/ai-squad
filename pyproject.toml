@@ -1,17 +1,23 @@
 [build-system]
 requires = ["setuptools>=68.0", "wheel"]
-build-backend = "setuptools.backends._legacy:_Backend"
+build-backend = "setuptools.build_meta"
 
 [project]
-name = "ai-dev-platform"
+name = "ai-dev-team"
 version = "0.1.0"
-description = "Plataforma de desenvolvimento autônomo por IA com agentes especializados"
+description = "Time completo de desenvolvimento autônomo por IA"
 requires-python = ">=3.11"
 dependencies = [
     "python-telegram-bot>=20.0",
     "openai>=1.0",
     "pyyaml>=6.0",
+    "click>=8.0",
+    "python-dotenv>=1.0",
+    "claude-agent-sdk>=0.1",
 ]
+
+[project.scripts]
+ai-dev-team = "src.cli.main:cli"
 
 [project.optional-dependencies]
 dev = [
@@ -28,3 +34,8 @@ addopts = "--cov=src --cov-report=term-missing --cov-fail-under=80"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["src*"]
+
+[tool.setuptools.package-data]
+src = [
+    "docker/*",
+]

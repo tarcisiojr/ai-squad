@@ -5,18 +5,22 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.adapters.claude_code import ClaudeCodeAdapter
+from src.adapters.claude_code import ClaudeCodeAdapter, ClaudeCodeCLIAdapter
 from src.adapters.interface import AIAgentAdapter
 from src.models import AgentStatus
 
 
 class TestClaudeCodeAdapter:
-    """Testes para ClaudeCodeAdapter."""
+    """Testes para ClaudeCodeCLIAdapter (e alias ClaudeCodeAdapter)."""
 
     @pytest.fixture
     def adapter(self):
-        """Cria instância de ClaudeCodeAdapter."""
-        return ClaudeCodeAdapter(timeout=30)
+        """Cria instância de ClaudeCodeCLIAdapter."""
+        return ClaudeCodeCLIAdapter(timeout=30)
+
+    def test_alias_retrocompatibilidade(self):
+        """Verifica que ClaudeCodeAdapter é alias para ClaudeCodeCLIAdapter."""
+        assert ClaudeCodeAdapter is ClaudeCodeCLIAdapter
 
     def test_herda_ai_agent_adapter(self, adapter):
         """Verifica que ClaudeCodeAdapter implementa AIAgentAdapter."""

@@ -1,49 +1,97 @@
-# AI Dev Platform
+# ai-dev-team
 
-Plataforma de desenvolvimento autônomo por IA que orquestra um time de agentes especializados — **PO**, **Dev** e **QA** — para conduzir o ciclo completo de entrega de software, da demanda à produção.
+Time completo de desenvolvimento autônomo por IA. Orquestra agentes especializados — **PO**, **Dev** e **QA** — para conduzir o ciclo completo de entrega de software, da demanda à produção.
 
-O usuário interage via barramento de mensagens (Telegram ou CLI). Os agentes trabalham de forma autônoma, solicitando intervenção humana apenas em pontos de decisão: aprovação de plano, aprovação de PR e erros bloqueantes.
+Você interage via **Telegram** (texto ou voz). Os agentes trabalham de forma autônoma, solicitando intervenção humana apenas em pontos de decisão: aprovação de plano, aprovação de PR e erros bloqueantes.
 
-## Principais Funcionalidades
-
-- **Orquestração por máquina de estados** — ciclo de vida de demandas com transições controladas (`idle` → `po_working` → ... → `done`)
-- **Providers plugáveis** — troque IA (Claude Code, Gemini, Copilot) ou mensageria (Telegram, Slack, CLI) alterando apenas `platform.yaml`
-- **Registry de agentes** — catálogo YAML com matching automático por domínio e prioridade
-- **Isolamento via Docker** — agentes executam em containers read-only, sem acesso ao host
-- **Identidade por persona** — cada agente tem nome, avatar e token próprios no canal de mensageria
-- **Transcrição de voz** — mensagens de áudio são transcritas automaticamente via Whisper API
-
-## Requisitos
-
-- Python 3.11+
-- Docker (para isolamento de agentes)
-- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) (provider de IA padrão)
-
-## Instalação
+## Quick Start
 
 ```bash
-# Clonar o repositório
-git clone <url-do-repo>
-cd ai-dev-platform
+# Instalar
+pip install -e .
 
-# Criar e ativar ambiente virtual
-python3 -m venv .venv
-source .venv/bin/activate
+# Criar um time apontando para seu repositório
+ai-dev-team create meu-time --repo ~/projetos/minha-api
 
-# Instalar dependências
-pip install -e ".[dev]"
+# Preencher os tokens no .env gerado
+# ~/.ai-dev-team/teams/meu-time/.env
+
+# Iniciar o time (sobe container Docker em loop)
+ai-dev-team start meu-time
+```
+
+Pronto. O bot do Telegram começa a escutar. Envie uma mensagem para criar uma demanda.
+
+## Como Funciona
+
+```
+Você (Telegram)                    ai-dev-team (Docker)
+     │                                    │
+     │  "Criar API de autenticação"       │
+     │───────────────────────────────────▶│
+     │                                    │
+     │                             ┌──────┴──────┐
+     │                             │  PO Agent   │
+     │  📋 "Aprovar plano?"        │  especifica │
+     │◀────────────────────────────│             │
+     │  ✅ Aprovar                  └──────┬──────┘
+     │───────────────────────────────────▶│
+     │                             ┌──────┴──────┐
+     │                             │  Dev Agent  │
+     │                             │  implementa │
+     │                             │  commit/push│
+     │  🔧 "Aprovar PR #42?"       │  cria PR    │
+     │◀────────────────────────────│             │
+     │  ✅ Aprovar                  └──────┬──────┘
+     │───────────────────────────────────▶│
+     │                             ┌──────┴──────┐
+     │                             │  QA Agent   │
+     │  ✅ "Demanda concluída!"     │  valida     │
+     │◀────────────────────────────└─────────────┘
+```
+
+## Gerenciamento de Times
+
+Cada time é uma instância independente: bot Telegram próprio, container Docker próprio, repositório alvo próprio.
+
+```bash
+# Criar múltiplos times
+ai-dev-team create backend  --repo ~/projetos/api
+ai-dev-team create frontend --repo ~/projetos/web
+ai-dev-team create infra    --repo ~/projetos/terraform
+
+# Gerenciar
+ai-dev-team list                  # ver todos os times e status
+ai-dev-team start --all           # iniciar todos
+ai-dev-team stop frontend         # parar um time específico
+ai-dev-team logs backend          # ver logs em tempo real
+ai-dev-team status backend        # ver demandas ativas
+ai-dev-team build                 # reconstruir imagem Docker
 ```
 
 ## Configuração
 
-Toda a configuração é centralizada em `platform.yaml`:
+Ao criar um time, três arquivos são gerados em `~/.ai-dev-team/teams/<nome>/`:
+
+### `.env` — Tokens obrigatórios
+
+```env
+CLAUDE_CODE_OAUTH_TOKEN=seu-oauth-token
+GITHUB_TOKEN=ghp_xxxxx
+TELEGRAM_TOKEN=bot-token-do-botfather
+TELEGRAM_CHAT_ID=seu-chat-id
+
+# Opcional (transcrição de voz)
+# OPENAI_API_KEY=sk-xxxxx
+```
+
+### `config.yaml` — Configuração do time
 
 ```yaml
-ai_provider: claude-code         # Provider de IA
-messaging_provider: cli           # Provider de mensageria
-agent_timeout: 300                # Timeout por agente (segundos)
-state_dir: state/                 # Diretório de persistência
-
+ai_provider: claude-code
+messaging_provider: telegram
+agent_timeout: 300
+repo_path: /caminho/do/seu/repo
 personas:
   po:
     name: "PO Agent"
@@ -56,68 +104,17 @@ personas:
     avatar: "🧪"
 ```
 
-Para usar Telegram, altere `messaging_provider: telegram` e adicione `token` em cada persona.
+### `docker-compose.yml` — Container do time
 
-## Uso Rápido
+Gerado automaticamente. O container inclui Python, Node.js, Claude CLI, git, gh CLI e Docker CLI. O `docker.sock` do host é montado para que agentes possam subir infraestrutura do projeto (banco, Redis, etc.).
 
-```python
-import asyncio
-from src.factory import PlatformConfig, PlatformFactory
-from src.barramento.cli import CLIMessageBus
-from src.adapters.claude_code import ClaudeCodeAdapter
-from src.orchestrator.engine import OrchestrationEngine
-from src.orchestrator.state import StateManager
+## Requisitos
 
-# Carregar configuração
-config = PlatformConfig.from_yaml("platform.yaml")
-
-# Montar componentes via factory
-factory = PlatformFactory()
-factory.register_message_bus("cli", CLIMessageBus)
-factory.register_ai_adapter("claude-code", ClaudeCodeAdapter)
-
-bus = factory.create_message_bus(config)
-adapter = factory.create_ai_adapter(config)
-state_mgr = StateManager(state_dir=config.state_dir)
-
-# Criar engine e executar demanda
-engine = OrchestrationEngine(adapter, bus, state_mgr)
-
-asyncio.run(
-    engine.run_demand_cycle("demand-001", "user1", "Criar API de autenticação")
-)
-```
-
-## Estrutura do Projeto
-
-```
-├── platform.yaml              # Configuração de providers e personas
-├── registry.yaml              # Catálogo de agentes por domínio
-├── src/
-│   ├── models.py              # Enums (AgentStatus, DemandState)
-│   ├── factory.py             # PlatformConfig + PlatformFactory
-│   ├── barramento/            # Implementações de MessageBus
-│   ├── adapters/              # Implementações de AIAgentAdapter
-│   ├── orchestrator/          # Engine, estado, worktrees, Docker
-│   └── registry/              # AgentRegistry
-├── agents/                    # Personas (PO, Dev, QA, dev-web)
-├── specs/                     # Contratos (OpenAPI, AsyncAPI)
-├── state/                     # Estado persistido (JSON)
-└── tests/                     # 114 testes unitários e de integração
-```
-
-## Testes
-
-```bash
-# Rodar todos os testes com cobertura
-python -m pytest tests/ -v
-
-# Apenas testes de um módulo
-python -m pytest tests/test_orchestrator.py -v
-
-# Verificar cobertura mínima (80%)
-python -m pytest tests/ --cov=src --cov-fail-under=80
-```
+- Python 3.11+
+- Docker
+- Conta Claude Code com OAuth token
+- Bot Telegram (criado via [@BotFather](https://t.me/BotFather))
+- GitHub token (para criação de PRs)
 
 ## Ciclo de Vida de uma Demanda
 
@@ -131,43 +128,74 @@ idle → po_working → awaiting_plan_approval → dev_working
 | `idle` | Demanda recebida, aguardando processamento |
 | `po_working` | PO elaborando especificação |
 | `awaiting_plan_approval` | Aguardando aprovação humana do plano |
-| `dev_working` | Subagentes implementando em worktrees isolados |
+| `dev_working` | Dev implementando em worktree isolado |
 | `awaiting_pr_approval` | Aguardando aprovação humana do PR |
 | `ci_running` | Pipeline de CI executando |
 | `qa_validating` | QA validando contra critérios de aceitação |
 | `done` | Demanda concluída |
 
-## Extensibilidade
+## Arquitetura
 
-### Adicionar novo provider de IA
+```
+~/.ai-dev-team/
+├── teams/
+│   ├── backend/                  # Time 1
+│   │   ├── config.yaml
+│   │   ├── .env
+│   │   ├── docker-compose.yml
+│   │   └── state/
+│   └── frontend/                 # Time 2
+│       └── ...
 
-1. Criar classe herdando `AIAgentAdapter` em `src/adapters/`
-2. Registrar: `factory.register_ai_adapter("meu-provider", MinhaClasse)`
-3. Atualizar `platform.yaml`: `ai_provider: meu-provider`
+Dentro do container Docker:
+├── Python 3.11 + Node.js 20
+├── claude CLI (via npm)
+├── git + gh CLI
+├── docker CLI (via docker.sock)
+└── /workspace (repo alvo montado)
+```
 
-### Adicionar novo canal de mensageria
-
-1. Criar classe herdando `MessageBus` em `src/barramento/`
-2. Registrar: `factory.register_message_bus("meu-canal", MinhaClasse)`
-3. Atualizar `platform.yaml`: `messaging_provider: meu-canal`
-
-### Adicionar novo agente
-
-1. Criar diretório `agents/<nome>/` com `AGENTS.md`
-2. Criar symlink: `ln -sf AGENTS.md CLAUDE.md`
-3. Adicionar entrada em `registry.yaml` com domínio e prioridade
-4. Nenhuma alteração de código necessária
-
-## Decisões Técnicas
+### Decisões Técnicas
 
 | Decisão | Motivo |
 |---------|--------|
-| Módulos Python, não microserviços | Desacoplamento via ABC sem overhead de rede na v1 |
-| Factory + injeção via construtor | Único ponto que conhece implementações concretas |
-| `claude --print` via subprocess | Aproveita assinatura existente sem API key separada |
-| JSON para estado | Simplicidade para v1; escrita atômica previne corrupção |
-| Docker read-only + rede desabilitada | Isolamento de segurança para agentes executando código |
-| AGENTS.md + symlinks | Fonte única de contexto agnóstica a provider de IA |
+| Docker para empacotamento | Preserva ambiente do host, dependências reproduzíveis |
+| docker.sock montado | Agentes podem subir infra do projeto (postgres, redis) |
+| `CLAUDE_CODE_OAUTH_TOKEN` | Auth limpa para Claude CLI dentro do container |
+| Um bot Telegram por time | Isolamento total entre times |
+| Worktrees git | Agentes trabalham em branches isoladas sem conflitos |
+| Factory + ABC | Providers plugáveis sem acoplamento |
+| JSON para estado | Simplicidade; escrita atômica previne corrupção |
+
+## Extensibilidade
+
+### Novo provider de IA
+1. Criar classe herdando `AIAgentAdapter` em `src/adapters/`
+2. Registrar: `factory.register_ai_adapter("nome", Classe)`
+3. Atualizar `config.yaml`: `ai_provider: nome`
+
+### Novo canal de mensageria
+1. Criar classe herdando `MessageBus` em `src/barramento/`
+2. Registrar: `factory.register_message_bus("nome", Classe)`
+3. Atualizar `config.yaml`: `messaging_provider: nome`
+
+### Novo agente
+1. Criar diretório `agents/<nome>/` com `AGENTS.md`
+2. Symlink: `ln -sf AGENTS.md CLAUDE.md`
+3. Adicionar em `registry.yaml`
+
+## Desenvolvimento
+
+```bash
+source .venv/bin/activate
+pip install -e ".[dev]"
+
+# Testes (212 testes, cobertura ~88%)
+python -m pytest tests/ -v
+
+# Verificar cobertura mínima
+python -m pytest tests/ --cov=src --cov-fail-under=80
+```
 
 ## Licença
 

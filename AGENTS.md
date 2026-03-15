@@ -91,6 +91,37 @@ personas:
 
 Para trocar provider, altere apenas `platform.yaml` — zero mudanças no código.
 
+## CLI ai-dev-team
+
+```bash
+# Instalar CLI
+pip install -e .
+
+# Criar um novo time de desenvolvimento
+ai-dev-team create backend-api --repo ~/projetos/minha-api
+
+# Editar tokens no .env gerado
+# ~/.ai-dev-team/teams/backend-api/.env
+
+# Iniciar o time (sobe container Docker)
+ai-dev-team start backend-api
+
+# Listar todos os times
+ai-dev-team list
+
+# Ver logs do time
+ai-dev-team logs backend-api
+
+# Ver demandas ativas
+ai-dev-team status backend-api
+
+# Parar o time
+ai-dev-team stop backend-api
+
+# Reconstruir imagem Docker
+ai-dev-team build
+```
+
 ## Comandos de Desenvolvimento
 
 ```bash
