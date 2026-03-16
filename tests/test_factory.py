@@ -30,6 +30,9 @@ class FakeMessageBus(MessageBus):
     async def receive_voice(self, callback) -> None:
         pass
 
+    async def ask_user(self, user_id: str, question: str) -> str:
+        return "resposta"
+
     async def notify(self, user_id: str, text: str) -> None:
         pass
 

@@ -1,5 +1,6 @@
 """Gerenciador de times ai-dev-team."""
 
+import shutil
 from pathlib import Path
 
 from src.cli.templates.config import (
@@ -87,16 +88,51 @@ class TeamManager:
         # Gera .env com placeholders
         (team_dir / ".env").write_text(ENV_TEMPLATE, encoding="utf-8")
 
+        # Copia Whisper service para o time
+        self._copy_whisper_service(team_dir)
+        whisper_context = "./whisper"
+
         # Gera docker-compose.yml
         compose_content = DOCKER_COMPOSE_TEMPLATE.format(
             team_name=team_name,
             repo_path=str(repo),
+            whisper_context=whisper_context,
         )
         (team_dir / "docker-compose.yml").write_text(
             compose_content, encoding="utf-8"
         )
 
+        # Copia pasta agents/ para customização pelo usuário
+        self._copy_default_agents(team_dir)
+
         return team_dir
+
+    def _copy_whisper_service(self, team_dir: Path) -> None:
+        """Copia Whisper service para o diretório do time."""
+        sources = [
+            Path(__file__).resolve().parent.parent / "whisper",
+            Path.cwd() / "src" / "whisper",
+        ]
+
+        for source in sources:
+            if source.exists() and source.is_dir():
+                dest = team_dir / "whisper"
+                shutil.copytree(source, dest, dirs_exist_ok=True)
+                return
+
+    def _copy_default_agents(self, team_dir: Path) -> None:
+        """Copia agents/ padrão para o diretório do time."""
+        # Procura agents/ no source do projeto
+        sources = [
+            Path(__file__).resolve().parent.parent.parent / "agents",
+            Path.cwd() / "agents",
+        ]
+
+        for source in sources:
+            if source.exists() and source.is_dir():
+                dest = team_dir / "agents"
+                shutil.copytree(source, dest, dirs_exist_ok=True)
+                return
 
     def list_teams(self) -> list[dict[str, str]]:
         """Lista todos os times com nome e repo path."""

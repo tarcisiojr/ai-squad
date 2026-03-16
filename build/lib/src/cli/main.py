@@ -366,5 +366,166 @@ def build() -> None:
     _build_image()
 
 
+@cli.command("add-agent")
+@click.argument("team_name")
+@click.argument("agent_name")
+@click.option("--name", "display_name", default=None, help="Nome de exibição do agente.")
+@click.option("--avatar", default="🤖", help="Emoji avatar do agente.")
+@click.option("--command", "cmd", default=None, help="Comando Telegram (ex: /sec).")
+@click.option("--marker", default="---DONE---", help="Marcador de conclusão.")
+def add_agent(
+    team_name: str, agent_name: str, display_name: str | None,
+    avatar: str, cmd: str | None, marker: str,
+) -> None:
+    """Adiciona um novo agente a um time existente."""
+    manager = _get_manager()
+    if not manager.exists(team_name):
+        click.echo(f"Erro: Time '{team_name}' não encontrado.", err=True)
+        sys.exit(1)
+
+    team_dir = manager.get_path(team_name)
+    agent_dir = team_dir / "agents" / agent_name
+
+    if agent_dir.exists():
+        click.echo(f"Erro: Agente '{agent_name}' já existe em '{team_name}'.", err=True)
+        sys.exit(1)
+
+    # Cria estrutura do agente
+    agent_dir.mkdir(parents=True)
+    (agent_dir / "skills").mkdir()
+
+    display_name = display_name or agent_name.replace("-", " ").title()
+    cmd = cmd or f"/{agent_name}"
+
+    # Gera AGENTS.md template
+    agents_md = f"""# {display_name}
+
+## Dominio
+<!-- Descreva o domínio de atuação deste agente -->
+
+## Quando Envolver
+- <!-- Quando o Squad Lead deve envolver este agente -->
+
+## Responsabilidades
+- <!-- Liste as responsabilidades -->
+
+## Criterios de Aceite
+- <!-- Liste os critérios verificáveis -->
+
+## Marcador de Conclusao
+{marker}
+
+## Restricoes
+- <!-- Liste as restrições -->
+
+## Instrucoes
+<!-- Instruções detalhadas para o agente -->
+"""
+    (agent_dir / "AGENTS.md").write_text(agents_md, encoding="utf-8")
+    (agent_dir / "CLAUDE.md").symlink_to("AGENTS.md")
+
+    # Adiciona ao config.yaml
+    import yaml
+    config_path = team_dir / "config.yaml"
+    with open(config_path, encoding="utf-8") as f:
+        config = yaml.safe_load(f)
+
+    if "agents" not in config:
+        config["agents"] = {}
+
+    config["agents"][agent_name] = {
+        "name": display_name,
+        "avatar": avatar,
+        "command": cmd,
+        "done_marker": marker,
+    }
+
+    with open(config_path, "w", encoding="utf-8") as f:
+        yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
+
+    click.echo(f"Agente '{agent_name}' adicionado ao time '{team_name}'.")
+    click.echo(f"  Diretório: {agent_dir}")
+    click.echo(f"  Comando: {cmd}")
+    click.echo(f"  Edite: {agent_dir / 'AGENTS.md'}")
+    click.echo(f"  Skills: {agent_dir / 'skills/'}")
+    click.echo(f"\nReinicie o time para aplicar: ai-dev-team stop {team_name} && ai-dev-team start {team_name}")
+
+
+@cli.command("remove-agent")
+@click.argument("team_name")
+@click.argument("agent_name")
+@click.confirmation_option(prompt="Tem certeza que deseja remover este agente?")
+def remove_agent(team_name: str, agent_name: str) -> None:
+    """Remove um agente de um time."""
+    manager = _get_manager()
+    if not manager.exists(team_name):
+        click.echo(f"Erro: Time '{team_name}' não encontrado.", err=True)
+        sys.exit(1)
+
+    team_dir = manager.get_path(team_name)
+    agent_dir = team_dir / "agents" / agent_name
+
+    if not agent_dir.exists():
+        click.echo(f"Erro: Agente '{agent_name}' não encontrado em '{team_name}'.", err=True)
+        sys.exit(1)
+
+    # Protege agentes obrigatórios
+    if agent_name == "squad-lead":
+        click.echo("Erro: Não é possível remover o Squad Lead.", err=True)
+        sys.exit(1)
+
+    # Remove diretório
+    import shutil
+    shutil.rmtree(agent_dir)
+
+    # Remove do config.yaml
+    import yaml
+    config_path = team_dir / "config.yaml"
+    with open(config_path, encoding="utf-8") as f:
+        config = yaml.safe_load(f)
+
+    if "agents" in config and agent_name in config["agents"]:
+        del config["agents"][agent_name]
+        with open(config_path, "w", encoding="utf-8") as f:
+            yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
+
+    click.echo(f"Agente '{agent_name}' removido do time '{team_name}'.")
+
+
+@cli.command("list-agents")
+@click.argument("team_name")
+def list_agents(team_name: str) -> None:
+    """Lista os agentes de um time."""
+    manager = _get_manager()
+    if not manager.exists(team_name):
+        click.echo(f"Erro: Time '{team_name}' não encontrado.", err=True)
+        sys.exit(1)
+
+    team_dir = manager.get_path(team_name)
+
+    import yaml
+    config_path = team_dir / "config.yaml"
+    with open(config_path, encoding="utf-8") as f:
+        config = yaml.safe_load(f)
+
+    # Squad Lead
+    sl = config.get("squad_lead", {})
+    click.echo(f"  {sl.get('avatar', '👨‍💼')} {sl.get('name', 'Squad Lead')} (squad-lead) — coordenador")
+
+    # Agentes
+    agents = config.get("agents", {})
+    for agent_id, agent_cfg in agents.items():
+        has_skills = (team_dir / "agents" / agent_id / "skills").exists()
+        skills_count = 0
+        if has_skills:
+            skills_dir = team_dir / "agents" / agent_id / "skills"
+            skills_count = len([d for d in skills_dir.iterdir() if d.is_dir()]) if skills_dir.exists() else 0
+        skills_label = f" ({skills_count} skills)" if skills_count else ""
+        click.echo(
+            f"  {agent_cfg.get('avatar', '🤖')} {agent_cfg.get('name', agent_id)} "
+            f"({agent_id}) — {agent_cfg.get('command', '/' + agent_id)}{skills_label}"
+        )
+
+
 if __name__ == "__main__":
     cli()

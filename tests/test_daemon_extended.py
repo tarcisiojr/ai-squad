@@ -17,7 +17,6 @@ class TestDaemonConfig:
     def test_load_config_com_yaml(self, tmp_path, monkeypatch):
         """Verifica carregamento de config com arquivo YAML."""
         monkeypatch.chdir(tmp_path)
-        # Limpa env vars
         for var in ["AI_PROVIDER", "MESSAGING_PROVIDER", "AGENT_TIMEOUT", "STATE_DIR", "REPO_PATH"]:
             monkeypatch.delenv(var, raising=False)
 
@@ -64,7 +63,6 @@ class TestDaemonConfig:
         for var in ["AI_PROVIDER", "MESSAGING_PROVIDER", "AGENT_TIMEOUT", "STATE_DIR", "REPO_PATH"]:
             monkeypatch.delenv(var, raising=False)
 
-        # Cria .env e config.yaml
         env_file = tmp_path / ".env"
         env_file.write_text("AGENT_TIMEOUT=777\n")
 
@@ -77,7 +75,6 @@ class TestDaemonConfig:
             })
         )
 
-        # Usa monkeypatch para simular o efeito do dotenv sem poluir o ambiente
         monkeypatch.setenv("AGENT_TIMEOUT", "777")
 
         daemon = Daemon()
@@ -116,77 +113,40 @@ class TestDaemonSetup:
         assert daemon._config is not None
 
 
-class TestDaemonQueue:
-    """Testes para fila de demandas."""
+class TestDaemonNonBlocking:
+    """Testes para processamento nao-bloqueante."""
 
     @pytest.mark.asyncio
-    async def test_process_queue_vazia_e_shutdown(self):
-        """Verifica que process_queue respeita shutdown."""
-        daemon = Daemon()
-        daemon._engine = AsyncMock()
-        daemon._bus = AsyncMock()
-
-        # Sinaliza shutdown imediato
-        daemon._shutdown_event.set()
-
-        # Não deve travar
-        await daemon._process_queue()
-
-    @pytest.mark.asyncio
-    async def test_process_queue_com_demanda(self, monkeypatch):
-        """Verifica processamento de demanda da fila."""
+    async def test_mensagem_processa_imediatamente(self, monkeypatch):
+        """Verifica que mensagens sao processadas inline, sem fila."""
         monkeypatch.setenv("TELEGRAM_CHAT_ID", "12345")
 
         daemon = Daemon()
-        daemon._engine = AsyncMock()
         daemon._bus = AsyncMock()
+        daemon._engine = AsyncMock()
+        daemon._config = MagicMock()
+        daemon._config.agents = {}
 
-        # Adiciona demanda
-        daemon._demand_queue.append({
-            "demand_id": "d-001",
-            "user_id": "12345",
-            "text": "Criar módulo X",
-        })
+        await daemon._handle_new_demand("Criar site")
 
-        # Sinaliza shutdown após 0.2s
-        async def delayed_shutdown():
-            await asyncio.sleep(0.2)
-            daemon._shutdown_event.set()
-
-        asyncio.create_task(delayed_shutdown())
-
-        await daemon._process_queue()
-
-        daemon._engine.run_demand_cycle.assert_called_once_with(
-            "d-001", "12345", "Criar módulo X"
-        )
+        # Squad Lead chamado diretamente (sem fila)
+        daemon._engine.run_squad_lead.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_process_queue_com_erro(self, monkeypatch):
-        """Verifica que erro na demanda não derruba o daemon."""
+    async def test_erro_nao_derruba_daemon(self, monkeypatch):
+        """Verifica que erro no processamento nao derruba o daemon."""
         monkeypatch.setenv("TELEGRAM_CHAT_ID", "12345")
 
         daemon = Daemon()
-        daemon._engine = AsyncMock()
-        daemon._engine.run_demand_cycle.side_effect = RuntimeError("Falha!")
         daemon._bus = AsyncMock()
+        daemon._engine = AsyncMock()
+        daemon._engine.run_squad_lead.side_effect = RuntimeError("Falha!")
+        daemon._config = MagicMock()
+        daemon._config.agents = {}
 
-        daemon._demand_queue.append({
-            "demand_id": "d-fail",
-            "user_id": "12345",
-            "text": "Demanda que falha",
-        })
+        # Nao deve lancar excecao
+        await daemon._handle_new_demand("Demanda que falha")
 
-        async def delayed_shutdown():
-            await asyncio.sleep(0.2)
-            daemon._shutdown_event.set()
-
-        asyncio.create_task(delayed_shutdown())
-
-        # Não deve lançar exceção
-        await daemon._process_queue()
-
-        # Deve notificar o erro via Telegram
         daemon._bus.notify.assert_called()
 
 
@@ -210,5 +170,4 @@ class TestDaemonHealthcheck:
         daemon = Daemon()
         daemon._shutdown_event.set()
 
-        # Não deve travar
         await daemon._healthcheck_loop()

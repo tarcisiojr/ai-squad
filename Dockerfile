@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     openssh-client \
     sudo \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Node.js 20 (para claude CLI)
@@ -40,8 +41,11 @@ RUN curl -fsSL https://download.docker.com/linux/debian/gpg \
     && apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin \
     && rm -rf /var/lib/apt/lists/*
 
-# Claude CLI via npm
-RUN npm install -g @anthropic-ai/claude-code
+# Claude CLI, OpenSpec CLI, Playwright CLI, Context Mode e Context7 via npm
+RUN npm install -g @anthropic-ai/claude-code @fission-ai/openspec @playwright/cli context-mode @upstash/context7-mcp
+
+# Instala dependencias de sistema do Playwright (precisa ser root)
+RUN npx playwright install-deps chromium
 
 # Cria usuário não-root (Claude Code exige isso)
 RUN useradd --create-home --shell /bin/bash --uid 1000 agent \
@@ -62,8 +66,30 @@ RUN pip install --no-cache-dir .
 RUN mkdir -p /app/state /workspace /home/agent/.claude \
     && chown -R agent:agent /app /workspace /home/agent
 
+# Configura MCP servers: context-mode (economia de contexto) + context7 (docs atualizadas)
+COPY <<'MCPEOF' /home/agent/.claude/settings.json
+{
+  "mcpServers": {
+    "context-mode": {
+      "type": "stdio",
+      "command": "context-mode",
+      "args": ["--transport", "stdio"]
+    },
+    "context7": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"]
+    }
+  }
+}
+MCPEOF
+RUN chown agent:agent /home/agent/.claude/settings.json
+
 # Troca para usuário não-root
 USER agent
+
+# Instala browser Chromium como usuario agent
+RUN npx playwright install chromium
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

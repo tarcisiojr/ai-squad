@@ -2,8 +2,11 @@
 
 CONFIG_YAML_TEMPLATE = """\
 # Configuração do time ai-dev-team
-ai_provider: claude-code
+ai_provider: claude-agent-sdk
 messaging_provider: telegram
+
+# Modelo de IA
+ai_model: claude-sonnet-4-20250514
 
 # Timeout para execução de agentes (segundos)
 agent_timeout: 300
@@ -14,17 +17,31 @@ state_dir: state/
 # Caminho do repositório alvo
 repo_path: "{repo_path}"
 
-# Configurações por persona
-personas:
+# Timeout estendido para Dev (segundos)
+dev_timeout: 600
+
+# Squad Lead (coordenador obrigatorio)
+squad_lead:
+  name: "Squad Lead"
+  avatar: "👨‍💼"
+
+# Agentes do time
+agents:
   po:
     name: "PO Agent"
     avatar: "📋"
-  dev-orchestrator:
-    name: "Dev Orchestrator"
+    command: "/po"
+    done_marker: "---SPEC_READY---"
+  dev:
+    name: "Dev Agent"
     avatar: "🔧"
+    command: "/dev"
+    done_marker: "---DONE---"
   qa:
     name: "QA Agent"
     avatar: "🧪"
+    command: "/qa"
+    done_marker: "---QA_DONE---"
 """
 
 ENV_TEMPLATE = """\
@@ -65,6 +82,15 @@ services:
       # Persistência de estado
       - ./state:/app/state
 
+      # Configuração do time
+      - ./config.yaml:/app/config.yaml:ro
+
+      # Agentes customizáveis (AGENTS.md + skills/)
+      - ./agents:/app/agents:ro
+
+      # Skills globais (compartilhadas por todos os times)
+      - ~/.ai-dev-team/skills:/app/global-skills:ro
+
       # Configurações git do host (agent = uid 1000)
       - ~/.ssh:/home/agent/.ssh:ro
       - ~/.gitconfig:/home/agent/.gitconfig:ro
@@ -80,6 +106,24 @@ services:
         limits:
           memory: 2G
           cpus: "2.0"
+
+  whisper:
+    build:
+      context: {whisper_context}
+    container_name: adt-{team_name}-whisper
+    restart: unless-stopped
+    environment:
+      - WHISPER_MODEL=medium
+    volumes:
+      - whisper-cache:/root/.cache
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: "4.0"
+
+volumes:
+  whisper-cache:
 """
 
 # Valor placeholder para detectar .env não preenchido

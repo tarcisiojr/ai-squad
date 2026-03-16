@@ -15,28 +15,71 @@ _PLACEHOLDER_PREFIX = "PREENCHA_AQUI_"
 
 
 @dataclass
-class PersonaConfig:
-    """Configuração de uma persona."""
+class SubmoduleConfig:
+    """Configuracao de um submodulo git."""
+
+    path: str  # caminho relativo no workspace (ex: "packages/api")
+    description: str = ""  # descricao opcional para o Squad Lead
+
+
+@dataclass
+class AgentConfig:
+    """Configuracao de um agente."""
 
     name: str
     avatar: str
-    token: str | None = None
+    command: str = ""
+    done_marker: str = ""
+    agents_md: str = ""
+    timeout: int = 0  # 0 = usa agent_timeout padrao
+    submodules: list[SubmoduleConfig] = field(default_factory=list)  # submodulos que o agente trabalha
+
+
+# Alias para retrocompatibilidade
+PersonaConfig = AgentConfig
+
+
+@dataclass
+class HeartbeatConfig:
+    """Configuração do heartbeat loop para retomada de demandas paradas."""
+
+    enabled: bool = True
+    interval: int = 300
+    stall_timeout: int = 1800
+    reminder_timeout: int = 3600
+    max_auto_retries: int = 3
+
+
+@dataclass
+class SquadLeadConfig:
+    """Configuracao do Squad Lead (agente coordenador obrigatorio)."""
+
+    name: str = "Squad Lead"
+    avatar: str = "👨‍💼"
 
 
 @dataclass
 class PlatformConfig:
-    """Configuração centralizada da plataforma.
+    """Configuracao centralizada da plataforma.
 
-    Carregada de config.yaml com override por variáveis de ambiente.
+    Carregada de config.yaml com override por variaveis de ambiente.
     """
 
     ai_provider: str
     messaging_provider: str
     agent_timeout: int = 300
+    dev_timeout: int = 600
     state_dir: str = "state/"
     repo_path: str = ""
     ai_model: str | None = None
-    personas: dict[str, PersonaConfig] = field(default_factory=dict)
+    squad_lead: SquadLeadConfig = field(default_factory=SquadLeadConfig)
+    heartbeat: HeartbeatConfig = field(default_factory=HeartbeatConfig)
+    agents: dict[str, AgentConfig] = field(default_factory=dict)
+
+    @property
+    def personas(self) -> dict[str, AgentConfig]:
+        """Alias para retrocompatibilidade."""
+        return self.agents
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> "PlatformConfig":
@@ -59,23 +102,59 @@ class PlatformConfig:
                 "Configuração inválida: 'messaging_provider' é obrigatório"
             )
 
-        # Processar personas
-        personas = {}
-        for nome, config in data.get("personas", {}).items():
-            personas[nome] = PersonaConfig(
+        # Processar heartbeat
+        hb_data = data.get("heartbeat", {})
+        heartbeat = HeartbeatConfig(
+            enabled=hb_data.get("enabled", True),
+            interval=hb_data.get("interval", 300),
+            stall_timeout=hb_data.get("stall_timeout", 1800),
+            reminder_timeout=hb_data.get("reminder_timeout", 3600),
+            max_auto_retries=hb_data.get("max_auto_retries", 3),
+        )
+
+        # Processar squad_lead
+        sl_data = data.get("squad_lead", {})
+        squad_lead = SquadLeadConfig(
+            name=sl_data.get("name", "Squad Lead"),
+            avatar=sl_data.get("avatar", "👨‍💼"),
+        )
+
+        # Processar agents (com fallback para personas)
+        agents_data = data.get("agents", data.get("personas", {}))
+        agents = {}
+        for nome, config in agents_data.items():
+            # Processa submodules (lista opcional)
+            subs_data = config.get("submodules", [])
+            submodules = []
+            for sub in subs_data:
+                if isinstance(sub, str):
+                    submodules.append(SubmoduleConfig(path=sub))
+                elif isinstance(sub, dict):
+                    submodules.append(SubmoduleConfig(
+                        path=sub.get("path", ""),
+                        description=sub.get("description", ""),
+                    ))
+
+            agents[nome] = AgentConfig(
                 name=config.get("name", nome),
                 avatar=config.get("avatar", ""),
-                token=config.get("token"),
+                command=config.get("command", f"/{nome}"),
+                done_marker=config.get("done_marker", ""),
+                timeout=config.get("timeout", 0),
+                submodules=submodules,
             )
 
         instance = cls(
             ai_provider=data["ai_provider"],
             messaging_provider=data["messaging_provider"],
             agent_timeout=data.get("agent_timeout", 300),
+            dev_timeout=data.get("dev_timeout", 600),
             state_dir=data.get("state_dir", "state/"),
             repo_path=data.get("repo_path", ""),
             ai_model=data.get("ai_model"),
-            personas=personas,
+            squad_lead=squad_lead,
+            heartbeat=heartbeat,
+            agents=agents,
         )
 
         # Variáveis de ambiente sobrescrevem valores do YAML

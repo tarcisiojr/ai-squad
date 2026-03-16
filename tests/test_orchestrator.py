@@ -60,6 +60,9 @@ class MockMessageBus(MessageBus):
     async def receive_voice(self, callback) -> None:
         await self._receive_voice_mock(callback)
 
+    async def ask_user(self, user_id: str, question: str) -> str:
+        return "resposta do usuário"
+
     async def notify(self, user_id: str, text: str) -> None:
         await self._notify_mock(user_id, text)
 
@@ -73,7 +76,9 @@ class TestStateMachine:
         adapter = MockAdapter()
         bus = MockMessageBus()
         state_mgr = StateManager(state_dir=str(tmp_path / "state"))
-        return OrchestrationEngine(adapter, bus, state_mgr)
+        workspace = str(tmp_path / "workspace")
+        (tmp_path / "workspace").mkdir()
+        return OrchestrationEngine(adapter, bus, state_mgr, workspace=workspace)
 
     def test_estado_inicial_idle(self, engine):
         """Verifica que estado inicial é IDLE."""

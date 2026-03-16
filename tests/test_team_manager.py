@@ -39,13 +39,13 @@ class TestTeamManager:
         with open(team_dir / "config.yaml", encoding="utf-8") as f:
             config = yaml.safe_load(f)
 
-        assert config["ai_provider"] == "claude-code"
+        assert config["ai_provider"] == "claude-agent-sdk"
         assert config["messaging_provider"] == "telegram"
         assert config["agent_timeout"] == 300
         assert config["repo_path"] == str(repo)
-        assert "po" in config["personas"]
-        assert "dev-orchestrator" in config["personas"]
-        assert "qa" in config["personas"]
+        assert "po" in config["agents"]
+        assert "dev" in config["agents"]
+        assert "qa" in config["agents"]
 
     def test_create_gera_env_com_placeholders(self, tmp_path):
         """Verifica que .env contém placeholders identificáveis."""

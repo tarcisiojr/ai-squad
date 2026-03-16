@@ -61,12 +61,18 @@ class TelegramMessageBus(MessageBus):
             user_id = str(update.message.chat_id)
             text = update.message.text
 
-            # Se há uma pergunta pendente para este usuário, responde ela
+            # Mostra "digitando..." imediatamente
+            try:
+                await self._app.bot.send_chat_action(chat_id=user_id, action="typing")
+            except Exception:
+                pass
+
+            # Se ha uma pergunta pendente para este usuario, responde ela
             if user_id in self._pending_text_reply:
                 self._pending_text_reply[user_id].set_result(text)
                 return
 
-            # Caso contrário, trata como nova demanda
+            # Caso contrario, trata como nova demanda
             if self._message_callback:
                 await self._message_callback(text)
 
@@ -87,52 +93,120 @@ class TelegramMessageBus(MessageBus):
                 self._pending_approvals[key].set_result(query.data)
 
         self._app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _handle_text))
+        self._app.add_handler(MessageHandler(filters.COMMAND, _handle_text))
         self._app.add_handler(MessageHandler(filters.VOICE, _handle_voice))
         self._app.add_handler(CallbackQueryHandler(_handle_callback))
 
+    # URL do serviço Whisper separado (container dedicado)
+    WHISPER_SERVICE_URL = "http://whisper:8000/transcribe"
+
     async def _transcribe_voice(self, update, context) -> str | None:
-        """Transcreve áudio via Whisper API."""
-        if not self._whisper_api_key:
-            return None
-
+        """Transcreve audio via servico Whisper separado (HTTP)."""
         try:
-            import openai
-
             voice = update.message.voice
             file = await context.bot.get_file(voice.file_id)
             audio_bytes = await file.download_as_bytearray()
 
-            # Salva temporariamente para enviar ao Whisper
-            import tempfile
-            import os
+            import aiohttp
 
-            with tempfile.NamedTemporaryFile(suffix=".ogg", delete=False) as tmp:
-                tmp.write(audio_bytes)
-                tmp_path = tmp.name
+            async with aiohttp.ClientSession() as session:
+                data = aiohttp.FormData()
+                data.add_field(
+                    "file", audio_bytes,
+                    filename="audio.ogg",
+                    content_type="audio/ogg",
+                )
+                async with session.post(
+                    self.WHISPER_SERVICE_URL, data=data, timeout=aiohttp.ClientTimeout(total=60),
+                ) as resp:
+                    if resp.status == 200:
+                        result = await resp.json()
+                        return result.get("text", "").strip() or None
+                    else:
+                        import logging
+                        logging.getLogger("ai-dev-team.telegram").error(
+                            "Whisper retornou %d: %s", resp.status, await resp.text(),
+                        )
+                        return None
 
-            try:
-                client = openai.OpenAI(api_key=self._whisper_api_key)
-                with open(tmp_path, "rb") as audio_file:
-                    transcription = client.audio.transcriptions.create(
-                        model="whisper-1",
-                        file=audio_file,
-                    )
-                return transcription.text
-            finally:
-                os.unlink(tmp_path)
-
-        except Exception:
+        except Exception as e:
+            import logging
+            logging.getLogger("ai-dev-team.telegram").error("Erro na transcricao: %s", e)
             return None
 
-    async def send_message(self, user_id: str, text: str) -> None:
-        """Envia mensagem de texto via Telegram."""
+    async def send_typing(self, chat_id: str) -> None:
+        """Envia acao 'digitando...' no Telegram."""
         await self._ensure_app()
-        prefixo = f"{self._persona_avatar} *{self._persona_name}*\n" if self._persona_name else ""
-        await self._app.bot.send_message(
-            chat_id=user_id,
-            text=f"{prefixo}{text}",
-            parse_mode="Markdown",
-        )
+        try:
+            await self._app.bot.send_chat_action(chat_id=chat_id, action="typing")
+        except Exception:
+            pass
+
+    @staticmethod
+    def _escape_markdown_v2(text: str) -> str:
+        """Escapa caracteres especiais do MarkdownV2, preservando formatacao basica."""
+        import re
+        # Preserva negrito (**texto**) e italico (_texto_) convertendo para MarkdownV2
+        # Primeiro protege as formatacoes existentes
+        protected = []
+
+        def protect(match):
+            protected.append(match.group(0))
+            return f"\x00PROT{len(protected) - 1}\x00"
+
+        # Protege **negrito** e *italico* e `codigo`
+        result = re.sub(r'\*\*(.+?)\*\*', protect, text)
+        result = re.sub(r'\*(.+?)\*', protect, result)
+        result = re.sub(r'`(.+?)`', protect, result)
+
+        # Escapa caracteres especiais do MarkdownV2
+        special_chars = r'_[]()~>#+=|{}.!-'
+        for char in special_chars:
+            result = result.replace(char, f'\\{char}')
+
+        # Restaura formatacoes protegidas
+        for i, original in enumerate(protected):
+            result = result.replace(f'\x00PROT{i}\x00', original)
+
+        return result
+
+    async def _send(self, chat_id: str, text: str, **kwargs):
+        """Envia mensagem com Markdown. Fallback para texto plano se falhar."""
+        max_len = 4096
+        if len(text) > max_len:
+            parts = [text[i:i + max_len] for i in range(0, len(text), max_len)]
+            msg = None
+            for i, part in enumerate(parts):
+                part_kwargs = kwargs if i == len(parts) - 1 else {}
+                msg = await self._send(chat_id, part, **part_kwargs)
+            return msg
+
+        # Tenta enviar com Markdown primeiro, fallback para texto plano
+        try:
+            return await self._app.bot.send_message(
+                chat_id=chat_id,
+                text=text,
+                parse_mode="Markdown",
+                **kwargs,
+            )
+        except Exception:
+            return await self._app.bot.send_message(
+                chat_id=chat_id,
+                text=text,
+                **kwargs,
+            )
+
+    async def send_message(self, user_id: str, text: str, sender: str = "") -> None:
+        """Envia mensagem de texto via Telegram. Mostra 'digitando...' antes."""
+        await self.send_typing(user_id)
+        await self._ensure_app()
+        if sender:
+            prefixo = f"{sender}\n\n"
+        elif self._persona_name:
+            prefixo = f"{self._persona_avatar} {self._persona_name}\n\n"
+        else:
+            prefixo = ""
+        await self._send(user_id, f"{prefixo}{text}")
 
     async def send_approval_request(
         self, user_id: str, question: str, options: list[str]
@@ -147,15 +221,13 @@ class TelegramMessageBus(MessageBus):
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        prefixo = f"{self._persona_avatar} *{self._persona_name}*\n" if self._persona_name else ""
-        msg = await self._app.bot.send_message(
-            chat_id=user_id,
-            text=f"{prefixo}{question}",
+        prefixo = f"{self._persona_avatar} {self._persona_name}\n" if self._persona_name else ""
+        msg = await self._send(
+            user_id,
+            f"{prefixo}{question}",
             reply_markup=reply_markup,
-            parse_mode="Markdown",
         )
 
-        # Aguarda resposta via callback
         key = f"{user_id}:{msg.message_id}"
         future: asyncio.Future = asyncio.get_event_loop().create_future()
         self._pending_approvals[key] = future
@@ -169,16 +241,12 @@ class TelegramMessageBus(MessageBus):
     async def ask_user(self, user_id: str, question: str) -> str:
         """Envia pergunta e aguarda resposta de texto livre do usuário."""
         await self._ensure_app()
-        prefixo = f"{self._persona_avatar} *{self._persona_name}*\n" if self._persona_name else ""
-        await self._app.bot.send_message(
-            chat_id=user_id,
-            text=f"{prefixo}{question}",
-            parse_mode="Markdown",
-        )
 
-        # Registra future para capturar próxima mensagem de texto deste usuário
         future: asyncio.Future = asyncio.get_event_loop().create_future()
         self._pending_text_reply[user_id] = future
+
+        prefixo = f"{self._persona_avatar} {self._persona_name}\n" if self._persona_name else ""
+        await self._send(user_id, f"{prefixo}{question}")
 
         try:
             resposta = await future
@@ -193,6 +261,22 @@ class TelegramMessageBus(MessageBus):
     async def receive_voice(self, callback: Callable) -> None:
         """Registra callback para mensagens de voz."""
         self._voice_callback = callback
+
+    async def send_photo(self, user_id: str, photo_path: str, caption: str = "") -> None:
+        """Envia foto via Telegram."""
+        await self._ensure_app()
+        try:
+            with open(photo_path, "rb") as f:
+                await self._app.bot.send_photo(
+                    chat_id=user_id,
+                    photo=f,
+                    caption=caption or None,
+                )
+        except Exception as e:
+            import logging
+            logging.getLogger("ai-dev-team.telegram").error("Erro ao enviar foto: %s", e)
+            # Fallback: informa que nao conseguiu enviar
+            await self.send_message(user_id, f"Nao consegui enviar a imagem: {e}")
 
     async def notify(self, user_id: str, text: str) -> None:
         """Envia notificação via Telegram."""

@@ -34,15 +34,38 @@ class StateManager:
 
         return DemandState(data["state"])
 
-    def set_state(self, demand_id: str, state: DemandState) -> None:
-        """Persiste o estado de uma demanda com escrita atômica."""
+    def set_state(
+        self,
+        demand_id: str,
+        state: DemandState,
+        checkpoint: dict | None = None,
+    ) -> None:
+        """Persiste o estado de uma demanda com escrita atômica.
+
+        O checkpoint contém resultados parciais das fases concluídas
+        para permitir retomada após crash.
+        """
+        # Carrega dados existentes para preservar checkpoint anterior
+        path = self._state_path(demand_id)
+        existing = {}
+        if path.exists():
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    existing = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                existing = {}
+
         data = {
             "demand_id": demand_id,
             "state": state.value,
+            "checkpoint": checkpoint or existing.get("checkpoint", {}),
         }
 
-        # Escrita atômica: escreve em temp e renomeia
-        path = self._state_path(demand_id)
+        # Preserva campos extras (user_id, description, etc.)
+        for key in ("user_id", "description"):
+            if key in existing:
+                data[key] = existing[key]
+
         fd, tmp_path = tempfile.mkstemp(
             dir=str(self._state_dir), suffix=".tmp"
         )
@@ -51,10 +74,39 @@ class StateManager:
                 json.dump(data, f, indent=2, ensure_ascii=False)
             os.replace(tmp_path, path)
         except Exception:
-            # Remove arquivo temporário em caso de erro
             if os.path.exists(tmp_path):
                 os.unlink(tmp_path)
             raise
+
+    def save_checkpoint(self, demand_id: str, key: str, value: str) -> None:
+        """Salva resultado parcial de uma fase no checkpoint."""
+        path = self._state_path(demand_id)
+        data = {}
+        if path.exists():
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                data = {"demand_id": demand_id, "state": "idle"}
+
+        checkpoint = data.get("checkpoint", {})
+        checkpoint[key] = value
+        data["checkpoint"] = checkpoint
+
+        self.set_state(demand_id, DemandState(data["state"]), checkpoint)
+
+    def get_checkpoint(self, demand_id: str) -> dict:
+        """Retorna checkpoint da demanda."""
+        path = self._state_path(demand_id)
+        if not path.exists():
+            return {}
+
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return data.get("checkpoint", {})
+        except (json.JSONDecodeError, OSError):
+            return {}
 
     def get_all_demands(self) -> dict[str, DemandState]:
         """Retorna estado de todas as demandas persistidas."""
@@ -63,6 +115,54 @@ class StateManager:
             demand_id = path.stem
             demands[demand_id] = self.get_state(demand_id)
         return demands
+
+    def get_pending_demands(self) -> list[dict]:
+        """Retorna demandas com estado não-terminal para retomada."""
+        terminal_states = {DemandState.DONE, DemandState.IDLE}
+        pending = []
+
+        for path in self._state_dir.glob("*.json"):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                state = DemandState(data["state"])
+                if state not in terminal_states:
+                    pending.append({
+                        "demand_id": data["demand_id"],
+                        "state": state,
+                        "user_id": data.get("user_id", ""),
+                        "description": data.get("description", ""),
+                        "checkpoint": data.get("checkpoint", {}),
+                    })
+            except (json.JSONDecodeError, OSError, KeyError, ValueError):
+                continue
+
+        return pending
+
+    def save_user_id(self, demand_id: str, user_id: str) -> None:
+        """Salva user_id no estado da demanda para retomada futura."""
+        path = self._state_path(demand_id)
+        data = {}
+        if path.exists():
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                data = {"demand_id": demand_id, "state": "idle"}
+
+        data["user_id"] = user_id
+        data.setdefault("demand_id", demand_id)
+        data.setdefault("state", "idle")
+
+        fd, tmp_path = tempfile.mkstemp(dir=str(self._state_dir), suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            os.replace(tmp_path, path)
+        except Exception:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+            raise
 
     def delete_state(self, demand_id: str) -> None:
         """Remove estado de uma demanda."""

@@ -11,6 +11,14 @@ agent_timeout: 300
 # Diretório para persistência de estado
 state_dir: state/
 
+# Heartbeat — verificação periódica de demandas paradas
+heartbeat:
+  enabled: true
+  interval: 300          # Segundos entre verificações (5min)
+  stall_timeout: 1800    # Segundos para considerar parada (30min)
+  reminder_timeout: 3600 # Segundos para lembrete de aprovação (1h)
+  max_auto_retries: 3    # Máximo de retomadas automáticas
+
 # Configurações por persona
 personas:
   po:

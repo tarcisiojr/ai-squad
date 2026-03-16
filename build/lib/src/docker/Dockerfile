@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     openssh-client \
     sudo \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Node.js 20 (para claude CLI)
@@ -41,8 +42,11 @@ RUN curl -fsSL https://download.docker.com/linux/debian/gpg \
     && apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin \
     && rm -rf /var/lib/apt/lists/*
 
-# Claude CLI via npm
-RUN npm install -g @anthropic-ai/claude-code
+# Claude CLI, OpenSpec CLI e Playwright CLI via npm
+RUN npm install -g @anthropic-ai/claude-code @fission-ai/openspec @playwright/cli
+
+# Instala browsers do Playwright (chromium) e dependencias de sistema
+RUN npx playwright install --with-deps chromium
 
 # Cria usuário não-root (Claude Code exige isso)
 RUN useradd --create-home --shell /bin/bash --uid 1000 agent \

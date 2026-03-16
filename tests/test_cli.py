@@ -208,16 +208,114 @@ class TestCLIBuild:
 
     def test_build_chama_docker(self, runner, tmp_path):
         """Verifica que build executa docker build."""
-        dockerfile = tmp_path / "Dockerfile"
-        dockerfile.write_text("FROM python:3.11-slim")
+        (tmp_path / "Dockerfile").write_text("FROM python:3.11-slim")
 
-        with patch("src.cli.main._find_dockerfile_dir", return_value=tmp_path), \
+        with patch("src.cli.main._find_source_dir", return_value=tmp_path), \
+             patch("src.cli.main._generate_wheel", return_value=True), \
+             patch("src.docker.get_docker_dir", return_value=tmp_path), \
              patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0)
             result = runner.invoke(cli, ["build"])
 
         assert result.exit_code == 0
         assert "construída" in result.output.lower() or "Construindo" in result.output
+
+
+class TestCLIAgentManagement:
+    """Testes para add-agent, remove-agent, list-agents."""
+
+    def _create_team(self, tmp_path):
+        from src.cli.team_manager import TeamManager
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+        manager.create("meu-time", str(repo))
+        return manager
+
+    def test_add_agent(self, runner, tmp_path):
+        """Verifica adição de agente."""
+        manager = self._create_team(tmp_path)
+
+        with patch("src.cli.main._get_manager", return_value=manager):
+            result = runner.invoke(cli, [
+                "add-agent", "meu-time", "security",
+                "--name", "Security Agent",
+                "--avatar", "🔒",
+                "--command", "/sec",
+                "--marker", "---SEC_DONE---",
+            ])
+
+        assert result.exit_code == 0
+        assert "adicionado" in result.output
+
+        # Verifica arquivos criados
+        agent_dir = manager.get_path("meu-time") / "agents" / "security"
+        assert agent_dir.exists()
+        assert (agent_dir / "AGENTS.md").exists()
+        assert (agent_dir / "CLAUDE.md").is_symlink()
+        assert (agent_dir / "skills").is_dir()
+
+        # Verifica config.yaml atualizado
+        import yaml
+        config = yaml.safe_load((manager.get_path("meu-time") / "config.yaml").read_text())
+        assert "security" in config["agents"]
+        assert config["agents"]["security"]["avatar"] == "🔒"
+
+    def test_add_agent_ja_existe(self, runner, tmp_path):
+        """Verifica erro ao adicionar agente existente."""
+        manager = self._create_team(tmp_path)
+
+        with patch("src.cli.main._get_manager", return_value=manager):
+            result = runner.invoke(cli, ["add-agent", "meu-time", "po"])
+
+        assert result.exit_code != 0
+        assert "já existe" in result.output
+
+    def test_add_agent_time_inexistente(self, runner, tmp_path):
+        """Verifica erro com time inexistente."""
+        from src.cli.team_manager import TeamManager
+        manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+
+        with patch("src.cli.main._get_manager", return_value=manager):
+            result = runner.invoke(cli, ["add-agent", "fake", "sec"])
+
+        assert result.exit_code != 0
+
+    def test_remove_agent(self, runner, tmp_path):
+        """Verifica remoção de agente."""
+        manager = self._create_team(tmp_path)
+
+        with patch("src.cli.main._get_manager", return_value=manager):
+            # Adiciona e depois remove
+            runner.invoke(cli, ["add-agent", "meu-time", "security"])
+            result = runner.invoke(cli, ["remove-agent", "meu-time", "security", "--yes"])
+
+        assert result.exit_code == 0
+        assert "removido" in result.output
+        assert not (manager.get_path("meu-time") / "agents" / "security").exists()
+
+    def test_remove_squad_lead_bloqueado(self, runner, tmp_path):
+        """Verifica que não pode remover squad-lead."""
+        manager = self._create_team(tmp_path)
+
+        with patch("src.cli.main._get_manager", return_value=manager):
+            result = runner.invoke(cli, ["remove-agent", "meu-time", "squad-lead", "--yes"])
+
+        assert result.exit_code != 0
+        assert "Squad Lead" in result.output
+
+    def test_list_agents(self, runner, tmp_path):
+        """Verifica listagem de agentes."""
+        manager = self._create_team(tmp_path)
+
+        with patch("src.cli.main._get_manager", return_value=manager):
+            result = runner.invoke(cli, ["list-agents", "meu-time"])
+
+        assert result.exit_code == 0
+        assert "Squad Lead" in result.output
+        assert "PO" in result.output
+        assert "Dev" in result.output
+        assert "QA" in result.output
 
 
 class TestCLIVersion:

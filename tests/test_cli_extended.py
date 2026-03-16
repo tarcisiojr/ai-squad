@@ -9,7 +9,7 @@ from click.testing import CliRunner
 from src.cli.main import (
     _build_image,
     _docker_compose_cmd,
-    _find_dockerfile_dir,
+    _find_source_dir,
     _get_container_status,
     _image_exists,
     cli,
@@ -57,31 +57,19 @@ class TestHelperFunctions:
             mock.return_value = MagicMock(returncode=1)
             assert _get_container_status("test") == "stopped"
 
-    def test_find_dockerfile_dir_cwd(self, tmp_path, monkeypatch):
-        """Verifica busca de Dockerfile no diretório atual."""
-        (tmp_path / "Dockerfile").touch()
+    def test_find_source_dir_cwd(self, tmp_path, monkeypatch):
+        """Verifica busca de pyproject.toml no diretório atual."""
+        (tmp_path / "pyproject.toml").touch()
         monkeypatch.chdir(tmp_path)
-        assert _find_dockerfile_dir() == tmp_path
-
-    def test_find_dockerfile_dir_not_found(self, tmp_path, monkeypatch):
-        """Verifica erro quando Dockerfile não encontrado."""
-        empty_dir = tmp_path / "empty"
-        empty_dir.mkdir()
-        monkeypatch.chdir(empty_dir)
-
-        # Mocka get_docker_dir para retornar diretório sem Dockerfile
-        fake_docker_dir = tmp_path / "fake_docker"
-        fake_docker_dir.mkdir()
-
-        with patch("src.cli.main.__file__", str(empty_dir / "main.py")), \
-             patch("src.docker.get_docker_dir", return_value=fake_docker_dir):
-            with pytest.raises(FileNotFoundError, match="Dockerfile"):
-                _find_dockerfile_dir()
+        assert _find_source_dir() == tmp_path
 
     def test_build_image_falha(self, tmp_path):
         """Verifica tratamento de erro no build."""
-        with patch("src.cli.main._find_dockerfile_dir", return_value=tmp_path), \
+        with patch("src.cli.main._find_source_dir", return_value=tmp_path), \
+             patch("src.cli.main._generate_wheel", return_value=True), \
+             patch("src.docker.get_docker_dir", return_value=tmp_path), \
              patch("subprocess.run") as mock_run:
+            (tmp_path / "Dockerfile").touch()
             mock_run.return_value = MagicMock(returncode=1)
             with pytest.raises(SystemExit):
                 _build_image()

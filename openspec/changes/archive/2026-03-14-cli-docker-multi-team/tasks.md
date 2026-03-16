@@ -3,7 +3,7 @@
 - [x] 1.1 Reescrever Dockerfile com multi-stage: Python 3.11 + Node.js 20 + git + gh CLI + docker CLI + docker-compose
 - [x] 1.2 Instalar claude CLI via npm no Dockerfile
 - [x] 1.3 Adicionar health check no Dockerfile (arquivo ou endpoint)
-- [ ] 1.4 Testar build da imagem e verificar que todas as ferramentas estão no PATH
+- [x] 1.4 Testar build da imagem e verificar que todas as ferramentas estão no PATH
 
 ## 2. Estrutura de Diretórios e Templates
 
@@ -50,11 +50,11 @@
 - [x] 6.2 Testes unitários para cada comando CLI (create, start, stop, list, logs, status, build)
 - [x] 6.3 Testes para Daemon (init, shutdown, fila de demandas)
 - [x] 6.4 Testes para PlatformConfig adaptado (env vars, validação, repo_path)
-- [ ] 6.5 Testes de integração: create → start → verificar container rodando → stop
+- [x] 6.5 Testes de integração: create → start → verificar container rodando → stop
 - [x] 6.6 Verificar cobertura ≥ 80%
 
 ## 7. Documentação e Finalização
 
 - [x] 7.1 Atualizar pyproject.toml com novas dependências e entry point
 - [x] 7.2 Atualizar CLAUDE.md com novos comandos de desenvolvimento
-- [ ] 7.3 Testar fluxo completo: pip install -e . → ai-dev-team create test --repo . → preencher .env → ai-dev-team start test
+- [x] 7.3 Testar fluxo completo: pip install -e . → ai-dev-team create test --repo . → preencher .env → ai-dev-team start test

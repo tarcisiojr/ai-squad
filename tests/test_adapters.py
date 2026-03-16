@@ -1,93 +1,29 @@
 """Testes para implementações de AIAgentAdapter."""
 
-import subprocess
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from src.adapters.claude_code import ClaudeCodeAdapter, ClaudeCodeCLIAdapter
+from src.adapters.claude_agent_sdk import ClaudeAgentSDKAdapter
 from src.adapters.interface import AIAgentAdapter
 from src.models import AgentStatus
 
 
-class TestClaudeCodeAdapter:
-    """Testes para ClaudeCodeCLIAdapter (e alias ClaudeCodeAdapter)."""
+class TestClaudeAgentSDKAdapter:
+    """Testes para ClaudeAgentSDKAdapter."""
 
     @pytest.fixture
     def adapter(self):
-        """Cria instância de ClaudeCodeCLIAdapter."""
-        return ClaudeCodeCLIAdapter(timeout=30)
-
-    def test_alias_retrocompatibilidade(self):
-        """Verifica que ClaudeCodeAdapter é alias para ClaudeCodeCLIAdapter."""
-        assert ClaudeCodeAdapter is ClaudeCodeCLIAdapter
+        """Cria instância de ClaudeAgentSDKAdapter."""
+        return ClaudeAgentSDKAdapter(timeout=30)
 
     def test_herda_ai_agent_adapter(self, adapter):
-        """Verifica que ClaudeCodeAdapter implementa AIAgentAdapter."""
+        """Verifica que ClaudeAgentSDKAdapter implementa AIAgentAdapter."""
         assert isinstance(adapter, AIAgentAdapter)
 
     def test_status_inicial_idle(self, adapter):
         """Verifica que status inicial é IDLE."""
         assert adapter.status() == AgentStatus.IDLE
-
-    @pytest.mark.asyncio
-    async def test_run_sucesso(self, adapter):
-        """Verifica execução com sucesso via subprocess mock."""
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = "Resultado do Claude"
-        mock_result.stderr = ""
-
-        with patch("subprocess.run", return_value=mock_result):
-            resultado = await adapter.run("Crie um hello world", {"lang": "python"})
-
-        assert resultado == "Resultado do Claude"
-        assert adapter.status() == AgentStatus.DONE
-
-    @pytest.mark.asyncio
-    async def test_run_timeout(self, adapter):
-        """Verifica tratamento de timeout."""
-        with patch(
-            "subprocess.run", side_effect=subprocess.TimeoutExpired("claude", 30)
-        ):
-            with pytest.raises(TimeoutError, match="excedeu timeout"):
-                await adapter.run("prompt longo", {})
-
-        assert adapter.status() == AgentStatus.ERROR
-
-    @pytest.mark.asyncio
-    async def test_run_erro_subprocess(self, adapter):
-        """Verifica tratamento de erro do subprocess."""
-        with patch(
-            "subprocess.run",
-            side_effect=subprocess.CalledProcessError(1, "claude", stderr="erro"),
-        ):
-            with pytest.raises(RuntimeError, match="retornou erro"):
-                await adapter.run("prompt", {})
-
-        assert adapter.status() == AgentStatus.ERROR
-
-    @pytest.mark.asyncio
-    async def test_run_cli_nao_encontrado(self, adapter):
-        """Verifica tratamento quando CLI não está instalado."""
-        with patch("subprocess.run", side_effect=FileNotFoundError()):
-            with pytest.raises(RuntimeError, match="não encontrado"):
-                await adapter.run("prompt", {})
-
-        assert adapter.status() == AgentStatus.ERROR
-
-    @pytest.mark.asyncio
-    async def test_ask_delega_para_run(self, adapter):
-        """Verifica que ask delega para run com contexto vazio."""
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = "Resposta"
-        mock_result.stderr = ""
-
-        with patch("subprocess.run", return_value=mock_result):
-            resultado = await adapter.ask("Qual é o sentido da vida?")
-
-        assert resultado == "Resposta"
 
     def test_on_human_needed_registra_callback(self, adapter):
         """Verifica registro de callback para intervenção humana."""
@@ -113,6 +49,21 @@ class TestClaudeCodeAdapter:
         with pytest.raises(RuntimeError, match="Nenhum callback"):
             await adapter.request_human_approval("Aprovar?")
 
+    def test_timeout_configuravel(self):
+        """Verifica que timeout é configurável."""
+        adapter = ClaudeAgentSDKAdapter(timeout=600)
+        assert adapter._timeout == 600
+
+    def test_working_dir_configuravel(self):
+        """Verifica que working_dir é configurável."""
+        adapter = ClaudeAgentSDKAdapter(working_dir="/tmp/projeto")
+        assert adapter._working_dir == "/tmp/projeto"
+
+    def test_model_configuravel(self):
+        """Verifica que model é configurável."""
+        adapter = ClaudeAgentSDKAdapter(model="claude-sonnet-4-20250514")
+        assert adapter._model == "claude-sonnet-4-20250514"
+
     def test_build_prompt_com_contexto(self, adapter):
         """Verifica montagem do prompt com contexto."""
         prompt = adapter._build_prompt(
@@ -120,22 +71,57 @@ class TestClaudeCodeAdapter:
         )
         assert "## Contexto" in prompt
         assert "linguagem: python" in prompt
-        assert "## Tarefa" in prompt
         assert "Crie um teste" in prompt
 
     def test_build_prompt_sem_contexto(self, adapter):
         """Verifica montagem do prompt sem contexto."""
         prompt = adapter._build_prompt("Crie um teste", {})
-        assert "## Contexto" not in prompt
-        assert "## Tarefa" in prompt
         assert "Crie um teste" in prompt
 
-    def test_timeout_configuravel(self):
-        """Verifica que timeout é configurável."""
-        adapter = ClaudeCodeAdapter(timeout=600)
-        assert adapter._timeout == 600
+    def test_build_prompt_com_product_context(self, adapter):
+        """Verifica montagem do prompt com contexto do produto."""
+        prompt = adapter._build_prompt(
+            "Crie um teste",
+            {"product_context": "README conteudo aqui"},
+        )
+        assert "## Contexto do Projeto" in prompt
+        assert "README conteudo aqui" in prompt
 
-    def test_working_dir_configuravel(self):
-        """Verifica que working_dir é configurável."""
-        adapter = ClaudeCodeAdapter(working_dir="/tmp/projeto")
-        assert adapter._working_dir == "/tmp/projeto"
+    def test_build_prompt_com_system_instructions(self, adapter):
+        """Verifica montagem do prompt com instruções do sistema."""
+        prompt = adapter._build_prompt(
+            "Crie um teste",
+            {"system_instructions": "Voce e o PO."},
+        )
+        assert "Voce e o PO." in prompt
+
+    def test_set_callbacks(self, adapter):
+        """Verifica que callbacks são configuráveis."""
+        cb1 = AsyncMock()
+        cb2 = AsyncMock()
+        cb3 = AsyncMock()
+        cb4 = AsyncMock()
+
+        adapter.set_progress_callback(cb1)
+        adapter.set_start_agent_callback(cb2)
+        adapter.set_get_agents_callback(cb3)
+        adapter.set_check_artifacts_callback(cb4)
+
+        assert adapter._progress_callback is cb1
+        assert adapter._start_agent_callback is cb2
+        assert adapter._get_agents_callback is cb3
+        assert adapter._check_artifacts_callback is cb4
+
+    def test_session_management(self, adapter):
+        """Verifica gerenciamento de sessões."""
+        assert adapter.get_session_id("conv-1") is None
+
+        adapter._sessions["conv-1"] = "session-abc"
+        assert adapter.get_session_id("conv-1") == "session-abc"
+
+        adapter.clear_session("conv-1")
+        assert adapter.get_session_id("conv-1") is None
+
+    def test_mcp_server_criado(self, adapter):
+        """Verifica que MCP server é criado com tools."""
+        assert adapter._mcp_server is not None
