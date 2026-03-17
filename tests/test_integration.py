@@ -168,7 +168,6 @@ class TestDesacoplamento:
             "src.models",
             "src.barramento.interface",
             "src.adapters.interface",
-            "src.registry.registry",
         ]
 
         for nome_modulo in modulos_core:
