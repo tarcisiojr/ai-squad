@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 from src.adapters.interface import AIAgentAdapter
-from src.barramento.interface import MessageBus
+from src.messaging.interface import MessageBus
 from src.orchestrator.context import ProductContextCollector
 from src.orchestrator.conversation import ConversationStore
 from src.orchestrator.daily_notes import DailyNotes

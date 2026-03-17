@@ -2,8 +2,8 @@
 
 import pytest
 
-from src.barramento.cli import CLIMessageBus
-from src.barramento.interface import MessageBus
+from src.messaging.cli import CLIMessageBus
+from src.messaging.interface import MessageBus
 
 
 class TestCLIMessageBus:

@@ -8,7 +8,7 @@ from src.models import AgentStatus
 from src.orchestrator.engine import OrchestrationEngine
 from src.orchestrator.state import StateManager
 from src.adapters.interface import AIAgentAdapter
-from src.barramento.interface import MessageBus
+from src.messaging.interface import MessageBus
 
 
 # Fixtures para mocks

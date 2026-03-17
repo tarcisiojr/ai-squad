@@ -8,7 +8,7 @@ from typing import Any
 import yaml
 
 from src.adapters.interface import AIAgentAdapter
-from src.barramento.interface import MessageBus
+from src.messaging.interface import MessageBus
 
 # Prefixo de placeholder para tokens não preenchidos
 _PLACEHOLDER_PREFIX = "PREENCHA_AQUI_"

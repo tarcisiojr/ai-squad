@@ -3,7 +3,7 @@
 import pytest
 
 from src.models import AgentStatus
-from src.barramento.interface import MessageBus
+from src.messaging.interface import MessageBus
 from src.adapters.interface import AIAgentAdapter
 
 

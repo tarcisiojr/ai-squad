@@ -12,7 +12,7 @@ from src.factory import PersonaConfig
 from src.orchestrator.engine import OrchestrationEngine
 from src.orchestrator.state import StateManager
 from src.adapters.interface import AIAgentAdapter
-from src.barramento.interface import MessageBus
+from src.messaging.interface import MessageBus
 
 TEST_PERSONAS = {
     "po": PersonaConfig(name="PO", avatar="📋", command="/po", done_marker="---SPEC_READY---"),

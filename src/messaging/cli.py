@@ -3,7 +3,7 @@
 import asyncio
 from typing import Callable
 
-from src.barramento.interface import MessageBus
+from src.messaging.interface import MessageBus
 
 
 class CLIMessageBus(MessageBus):

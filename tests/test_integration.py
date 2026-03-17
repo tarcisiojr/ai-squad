@@ -9,10 +9,10 @@ import pytest
 from src.models import AgentStatus
 from src.orchestrator.engine import OrchestrationEngine
 from src.orchestrator.state import StateManager
-from src.barramento.cli import CLIMessageBus
+from src.messaging.cli import CLIMessageBus
 from src.factory import PlatformConfig, PlatformFactory
 from src.adapters.interface import AIAgentAdapter
-from src.barramento.interface import MessageBus
+from src.messaging.interface import MessageBus
 
 
 # Mock adapter para testes de integração
@@ -153,8 +153,8 @@ class TestDesacoplamento:
         source = inspect.getsource(modulo)
 
         # Não deve importar implementações concretas
-        assert "from src.barramento.cli" not in source
-        assert "from src.barramento.telegram" not in source
+        assert "from src.messaging.cli" not in source
+        assert "from src.messaging.telegram" not in source
         assert "from src.adapters.claude_code" not in source
         assert "CLIMessageBus" not in source
         assert "TelegramMessageBus" not in source
@@ -166,7 +166,7 @@ class TestDesacoplamento:
             "src.orchestrator.engine",
             "src.orchestrator.state",
             "src.models",
-            "src.barramento.interface",
+            "src.messaging.interface",
             "src.adapters.interface",
         ]
 

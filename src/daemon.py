@@ -13,7 +13,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from src.adapters.claude_agent_sdk import ClaudeAgentSDKAdapter
-from src.barramento.telegram import TelegramMessageBus
+from src.messaging.telegram import TelegramMessageBus
 from src.factory import PlatformConfig
 from src.orchestrator.engine import OrchestrationEngine
 from src.orchestrator.journal import JournalStore

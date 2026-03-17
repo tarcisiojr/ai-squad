@@ -5,7 +5,7 @@ import os
 import re
 from pathlib import Path
 
-from src.barramento.interface import MessageBus
+from src.messaging.interface import MessageBus
 
 logger = logging.getLogger("ai-dev-team.media")
 

@@ -7,7 +7,7 @@ import pytest
 import yaml
 
 from src.factory import PlatformConfig, PlatformFactory, PersonaConfig
-from src.barramento.interface import MessageBus
+from src.messaging.interface import MessageBus
 from src.adapters.interface import AIAgentAdapter
 from src.models import AgentStatus
 
