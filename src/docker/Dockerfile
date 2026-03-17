@@ -1,5 +1,4 @@
-# Dockerfile para ai-dev-team — auto-contido
-# O pacote Python é instalado a partir de um .whl embutido no build context
+# Dockerfile para ai-dev-team (dev mode — usa código-fonte local)
 # IMPORTANTE: Claude Code não roda como root
 
 FROM python:3.11-slim
@@ -42,29 +41,55 @@ RUN curl -fsSL https://download.docker.com/linux/debian/gpg \
     && apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin \
     && rm -rf /var/lib/apt/lists/*
 
-# Claude CLI, OpenSpec CLI e Playwright CLI via npm
-RUN npm install -g @anthropic-ai/claude-code @fission-ai/openspec @playwright/cli
+# Claude CLI, OpenSpec CLI, Playwright CLI, Context Mode e Context7 via npm
+RUN npm install -g @anthropic-ai/claude-code @fission-ai/openspec @playwright/cli context-mode @upstash/context7-mcp
 
-# Instala browsers do Playwright (chromium) e dependencias de sistema
-RUN npx playwright install --with-deps chromium
+# Instala dependencias de sistema do Playwright (precisa ser root)
+RUN npx playwright install-deps chromium
 
 # Cria usuário não-root (Claude Code exige isso)
 RUN useradd --create-home --shell /bin/bash --uid 1000 agent \
     && usermod -aG sudo agent \
     && echo "agent ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
-# Instala o pacote ai-dev-team a partir do .whl
-COPY *.whl /tmp/
-RUN pip install --no-cache-dir /tmp/*.whl && rm -f /tmp/*.whl
+WORKDIR /app
+
+# Copia e instala dependências Python
+COPY pyproject.toml .
+COPY src/ src/
+COPY agents/ agents/
+COPY registry.yaml .
+
+RUN pip install --no-cache-dir .
 
 # Configura diretórios com permissão para o usuário agent
 RUN mkdir -p /app/state /workspace /home/agent/.claude \
     && chown -R agent:agent /app /workspace /home/agent
 
-WORKDIR /app
+# Configura MCP servers: context-mode (economia de contexto) + context7 (docs atualizadas)
+COPY <<'MCPEOF' /home/agent/.claude/settings.json
+{
+  "mcpServers": {
+    "context-mode": {
+      "type": "stdio",
+      "command": "context-mode",
+      "args": ["--transport", "stdio"]
+    },
+    "context7": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"]
+    }
+  }
+}
+MCPEOF
+RUN chown agent:agent /home/agent/.claude/settings.json
 
 # Troca para usuário não-root
 USER agent
+
+# Instala browser Chromium como usuario agent
+RUN npx playwright install chromium
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
