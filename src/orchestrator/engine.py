@@ -2,12 +2,10 @@
 
 import asyncio
 import logging
-import subprocess
+import re
 import time
 from pathlib import Path
-from typing import Callable
 
-from src.models import DemandState, VALID_TRANSITIONS, AgentStatus
 from src.adapters.interface import AIAgentAdapter
 from src.barramento.interface import MessageBus
 from src.orchestrator.context import ProductContextCollector
@@ -19,31 +17,25 @@ from src.orchestrator.media import extract_and_send_media
 from src.orchestrator.model_router import select_model
 from src.orchestrator.pipeline import PipelineLoader
 from src.orchestrator.pipeline_state import PipelineExecutor
+from src.orchestrator.prompt_builder import (
+    get_agents_summary,
+    get_demand_state_summary,
+    get_running_agents_status,
+    read_agents_md,
+)
 from src.orchestrator.state import StateManager
+from src.orchestrator.tools import (
+    DemandStatus,
+    RunningAgent,
+    VerificationResult,
+)
 from src.orchestrator.verification import (
     check_artifacts_enriched,
     classify_agent_role,
     verify_completion,
 )
-from src.orchestrator.prompt_builder import (
-    read_agents_md,
-    get_agents_summary,
-    get_running_agents_status,
-    get_demand_state_summary,
-)
-from src.orchestrator.tools import (
-    AgentResult, DemandStatus, RunningAgent, VerificationResult, check_workspace,
-)
-
-import re
 
 logger = logging.getLogger("ai-dev-team.engine")
-
-
-class InvalidTransitionError(Exception):
-    """Erro para transições de estado inválidas."""
-
-    pass
 
 
 class OrchestrationEngine:
@@ -107,11 +99,13 @@ class OrchestrationEngine:
             pipeline = loader.load()
             if pipeline:
                 self._pipeline_executor = PipelineExecutor(
-                    state_dir=state_manager._state_dir, pipeline=pipeline,
+                    state_dir=state_manager._state_dir,
+                    pipeline=pipeline,
                 )
                 logger.info(
                     "Pipeline carregado: %s (%d steps)",
-                    pipeline.name, len(pipeline.steps),
+                    pipeline.name,
+                    len(pipeline.steps),
                 )
 
         # Agentes em background: agent_name → RunningAgent
@@ -200,7 +194,7 @@ class OrchestrationEngine:
 
     def _strip_markers(self, text: str) -> str:
         """Remove marcadores internos (---ALGO---) do texto antes de enviar ao usuario."""
-        return re.sub(r'---\w+---', '', text).strip()
+        return re.sub(r"---\w+---", "", text).strip()
 
     def _read_agents_md(self, agent_name: str) -> str:
         """Le o AGENTS.md de um agente."""
@@ -221,24 +215,6 @@ class OrchestrationEngine:
             return f"{minutes}min{secs}s"
         return f"{minutes}min"
 
-    # --- State machine ---
-
-    def transition(self, demand_id: str, new_state: DemandState) -> None:
-        """Realiza transição de estado para uma demanda."""
-        current = self._state_manager.get_state(demand_id)
-
-        if new_state not in VALID_TRANSITIONS.get(current, []):
-            raise InvalidTransitionError(
-                f"Transição inválida: {current.value} → {new_state.value}. "
-                f"Transições válidas: {[s.value for s in VALID_TRANSITIONS.get(current, [])]}"
-            )
-
-        self._state_manager.set_state(demand_id, new_state)
-
-    def get_state(self, demand_id: str) -> DemandState:
-        """Retorna o estado atual de uma demanda."""
-        return self._state_manager.get_state(demand_id)
-
     # --- MCP tool callbacks ---
 
     def _resolve_user_id(self, agent_name: str = "") -> str:
@@ -258,7 +234,9 @@ class OrchestrationEngine:
         try:
             label = self._get_agent_label(agent_name)
             await self._message_bus.send_message(
-                user_id, message, sender=label,
+                user_id,
+                message,
+                sender=label,
             )
         except Exception as e:
             logger.warning("[%s] Falha ao enviar progresso: %s", agent_name, e)
@@ -285,16 +263,23 @@ class OrchestrationEngine:
         # Registra decisão no journal
         if demand_id:
             self._journal.add_decision(
-                demand_id, f"delegated_to_{agent_name}", task_description,
+                demand_id,
+                f"delegated_to_{agent_name}",
+                task_description,
             )
             self._journal.set_next_expected(
-                demand_id, f"{agent_name}_completion", agent_name,
+                demand_id,
+                f"{agent_name}_completion",
+                agent_name,
                 f"{label} executando: {task_description[:100]}",
             )
 
         # Inicia agente em background
         self._start_agent_background(
-            agent_name, task_description, demand_id, user_id,
+            agent_name,
+            task_description,
+            demand_id,
+            user_id,
         )
 
         return f"Agente {label} iniciado em background. Voce sera notificado quando concluir."
@@ -316,7 +301,10 @@ class OrchestrationEngine:
         return self._journal.get_active_summaries()
 
     async def _handle_learn_lesson(
-        self, category: str, problem: str, solution: str,
+        self,
+        category: str,
+        problem: str,
+        solution: str,
     ) -> None:
         """Callback da MCP tool learn_lesson — registra licao aprendida.
 
@@ -407,7 +395,11 @@ class OrchestrationEngine:
     # --- Agentes em background ---
 
     def _start_agent_background(
-        self, agent_name: str, prompt: str, demand_id: str, user_id: str,
+        self,
+        agent_name: str,
+        prompt: str,
+        demand_id: str,
+        user_id: str,
     ) -> None:
         """Inicia agente como asyncio task em background."""
         running = RunningAgent(
@@ -420,7 +412,10 @@ class OrchestrationEngine:
 
         async def _run() -> str:
             return await self._run_agent_work(
-                agent_name, prompt, demand_id, user_id,
+                agent_name,
+                prompt,
+                demand_id,
+                user_id,
             )
 
         task = asyncio.create_task(_run())
@@ -428,16 +423,16 @@ class OrchestrationEngine:
         self._running_agents[agent_name] = running
 
         # Callback quando conclui
-        task.add_done_callback(
-            lambda t: asyncio.create_task(
-                self._on_agent_done(agent_name, t)
-            )
-        )
+        task.add_done_callback(lambda t: asyncio.create_task(self._on_agent_done(agent_name, t)))
 
         logger.info("[%s] Agente iniciado em background (demand: %s)", agent_name, demand_id)
 
     async def _run_agent_work(
-        self, agent_name: str, prompt: str, demand_id: str, user_id: str,
+        self,
+        agent_name: str,
+        prompt: str,
+        demand_id: str,
+        user_id: str,
     ) -> str:
         """Executa o trabalho do agente — roda em background task."""
         agents_md = self._read_agents_md(agent_name)
@@ -484,9 +479,7 @@ class OrchestrationEngine:
         specs_dir.mkdir(parents=True, exist_ok=True)
 
         # Inicia typing + feedback background para este agente
-        typing_task = asyncio.create_task(
-            self._keep_typing_and_feedback(user_id, agent_name)
-        )
+        typing_task = asyncio.create_task(self._keep_typing_and_feedback(user_id, agent_name))
 
         try:
             resultado = await self._adapter.run(prompt, context)
@@ -518,13 +511,15 @@ class OrchestrationEngine:
 
                 # Registra na nota diária
                 self._daily_notes.add_agent_event(
-                    agent_name, f"Concluiu com sucesso ({running.elapsed_str()})",
+                    agent_name,
+                    f"Concluiu com sucesso ({running.elapsed_str()})",
                 )
 
                 # Registra no journal
                 if running.demand_id:
                     self._journal.add_decision(
-                        running.demand_id, f"{agent_name}_completed",
+                        running.demand_id,
+                        f"{agent_name}_completed",
                         f"Verificacao: {verification.details}",
                     )
 
@@ -535,13 +530,16 @@ class OrchestrationEngine:
                 # Salva resultado do agente no historico de conversa
                 if running.demand_id:
                     self._conversation.save_message(
-                        running.demand_id, "assistant",
+                        running.demand_id,
+                        "assistant",
                         f"{agent_name} concluiu: {preview[:500]}",
                         agent_name=agent_name,
                     )
 
                 await self._message_bus.send_message(
-                    user_id, f"Concluido!\n\n{preview}", sender=label,
+                    user_id,
+                    f"Concluido!\n\n{preview}",
+                    sender=label,
                 )
 
                 # Dispara Squad Lead com contexto completo
@@ -557,7 +555,10 @@ class OrchestrationEngine:
                 running.status = "running"
                 logger.info(
                     "[%s] Verificacao falhou (tentativa %d/%d): %s",
-                    agent_name, running.retries, self.MAX_RETRIES, verification.details,
+                    agent_name,
+                    running.retries,
+                    self.MAX_RETRIES,
+                    verification.details,
                 )
 
                 await self._message_bus.send_message(
@@ -574,7 +575,9 @@ class OrchestrationEngine:
                     f"Continue o trabalho e conclua o que falta."
                 )
                 self._start_agent_retry(
-                    agent_name, feedback_prompt, running,
+                    agent_name,
+                    feedback_prompt,
+                    running,
                 )
                 return  # Nao dispara Squad Lead ainda
 
@@ -583,7 +586,9 @@ class OrchestrationEngine:
                 running.status = "incomplete"
                 logger.warning(
                     "[%s] Verificacao falhou apos %d tentativas: %s",
-                    agent_name, self.MAX_RETRIES + 1, verification.details,
+                    agent_name,
+                    self.MAX_RETRIES + 1,
+                    verification.details,
                 )
 
                 # Registra licao aprendida
@@ -616,7 +621,8 @@ class OrchestrationEngine:
 
             # Registra erro na nota diária
             self._daily_notes.add_agent_event(
-                agent_name, f"Erro: {str(e)[:100]}",
+                agent_name,
+                f"Erro: {str(e)[:100]}",
             )
 
             # Registra licao aprendida com o erro
@@ -629,7 +635,9 @@ class OrchestrationEngine:
             )
 
             await self._message_bus.send_message(
-                user_id, f"Erro: {e}", sender=label,
+                user_id,
+                f"Erro: {e}",
+                sender=label,
             )
 
             await self._trigger_squad_lead_for_agent(
@@ -638,22 +646,25 @@ class OrchestrationEngine:
             )
 
     def _start_agent_retry(
-        self, agent_name: str, prompt: str, running: RunningAgent,
+        self,
+        agent_name: str,
+        prompt: str,
+        running: RunningAgent,
     ) -> None:
         """Re-invoca agente apos falha na verificacao."""
+
         async def _run() -> str:
             return await self._run_agent_work(
-                agent_name, prompt, running.demand_id, running.user_id,
+                agent_name,
+                prompt,
+                running.demand_id,
+                running.user_id,
             )
 
         task = asyncio.create_task(_run())
         running.task = task
 
-        task.add_done_callback(
-            lambda t: asyncio.create_task(
-                self._on_agent_done(agent_name, t)
-            )
-        )
+        task.add_done_callback(lambda t: asyncio.create_task(self._on_agent_done(agent_name, t)))
 
     def _classify_agent_role(self, agent_name: str) -> str:
         """Delega classificação ao módulo verification."""
@@ -662,24 +673,32 @@ class OrchestrationEngine:
         return classify_agent_role(agent_name, self._agents_dir, role_override)
 
     def _verify_completion(
-        self, agent_name: str, resultado: str,
+        self,
+        agent_name: str,
+        resultado: str,
     ) -> VerificationResult:
         """Delega verificação ao módulo verification."""
         persona = self._personas.get(agent_name)
         role_override = persona.role if persona and persona.role else ""
         return verify_completion(
-            agent_name, resultado, self._workspace,
-            self._agents_dir, self._running_agents,
+            agent_name,
+            resultado,
+            self._workspace,
+            self._agents_dir,
+            self._running_agents,
             role_override=role_override,
         )
 
     def _verify_spec_completion(self) -> list[str]:
         """Delega ao módulo verification (retrocompat para testes)."""
         from src.orchestrator.verification import _verify_spec_completion
+
         return _verify_spec_completion(self._workspace)
 
     async def _trigger_squad_lead_for_agent(
-        self, running: RunningAgent, event_context: str,
+        self,
+        running: RunningAgent,
+        event_context: str,
     ) -> None:
         """Dispara Squad Lead com contexto do agente que concluiu."""
         user_id = running.user_id or self._default_user_id
@@ -704,19 +723,25 @@ class OrchestrationEngine:
     def _check_tasks_md_completion(self) -> str | None:
         """Delega ao módulo verification (retrocompat para testes)."""
         from src.orchestrator.verification import _check_tasks_md_completion
+
         return _check_tasks_md_completion(self._workspace)
 
     def _get_demand_state_summary(self) -> str:
         """Retorna resumo do estado de todas as demandas ativas."""
         return get_demand_state_summary(
-            self._journal, self._state_manager,
-            self._running_agents, self._personas,
+            self._journal,
+            self._state_manager,
+            self._running_agents,
+            self._personas,
         )
 
     # --- Squad Lead (chamadas curtas) ---
 
     async def run_squad_lead(
-        self, demand_id: str, user_id: str, demand_text: str,
+        self,
+        demand_id: str,
+        user_id: str,
+        demand_text: str,
     ) -> str:
         """Executa Squad Lead com chamada SDK curta.
 
@@ -779,7 +804,9 @@ class OrchestrationEngine:
 
         # Salva mensagem do usuario no historico
         self._conversation.save_message(
-            demand_id, "user", demand_text,
+            demand_id,
+            "user",
+            demand_text,
         )
 
         prompt_parts.append(f"## Mensagem do usuario\n\n{demand_text}")
@@ -787,9 +814,7 @@ class OrchestrationEngine:
         full_prompt = "\n\n".join(prompt_parts)
 
         # Typing enquanto Squad Lead processa
-        typing_task = asyncio.create_task(
-            self._keep_typing_and_feedback(user_id, "squad-lead")
-        )
+        typing_task = asyncio.create_task(self._keep_typing_and_feedback(user_id, "squad-lead"))
 
         try:
             # Model routing: seleciona modelo baseado na complexidade
@@ -819,19 +844,25 @@ class OrchestrationEngine:
             # Limpa marcadores e detecta imagens/arquivos na resposta
             resposta_limpa = self._strip_markers(resposta)
             resposta_limpa = await self._extract_and_send_images(
-                user_id, resposta_limpa,
+                user_id,
+                resposta_limpa,
             )
 
             # Salva resposta no historico de conversa
             self._conversation.save_message(
-                demand_id, "assistant", resposta_limpa, agent_name="squad-lead",
+                demand_id,
+                "assistant",
+                resposta_limpa,
+                agent_name="squad-lead",
             )
 
             # Sumariza conversa se ultrapassou threshold
             await self._maybe_summarize(demand_id)
 
             await self._message_bus.send_message(
-                user_id, resposta_limpa, sender=label,
+                user_id,
+                resposta_limpa,
+                sender=label,
             )
             # Monitor: resposta ok, reseta contador
             self._squad_lead_empty_count = 0
@@ -839,7 +870,8 @@ class OrchestrationEngine:
             self._squad_lead_empty_count += 1
             logger.warning(
                 "Squad Lead resposta vazia (%d/%d) para: %s",
-                self._squad_lead_empty_count, self._squad_lead_max_empty,
+                self._squad_lead_empty_count,
+                self._squad_lead_max_empty,
                 demand_text[:80],
             )
 
@@ -871,14 +903,21 @@ class OrchestrationEngine:
     # --- Conversa direta com agente ---
 
     async def direct_agent_conversation(
-        self, demand_id: str, user_id: str, agent_name: str, text: str,
+        self,
+        demand_id: str,
+        user_id: str,
+        agent_name: str,
+        text: str,
     ) -> None:
         """Conversa direta com um agente específico (via comando)."""
         label = self._get_agent_label(agent_name)
         await self.notify_user(user_id, f"{label} recebeu sua mensagem...")
 
         resultado = await self._agent_conversation(
-            demand_id, user_id, agent_name, text,
+            demand_id,
+            user_id,
+            agent_name,
+            text,
             {"fase": "conversa_direta", "agent_label": label},
         )
 
@@ -890,7 +929,10 @@ class OrchestrationEngine:
     # --- Feedback background ---
 
     async def _keep_typing_and_feedback(
-        self, user_id: str, agent_name: str, fase: str = "",
+        self,
+        user_id: str,
+        agent_name: str,
+        fase: str = "",
     ) -> None:
         """Envia typing enquanto o agente processa.
 
@@ -914,7 +956,9 @@ class OrchestrationEngine:
                     tempo = self._format_elapsed(elapsed)
                     try:
                         await self._message_bus.send_message(
-                            user_id, f"Trabalhando... ({tempo})", sender=label,
+                            user_id,
+                            f"Trabalhando... ({tempo})",
+                            sender=label,
                         )
                     except Exception:
                         pass
@@ -970,8 +1014,12 @@ class OrchestrationEngine:
     # --- Agent conversation (usado por agentes worker e conversa direta) ---
 
     async def _agent_conversation(
-        self, demand_id: str, user_id: str, agent_name: str,
-        initial_prompt: str, context: dict,
+        self,
+        demand_id: str,
+        user_id: str,
+        agent_name: str,
+        initial_prompt: str,
+        context: dict,
     ) -> str:
         """Conversa fluida entre agente e usuário.
 
@@ -995,18 +1043,22 @@ class OrchestrationEngine:
         while True:
             turno += 1
 
-            typing_task = asyncio.create_task(
-                self._keep_typing_and_feedback(user_id, agent_name)
-            )
+            typing_task = asyncio.create_task(self._keep_typing_and_feedback(user_id, agent_name))
             try:
                 resposta_agente = await self.dispatch_agent(
-                    demand_id, agent_name, historico, dict(context),
+                    demand_id,
+                    agent_name,
+                    historico,
+                    dict(context),
                 )
             finally:
                 typing_task.cancel()
 
             self._conversation.save_message(
-                demand_id, "agent", resposta_agente, agent_name,
+                demand_id,
+                "agent",
+                resposta_agente,
+                agent_name,
             )
 
             has_marker = done_marker and done_marker in resposta_agente
@@ -1015,7 +1067,8 @@ class OrchestrationEngine:
                 texto_limpo = resposta_agente.replace(done_marker, "").strip()
 
                 aprovacao = await self.request_approval(
-                    demand_id, user_id,
+                    demand_id,
+                    user_id,
                     f"[{agent_label}]\n\n{texto_limpo}",
                     ["Aprovar", "Rejeitar"],
                 )
@@ -1037,12 +1090,15 @@ class OrchestrationEngine:
                 continue
 
             await self._message_bus.send_message(
-                user_id, self._strip_markers(resposta_agente), sender=agent_label,
+                user_id,
+                self._strip_markers(resposta_agente),
+                sender=agent_label,
             )
 
             if turno >= self.MAX_TURNS_WITHOUT_MARKER:
                 finalizar = await self.request_approval(
-                    demand_id, user_id,
+                    demand_id,
+                    user_id,
                     f"[{agent_label}] Conversa longa. Deseja finalizar?",
                     ["Finalizar", "Continuar"],
                 )
@@ -1058,4 +1114,3 @@ class OrchestrationEngine:
                 f"--- Resposta do agente ---\n{resposta_agente}\n\n"
                 f"--- Resposta do usuário ---\n{feedback}"
             )
-

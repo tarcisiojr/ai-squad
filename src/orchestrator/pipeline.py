@@ -150,7 +150,8 @@ class PipelineLoader:
 
         logger.info(
             "Pipeline carregado: %s (%d steps)",
-            pipeline.name, len(pipeline.steps),
+            pipeline.name,
+            len(pipeline.steps),
         )
         return pipeline
 
@@ -269,8 +270,16 @@ class PipelineLoader:
 
         file_keywords = ("existe", "exists", "ausente", "bytes", "arquivo", "file")
         structural_keywords = (
-            "contém", "contains", "itens", "items", "formato",
-            "format", "mínimo", "minimum", "pelo menos", "at least",
+            "contém",
+            "contains",
+            "itens",
+            "items",
+            "formato",
+            "format",
+            "mínimo",
+            "minimum",
+            "pelo menos",
+            "at least",
         )
 
         for item in items:

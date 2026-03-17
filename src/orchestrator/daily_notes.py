@@ -20,7 +20,7 @@ class DailyNotes:
     # Quantos dias recentes injetar no prompt
     DAYS_TO_INJECT = 3
 
-    def __init__(self, state_dir: str = "state") -> None:
+    def __init__(self, state_dir: str | Path = "state") -> None:
         self._daily_dir = Path(state_dir) / "daily"
         self._daily_dir.mkdir(parents=True, exist_ok=True)
 
@@ -56,7 +56,10 @@ class DailyNotes:
         self._write_atomic(path, content)
 
     def add_demand_completed(
-        self, demand_id: str, demand_text: str, day: date | None = None,
+        self,
+        demand_id: str,
+        demand_text: str,
+        day: date | None = None,
     ) -> None:
         """Registra conclusão de demanda na nota do dia."""
         self.add_entry(
@@ -65,7 +68,10 @@ class DailyNotes:
         )
 
     def add_agent_event(
-        self, agent_name: str, event: str, day: date | None = None,
+        self,
+        agent_name: str,
+        event: str,
+        day: date | None = None,
     ) -> None:
         """Registra evento de agente na nota do dia."""
         self.add_entry(f"{agent_name}: {event}", day=day)

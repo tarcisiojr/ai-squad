@@ -38,21 +38,16 @@ class TelegramMessageBus(MessageBus):
         try:
             from telegram.ext import (
                 ApplicationBuilder,
-                MessageHandler,
                 CallbackQueryHandler,
+                MessageHandler,
                 filters,
             )
         except ImportError:
             raise ImportError(
-                "python-telegram-bot é necessário. "
-                "Instale com: pip install python-telegram-bot"
+                "python-telegram-bot é necessário. Instale com: pip install python-telegram-bot"
             )
 
-        self._app = (
-            ApplicationBuilder()
-            .token(self._token)
-            .build()
-        )
+        self._app = ApplicationBuilder().token(self._token).build()
 
         # Registra handler de mensagens de texto
         async def _handle_text(update, context):
@@ -112,25 +107,32 @@ class TelegramMessageBus(MessageBus):
             async with aiohttp.ClientSession() as session:
                 data = aiohttp.FormData()
                 data.add_field(
-                    "file", audio_bytes,
+                    "file",
+                    audio_bytes,
                     filename="audio.ogg",
                     content_type="audio/ogg",
                 )
                 async with session.post(
-                    self.WHISPER_SERVICE_URL, data=data, timeout=aiohttp.ClientTimeout(total=60),
+                    self.WHISPER_SERVICE_URL,
+                    data=data,
+                    timeout=aiohttp.ClientTimeout(total=60),
                 ) as resp:
                     if resp.status == 200:
                         result = await resp.json()
                         return result.get("text", "").strip() or None
                     else:
                         import logging
+
                         logging.getLogger("ai-dev-team.telegram").error(
-                            "Whisper retornou %d: %s", resp.status, await resp.text(),
+                            "Whisper retornou %d: %s",
+                            resp.status,
+                            await resp.text(),
                         )
                         return None
 
         except Exception as e:
             import logging
+
             logging.getLogger("ai-dev-team.telegram").error("Erro na transcricao: %s", e)
             return None
 
@@ -146,6 +148,7 @@ class TelegramMessageBus(MessageBus):
     def _escape_markdown_v2(text: str) -> str:
         """Escapa caracteres especiais do MarkdownV2, preservando formatacao basica."""
         import re
+
         # Preserva negrito (**texto**) e italico (_texto_) convertendo para MarkdownV2
         # Primeiro protege as formatacoes existentes
         protected = []
@@ -155,18 +158,18 @@ class TelegramMessageBus(MessageBus):
             return f"\x00PROT{len(protected) - 1}\x00"
 
         # Protege **negrito** e *italico* e `codigo`
-        result = re.sub(r'\*\*(.+?)\*\*', protect, text)
-        result = re.sub(r'\*(.+?)\*', protect, result)
-        result = re.sub(r'`(.+?)`', protect, result)
+        result = re.sub(r"\*\*(.+?)\*\*", protect, text)
+        result = re.sub(r"\*(.+?)\*", protect, result)
+        result = re.sub(r"`(.+?)`", protect, result)
 
         # Escapa caracteres especiais do MarkdownV2
-        special_chars = r'_[]()~>#+=|{}.!-'
+        special_chars = r"_[]()~>#+=|{}.!-"
         for char in special_chars:
-            result = result.replace(char, f'\\{char}')
+            result = result.replace(char, f"\\{char}")
 
         # Restaura formatacoes protegidas
         for i, original in enumerate(protected):
-            result = result.replace(f'\x00PROT{i}\x00', original)
+            result = result.replace(f"\x00PROT{i}\x00", original)
 
         return result
 
@@ -174,7 +177,7 @@ class TelegramMessageBus(MessageBus):
         """Envia mensagem com Markdown. Fallback para texto plano se falhar."""
         max_len = 4096
         if len(text) > max_len:
-            parts = [text[i:i + max_len] for i in range(0, len(text), max_len)]
+            parts = [text[i : i + max_len] for i in range(0, len(text), max_len)]
             msg = None
             for i, part in enumerate(parts):
                 part_kwargs = kwargs if i == len(parts) - 1 else {}
@@ -208,17 +211,13 @@ class TelegramMessageBus(MessageBus):
             prefixo = ""
         await self._send(user_id, f"{prefixo}{text}")
 
-    async def send_approval_request(
-        self, user_id: str, question: str, options: list[str]
-    ) -> str:
+    async def send_approval_request(self, user_id: str, question: str, options: list[str]) -> str:
         """Envia pedido de aprovação com botões inline."""
         await self._ensure_app()
 
         from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-        keyboard = [
-            [InlineKeyboardButton(opt, callback_data=opt)] for opt in options
-        ]
+        keyboard = [[InlineKeyboardButton(opt, callback_data=opt)] for opt in options]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         prefixo = f"{self._persona_avatar} {self._persona_name}\n" if self._persona_name else ""
@@ -274,6 +273,7 @@ class TelegramMessageBus(MessageBus):
                 )
         except Exception as e:
             import logging
+
             logging.getLogger("ai-dev-team.telegram").error("Erro ao enviar foto: %s", e)
             # Fallback: informa que nao conseguiu enviar
             await self.send_message(user_id, f"Nao consegui enviar a imagem: {e}")

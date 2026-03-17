@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.models import DemandState, AgentStatus
+from src.models import AgentStatus
 from src.orchestrator.engine import OrchestrationEngine
 from src.orchestrator.state import StateManager
 from src.barramento.cli import CLIMessageBus
@@ -40,11 +40,11 @@ class IntegrationMockAdapter(AIAgentAdapter):
 
 
 class TestFluxoCompleto:
-    """Teste de integração: fluxo completo idle → done."""
+    """Teste de integração: fluxo com dispatch de agentes."""
 
     @pytest.mark.asyncio
-    async def test_ciclo_completo_com_cli_bus(self, tmp_path):
-        """Verifica fluxo completo com CLIMessageBus + mock adapter."""
+    async def test_dispatch_agentes_com_cli_bus(self, tmp_path):
+        """Verifica dispatch de agentes com CLIMessageBus + mock adapter."""
         adapter = IntegrationMockAdapter()
         bus = CLIMessageBus()
         state_mgr = StateManager(state_dir=str(tmp_path / "state"))
@@ -53,21 +53,11 @@ class TestFluxoCompleto:
 
         demand_id = "integ-001"
 
-        # Verifica estado inicial
-        assert engine.get_state(demand_id) == DemandState.IDLE
-
-        # Executa transições manuais (simulando ciclo)
-        engine.transition(demand_id, DemandState.PO_WORKING)
-        assert engine.get_state(demand_id) == DemandState.PO_WORKING
-
         # PO produz resultado
         resultado = await engine.dispatch_agent(
             demand_id, "po", "Nova feature", {"repo": "test"}
         )
         assert "po" in resultado
-
-        engine.transition(demand_id, DemandState.AWAITING_PLAN_APPROVAL)
-        engine.transition(demand_id, DemandState.DEV_WORKING)
 
         # Dev produz resultado
         resultado_dev = await engine.dispatch_agent(
@@ -75,37 +65,24 @@ class TestFluxoCompleto:
         )
         assert "dev-orchestrator" in resultado_dev
 
-        engine.transition(demand_id, DemandState.AWAITING_PR_APPROVAL)
-        engine.transition(demand_id, DemandState.CI_RUNNING)
-        engine.transition(demand_id, DemandState.QA_VALIDATING)
-
         # QA valida
-        await engine.dispatch_agent(demand_id, "qa", "Validar", {})
-
-        engine.transition(demand_id, DemandState.DONE)
-        assert engine.get_state(demand_id) == DemandState.DONE
+        resultado_qa = await engine.dispatch_agent(
+            demand_id, "qa", "Validar", {}
+        )
+        assert "qa" in resultado_qa
 
     @pytest.mark.asyncio
     async def test_estado_persiste_entre_instancias(self, tmp_path):
-        """Verifica que estado sobrevive recriação do engine."""
+        """Verifica que estado persiste via StateManager entre instâncias."""
         state_dir = str(tmp_path / "state")
 
-        # Primeira instância
-        adapter1 = IntegrationMockAdapter()
-        bus1 = CLIMessageBus()
+        # Primeira instância — grava estado diretamente no StateManager
         state_mgr1 = StateManager(state_dir=state_dir)
-        engine1 = OrchestrationEngine(adapter1, bus1, state_mgr1)
-
-        engine1.transition("demand-persist", DemandState.PO_WORKING)
-        engine1.transition("demand-persist", DemandState.AWAITING_PLAN_APPROVAL)
+        state_mgr1.set_state("demand-persist", "awaiting_plan_approval")
 
         # Segunda instância (simula reinício)
-        adapter2 = IntegrationMockAdapter()
-        bus2 = CLIMessageBus()
         state_mgr2 = StateManager(state_dir=state_dir)
-        engine2 = OrchestrationEngine(adapter2, bus2, state_mgr2)
-
-        assert engine2.get_state("demand-persist") == DemandState.AWAITING_PLAN_APPROVAL
+        assert state_mgr2.get_state("demand-persist") == "awaiting_plan_approval"
 
 
 class TestTrocaDeProvider:

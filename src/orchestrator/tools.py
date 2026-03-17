@@ -92,8 +92,10 @@ def check_workspace(workspace: str = "/workspace") -> str:
     try:
         result = subprocess.run(
             ["git", "status", "--short"],
-            capture_output=True, text=True,
-            cwd=str(ws), timeout=10,
+            capture_output=True,
+            text=True,
+            cwd=str(ws),
+            timeout=10,
         )
         status = result.stdout.strip()
         parts.append(f"Git status:\n{status if status else '(limpo, sem mudancas)'}")
@@ -104,8 +106,10 @@ def check_workspace(workspace: str = "/workspace") -> str:
     try:
         result = subprocess.run(
             ["git", "log", "--oneline", "-5"],
-            capture_output=True, text=True,
-            cwd=str(ws), timeout=10,
+            capture_output=True,
+            text=True,
+            cwd=str(ws),
+            timeout=10,
         )
         log = result.stdout.strip()
         if log:

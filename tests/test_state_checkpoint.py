@@ -4,7 +4,6 @@ import json
 
 import pytest
 
-from src.models import DemandState
 from src.orchestrator.state import StateManager
 
 
@@ -14,7 +13,7 @@ class TestCheckpoint:
     def test_save_checkpoint(self, tmp_path):
         """Verifica salvamento de checkpoint."""
         mgr = StateManager(state_dir=str(tmp_path))
-        mgr.set_state("d-001", DemandState.PO_WORKING)
+        mgr.set_state("d-001", "po_working")
         mgr.save_checkpoint("d-001", "plano", "Criar API")
 
         checkpoint = mgr.get_checkpoint("d-001")
@@ -23,10 +22,10 @@ class TestCheckpoint:
     def test_checkpoint_preservado_na_transicao(self, tmp_path):
         """Verifica que checkpoint é preservado entre transições."""
         mgr = StateManager(state_dir=str(tmp_path))
-        mgr.set_state("d-001", DemandState.PO_WORKING)
+        mgr.set_state("d-001", "po_working")
         mgr.save_checkpoint("d-001", "plano", "Plano X")
 
-        mgr.set_state("d-001", DemandState.AWAITING_PLAN_APPROVAL)
+        mgr.set_state("d-001", "awaiting_plan_approval")
 
         checkpoint = mgr.get_checkpoint("d-001")
         assert checkpoint["plano"] == "Plano X"
@@ -34,7 +33,7 @@ class TestCheckpoint:
     def test_checkpoint_acumula_dados(self, tmp_path):
         """Verifica que múltiplos checkpoints se acumulam."""
         mgr = StateManager(state_dir=str(tmp_path))
-        mgr.set_state("d-001", DemandState.PO_WORKING)
+        mgr.set_state("d-001", "po_working")
         mgr.save_checkpoint("d-001", "plano", "Plano A")
         mgr.save_checkpoint("d-001", "resultado_dev", "Código B")
 
@@ -59,18 +58,18 @@ class TestPendingDemands:
     def test_get_pending_com_demanda_ativa(self, tmp_path):
         """Verifica detecção de demanda ativa."""
         mgr = StateManager(state_dir=str(tmp_path))
-        mgr.set_state("d-001", DemandState.DEV_WORKING)
+        mgr.set_state("d-001", "dev_working")
 
         pending = mgr.get_pending_demands()
         assert len(pending) == 1
         assert pending[0]["demand_id"] == "d-001"
-        assert pending[0]["state"] == DemandState.DEV_WORKING
+        assert pending[0]["state"] == "dev_working"
 
     def test_get_pending_ignora_done(self, tmp_path):
         """Verifica que demandas concluídas são ignoradas."""
         mgr = StateManager(state_dir=str(tmp_path))
-        mgr.set_state("d-done", DemandState.DONE)
-        mgr.set_state("d-active", DemandState.QA_VALIDATING)
+        mgr.set_state("d-done", "done")
+        mgr.set_state("d-active", "qa_validating")
 
         pending = mgr.get_pending_demands()
         assert len(pending) == 1
@@ -79,7 +78,7 @@ class TestPendingDemands:
     def test_get_pending_ignora_idle(self, tmp_path):
         """Verifica que demandas idle são ignoradas."""
         mgr = StateManager(state_dir=str(tmp_path))
-        mgr.set_state("d-idle", DemandState.IDLE)
+        mgr.set_state("d-idle", "idle")
 
         pending = mgr.get_pending_demands()
         assert len(pending) == 0
@@ -87,7 +86,7 @@ class TestPendingDemands:
     def test_get_pending_com_json_corrompido(self, tmp_path):
         """Verifica que JSON corrompido é ignorado."""
         mgr = StateManager(state_dir=str(tmp_path))
-        mgr.set_state("d-ok", DemandState.DEV_WORKING)
+        mgr.set_state("d-ok", "dev_working")
 
         # Cria JSON corrompido
         (tmp_path / "d-bad.json").write_text("não é json")
@@ -99,7 +98,7 @@ class TestPendingDemands:
     def test_set_state_com_checkpoint_explicito(self, tmp_path):
         """Verifica set_state com checkpoint explícito."""
         mgr = StateManager(state_dir=str(tmp_path))
-        mgr.set_state("d-001", DemandState.DEV_WORKING, checkpoint={"plano": "X"})
+        mgr.set_state("d-001", "dev_working", checkpoint={"plano": "X"})
 
         checkpoint = mgr.get_checkpoint("d-001")
         assert checkpoint["plano"] == "X"

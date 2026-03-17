@@ -7,8 +7,8 @@ from typing import Any
 
 import yaml
 
-from src.barramento.interface import MessageBus
 from src.adapters.interface import AIAgentAdapter
+from src.barramento.interface import MessageBus
 
 # Prefixo de placeholder para tokens não preenchidos
 _PLACEHOLDER_PREFIX = "PREENCHA_AQUI_"
@@ -33,7 +33,9 @@ class AgentConfig:
     agents_md: str = ""
     role: str = ""  # papel do agente: spec, dev, review, generic (vazio = inferir)
     timeout: int = 0  # 0 = usa agent_timeout padrao
-    submodules: list[SubmoduleConfig] = field(default_factory=list)  # submodulos que o agente trabalha
+    submodules: list[SubmoduleConfig] = field(
+        default_factory=list
+    )  # submodulos que o agente trabalha
 
 
 # Alias para retrocompatibilidade
@@ -101,9 +103,7 @@ class PlatformConfig:
             raise ValueError("Configuração inválida: 'ai_provider' é obrigatório")
 
         if "messaging_provider" not in data:
-            raise ValueError(
-                "Configuração inválida: 'messaging_provider' é obrigatório"
-            )
+            raise ValueError("Configuração inválida: 'messaging_provider' é obrigatório")
 
         # Processar heartbeat
         hb_data = data.get("heartbeat", {})
@@ -133,10 +133,12 @@ class PlatformConfig:
                 if isinstance(sub, str):
                     submodules.append(SubmoduleConfig(path=sub))
                 elif isinstance(sub, dict):
-                    submodules.append(SubmoduleConfig(
-                        path=sub.get("path", ""),
-                        description=sub.get("description", ""),
-                    ))
+                    submodules.append(
+                        SubmoduleConfig(
+                            path=sub.get("path", ""),
+                            description=sub.get("description", ""),
+                        )
+                    )
 
             agents[nome] = AgentConfig(
                 name=config.get("name", nome),
@@ -203,10 +205,7 @@ class PlatformConfig:
             "TELEGRAM_CHAT_ID": os.environ.get("TELEGRAM_CHAT_ID", ""),
         }
 
-        return [
-            k for k, v in required.items()
-            if not v or v.startswith(_PLACEHOLDER_PREFIX)
-        ]
+        return [k for k, v in required.items() if not v or v.startswith(_PLACEHOLDER_PREFIX)]
 
 
 class PlatformFactory:
@@ -238,9 +237,7 @@ class PlatformFactory:
             )
         return self._message_bus_providers[provider](**kwargs)
 
-    def create_ai_adapter(
-        self, config: PlatformConfig, **kwargs: Any
-    ) -> AIAgentAdapter:
+    def create_ai_adapter(self, config: PlatformConfig, **kwargs: Any) -> AIAgentAdapter:
         """Cria instância de AIAgentAdapter baseada na configuração."""
         provider = config.ai_provider
         if provider not in self._ai_adapter_providers:

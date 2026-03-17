@@ -66,14 +66,10 @@ class TeamManager:
         """Cria estrutura completa para um novo time."""
         repo = Path(repo_path).resolve()
         if not repo.exists():
-            raise FileNotFoundError(
-                f"Diretório do repositório não encontrado: {repo}"
-            )
+            raise FileNotFoundError(f"Diretório do repositório não encontrado: {repo}")
 
         if self.exists(team_name):
-            raise TeamExistsError(
-                f"Time '{team_name}' já existe. Use outro nome."
-            )
+            raise TeamExistsError(f"Time '{team_name}' já existe. Use outro nome.")
 
         team_dir = self.get_path(team_name)
         team_dir.mkdir(parents=True, exist_ok=True)
@@ -98,9 +94,7 @@ class TeamManager:
             repo_path=str(repo),
             whisper_context=whisper_context,
         )
-        (team_dir / "docker-compose.yml").write_text(
-            compose_content, encoding="utf-8"
-        )
+        (team_dir / "docker-compose.yml").write_text(compose_content, encoding="utf-8")
 
         # Copia pasta agents/ para customização pelo usuário
         self._copy_default_agents(team_dir)
@@ -153,11 +147,13 @@ class TeamManager:
                     data = yaml.safe_load(f)
                 repo_path = data.get("repo_path", "")
 
-            teams.append({
-                "name": team_dir.name,
-                "repo_path": repo_path,
-                "team_dir": str(team_dir),
-            })
+            teams.append(
+                {
+                    "name": team_dir.name,
+                    "repo_path": repo_path,
+                    "team_dir": str(team_dir),
+                }
+            )
 
         return teams
 

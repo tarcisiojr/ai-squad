@@ -3,7 +3,6 @@
 import json
 from pathlib import Path
 
-from src.models import DemandState
 from src.orchestrator.atomic_write import write_json_atomic
 
 
@@ -12,9 +11,12 @@ class StateManager:
 
     Usa escrita atômica (write-to-temp + fsync + rename) para evitar
     corrupção de dados em caso de crash.
+
+    O estado é armazenado como string simples — o pipeline declarativo
+    controla as transições via pipeline-state.json.
     """
 
-    def __init__(self, state_dir: str = "state/") -> None:
+    def __init__(self, state_dir: str | Path = "state/") -> None:
         self._state_dir = Path(state_dir)
         self._state_dir.mkdir(parents=True, exist_ok=True)
 
@@ -32,18 +34,18 @@ class StateManager:
         except (json.JSONDecodeError, OSError):
             return {}
 
-    def get_state(self, demand_id: str) -> DemandState:
-        """Retorna o estado atual de uma demanda."""
+    def get_state(self, demand_id: str) -> str:
+        """Retorna o estado atual de uma demanda como string."""
         path = self._state_path(demand_id)
         data = self._load_data(path)
         if not data:
-            return DemandState.IDLE
-        return DemandState(data["state"])
+            return "idle"
+        return data["state"]
 
     def set_state(
         self,
         demand_id: str,
-        state: DemandState,
+        state: str,
         checkpoint: dict | None = None,
     ) -> None:
         """Persiste o estado de uma demanda com escrita atômica.
@@ -56,7 +58,7 @@ class StateManager:
 
         data = {
             "demand_id": demand_id,
-            "state": state.value,
+            "state": state,
             "checkpoint": checkpoint or existing.get("checkpoint", {}),
         }
 
@@ -74,18 +76,19 @@ class StateManager:
         if not data:
             data = {"demand_id": demand_id, "state": "idle"}
 
-        checkpoint = data.get("checkpoint", {})
+        checkpoint: dict = data.get("checkpoint", {})  # type: ignore[assignment]
         checkpoint[key] = value
-        data["checkpoint"] = checkpoint
+        data["checkpoint"] = checkpoint  # type: ignore[index]
 
-        self.set_state(demand_id, DemandState(data["state"]), checkpoint)
+        state: str = data.get("state", "idle")  # type: ignore[assignment]
+        self.set_state(demand_id, state, checkpoint)
 
     def get_checkpoint(self, demand_id: str) -> dict:
         """Retorna checkpoint da demanda."""
         data = self._load_data(self._state_path(demand_id))
         return data.get("checkpoint", {})
 
-    def get_all_demands(self) -> dict[str, DemandState]:
+    def get_all_demands(self) -> dict[str, str]:
         """Retorna estado de todas as demandas persistidas."""
         demands = {}
         for path in self._state_dir.glob("*.json"):
@@ -95,22 +98,23 @@ class StateManager:
 
     def get_pending_demands(self) -> list[dict]:
         """Retorna demandas com estado não-terminal para retomada."""
-        terminal_states = {DemandState.DONE, DemandState.IDLE}
         pending = []
 
         for path in self._state_dir.glob("*.json"):
             try:
                 with open(path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                state = DemandState(data["state"])
-                if state not in terminal_states:
-                    pending.append({
-                        "demand_id": data["demand_id"],
-                        "state": state,
-                        "user_id": data.get("user_id", ""),
-                        "description": data.get("description", ""),
-                        "checkpoint": data.get("checkpoint", {}),
-                    })
+                state = data["state"]
+                if state not in ("done", "idle"):
+                    pending.append(
+                        {
+                            "demand_id": data["demand_id"],
+                            "state": state,
+                            "user_id": data.get("user_id", ""),
+                            "description": data.get("description", ""),
+                            "checkpoint": data.get("checkpoint", {}),
+                        }
+                    )
             except (json.JSONDecodeError, OSError, KeyError, ValueError):
                 continue
 

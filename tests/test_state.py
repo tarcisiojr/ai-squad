@@ -4,7 +4,6 @@ import json
 
 import pytest
 
-from src.models import DemandState
 from src.orchestrator.state import StateManager
 
 
@@ -17,19 +16,19 @@ class TestStateManager:
         return StateManager(state_dir=str(tmp_path / "state"))
 
     def test_estado_padrao_idle(self, state_mgr):
-        """Verifica que demanda inexistente retorna IDLE."""
+        """Verifica que demanda inexistente retorna 'idle'."""
         state = state_mgr.get_state("demand-nova")
-        assert state == DemandState.IDLE
+        assert state == "idle"
 
     def test_set_e_get_state(self, state_mgr):
         """Verifica persistência e recuperação de estado."""
-        state_mgr.set_state("demand-1", DemandState.PO_WORKING)
+        state_mgr.set_state("demand-1", "po_working")
         state = state_mgr.get_state("demand-1")
-        assert state == DemandState.PO_WORKING
+        assert state == "po_working"
 
     def test_persistencia_em_arquivo(self, state_mgr, tmp_path):
         """Verifica que estado é persistido em arquivo JSON."""
-        state_mgr.set_state("demand-1", DemandState.DEV_WORKING)
+        state_mgr.set_state("demand-1", "dev_working")
 
         path = tmp_path / "state" / "demand-1.json"
         assert path.exists()
@@ -45,31 +44,31 @@ class TestStateManager:
 
         # Primeira instância
         mgr1 = StateManager(state_dir=state_dir)
-        mgr1.set_state("demand-1", DemandState.CI_RUNNING)
+        mgr1.set_state("demand-1", "ci_running")
 
         # Segunda instância (simula reinício)
         mgr2 = StateManager(state_dir=state_dir)
         state = mgr2.get_state("demand-1")
-        assert state == DemandState.CI_RUNNING
+        assert state == "ci_running"
 
     def test_get_all_demands(self, state_mgr):
         """Verifica listagem de todas as demandas."""
-        state_mgr.set_state("demand-1", DemandState.PO_WORKING)
-        state_mgr.set_state("demand-2", DemandState.DONE)
+        state_mgr.set_state("demand-1", "po_working")
+        state_mgr.set_state("demand-2", "done")
 
         demands = state_mgr.get_all_demands()
         assert len(demands) == 2
-        assert demands["demand-1"] == DemandState.PO_WORKING
-        assert demands["demand-2"] == DemandState.DONE
+        assert demands["demand-1"] == "po_working"
+        assert demands["demand-2"] == "done"
 
     def test_delete_state(self, state_mgr):
         """Verifica remoção de estado."""
-        state_mgr.set_state("demand-1", DemandState.DONE)
+        state_mgr.set_state("demand-1", "done")
         state_mgr.delete_state("demand-1")
 
-        # Deve retornar IDLE (padrão)
+        # Deve retornar "idle" (padrão)
         state = state_mgr.get_state("demand-1")
-        assert state == DemandState.IDLE
+        assert state == "idle"
 
     def test_delete_state_inexistente(self, state_mgr):
         """Verifica que deletar estado inexistente não falha."""
@@ -77,7 +76,7 @@ class TestStateManager:
 
     def test_escrita_atomica(self, state_mgr, tmp_path):
         """Verifica que escrita atômica não deixa arquivos temporários."""
-        state_mgr.set_state("demand-1", DemandState.PO_WORKING)
+        state_mgr.set_state("demand-1", "po_working")
 
         state_dir = tmp_path / "state"
         arquivos = list(state_dir.glob("*"))
@@ -86,9 +85,9 @@ class TestStateManager:
 
     def test_multiplas_atualizacoes(self, state_mgr):
         """Verifica que múltiplas atualizações funcionam."""
-        state_mgr.set_state("demand-1", DemandState.PO_WORKING)
-        state_mgr.set_state("demand-1", DemandState.AWAITING_PLAN_APPROVAL)
-        state_mgr.set_state("demand-1", DemandState.DEV_WORKING)
+        state_mgr.set_state("demand-1", "po_working")
+        state_mgr.set_state("demand-1", "awaiting_plan_approval")
+        state_mgr.set_state("demand-1", "dev_working")
 
         state = state_mgr.get_state("demand-1")
-        assert state == DemandState.DEV_WORKING
+        assert state == "dev_working"

@@ -38,5 +38,24 @@ include = ["src*"]
 
 [tool.setuptools.package-data]
 src = [
-    "docker/*",
+    "presets/**/*",
 ]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]  # line length gerenciado pelo formatter
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+
+[tool.pyright]
+pythonVersion = "3.11"
+typeCheckingMode = "basic"
+include = ["src"]
+exclude = ["src/whisper", "build", ".venv"]
+reportMissingImports = "warning"
+reportOptionalMemberAccess = "warning"

@@ -4,7 +4,6 @@ from pathlib import Path
 
 from src.orchestrator.journal import JournalStore
 from src.orchestrator.state import StateManager
-from src.orchestrator.tools import RunningAgent
 
 
 def _get_agent_label(agent_name: str, personas: dict) -> str:
@@ -159,7 +158,8 @@ def get_demand_state_summary(
 
         # Verifica se tem agente rodando
         running = [
-            ra for ra in running_agents.values()
+            ra
+            for ra in running_agents.values()
             if ra.demand_id == demand_id and ra.status == "running"
         ]
         if running:

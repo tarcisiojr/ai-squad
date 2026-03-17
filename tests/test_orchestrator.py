@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.models import DemandState, AgentStatus
-from src.orchestrator.engine import OrchestrationEngine, InvalidTransitionError
+from src.models import AgentStatus
+from src.orchestrator.engine import OrchestrationEngine
 from src.orchestrator.state import StateManager
 from src.adapters.interface import AIAgentAdapter
 from src.barramento.interface import MessageBus
@@ -65,75 +65,6 @@ class MockMessageBus(MessageBus):
 
     async def notify(self, user_id: str, text: str) -> None:
         await self._notify_mock(user_id, text)
-
-
-class TestStateMachine:
-    """Testes para máquina de estados do orquestrador."""
-
-    @pytest.fixture
-    def engine(self, tmp_path):
-        """Cria engine com mocks."""
-        adapter = MockAdapter()
-        bus = MockMessageBus()
-        state_mgr = StateManager(state_dir=str(tmp_path / "state"))
-        workspace = str(tmp_path / "workspace")
-        (tmp_path / "workspace").mkdir()
-        return OrchestrationEngine(adapter, bus, state_mgr, workspace=workspace)
-
-    def test_estado_inicial_idle(self, engine):
-        """Verifica que estado inicial é IDLE."""
-        state = engine.get_state("demand-1")
-        assert state == DemandState.IDLE
-
-    def test_transicao_valida_idle_para_po_working(self, engine):
-        """Verifica transição válida idle → po_working."""
-        engine.transition("demand-1", DemandState.PO_WORKING)
-        assert engine.get_state("demand-1") == DemandState.PO_WORKING
-
-    def test_transicao_invalida_idle_para_dev_working(self, engine):
-        """Verifica que transição inválida levanta erro."""
-        with pytest.raises(InvalidTransitionError, match="Transição inválida"):
-            engine.transition("demand-1", DemandState.DEV_WORKING)
-
-    def test_transicao_invalida_done_para_qualquer(self, engine):
-        """Verifica que done é estado terminal."""
-        # Avança até done
-        engine.transition("demand-1", DemandState.PO_WORKING)
-        engine.transition("demand-1", DemandState.AWAITING_PLAN_APPROVAL)
-        engine.transition("demand-1", DemandState.DEV_WORKING)
-        engine.transition("demand-1", DemandState.AWAITING_PR_APPROVAL)
-        engine.transition("demand-1", DemandState.CI_RUNNING)
-        engine.transition("demand-1", DemandState.QA_VALIDATING)
-        engine.transition("demand-1", DemandState.DONE)
-
-        with pytest.raises(InvalidTransitionError):
-            engine.transition("demand-1", DemandState.IDLE)
-
-    def test_ciclo_completo(self, engine):
-        """Verifica ciclo completo idle → done."""
-        demand_id = "demand-ciclo"
-        estados = [
-            DemandState.PO_WORKING,
-            DemandState.AWAITING_PLAN_APPROVAL,
-            DemandState.DEV_WORKING,
-            DemandState.AWAITING_PR_APPROVAL,
-            DemandState.CI_RUNNING,
-            DemandState.QA_VALIDATING,
-            DemandState.DONE,
-        ]
-
-        for estado in estados:
-            engine.transition(demand_id, estado)
-            assert engine.get_state(demand_id) == estado
-
-    def test_demandas_independentes(self, engine):
-        """Verifica que demandas têm estados independentes."""
-        engine.transition("demand-a", DemandState.PO_WORKING)
-        engine.transition("demand-b", DemandState.PO_WORKING)
-        engine.transition("demand-b", DemandState.AWAITING_PLAN_APPROVAL)
-
-        assert engine.get_state("demand-a") == DemandState.PO_WORKING
-        assert engine.get_state("demand-b") == DemandState.AWAITING_PLAN_APPROVAL
 
 
 class TestDispatchAgent:

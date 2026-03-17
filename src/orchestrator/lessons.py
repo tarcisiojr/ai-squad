@@ -20,7 +20,7 @@ class LessonsStore:
     MAX_LESSONS = 200
     MAX_CONTEXT_LESSONS = 10
 
-    def __init__(self, state_dir: str = "state") -> None:
+    def __init__(self, state_dir: str | Path = "state") -> None:
         self._state_dir = Path(state_dir)
         self._state_dir.mkdir(parents=True, exist_ok=True)
         self._db_path = self._state_dir / "lessons.db"
@@ -133,8 +133,14 @@ class LessonsStore:
         conn.execute(
             "INSERT INTO lessons (category, problem, solution, agent_name, demand_id, timestamp) "
             "VALUES (?, ?, ?, ?, ?, ?)",
-            (category, problem, solution, agent_name, demand_id,
-             datetime.now(timezone.utc).isoformat()),
+            (
+                category,
+                problem,
+                solution,
+                agent_name,
+                demand_id,
+                datetime.now(timezone.utc).isoformat(),
+            ),
         )
         conn.commit()
 

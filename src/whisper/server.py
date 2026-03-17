@@ -1,10 +1,10 @@
 """Servico HTTP para transcricao de audio via Whisper."""
 
 import logging
-import tempfile
 import os
+import tempfile
 
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import JSONResponse
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -21,6 +21,7 @@ def _get_model():
     global _model
     if _model is None:
         import whisper
+
         logger.info("Carregando modelo Whisper '%s'...", WHISPER_MODEL)
         _model = whisper.load_model(WHISPER_MODEL)
         logger.info("Modelo carregado.")

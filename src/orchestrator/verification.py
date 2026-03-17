@@ -90,41 +90,51 @@ def collect_artifact_issues(change_dir: Path) -> list[dict]:
                 size_ok = filepath.stat().st_size >= MIN_ARTIFACT_SIZE
             except OSError:
                 pass
-        checks.append({
-            "name": f"{filename.replace('.md', '')}_exists",
-            "passed": exists and size_ok,
-            "detail": (
-                f"{filename} encontrado" if exists and size_ok
-                else f"{filename} ausente" if not exists
-                else f"{filename} parece vazio"
-            ),
-        })
+        checks.append(
+            {
+                "name": f"{filename.replace('.md', '')}_exists",
+                "passed": exists and size_ok,
+                "detail": (
+                    f"{filename} encontrado"
+                    if exists and size_ok
+                    else f"{filename} ausente"
+                    if not exists
+                    else f"{filename} parece vazio"
+                ),
+            }
+        )
 
     # Verifica specs com critérios de aceite
     specs_dir = change_dir / "specs"
     spec_files = list(specs_dir.rglob("*.md")) if specs_dir.exists() else []
-    checks.append({
-        "name": "specs_exist",
-        "passed": len(spec_files) > 0,
-        "detail": (
-            f"{len(spec_files)} spec(s) encontrada(s)"
-            if spec_files else "Nenhuma spec encontrada"
-        ),
-    })
+    checks.append(
+        {
+            "name": "specs_exist",
+            "passed": len(spec_files) > 0,
+            "detail": (
+                f"{len(spec_files)} spec(s) encontrada(s)"
+                if spec_files
+                else "Nenhuma spec encontrada"
+            ),
+        }
+    )
 
     for spec_file in spec_files:
         try:
             content = spec_file.read_text(encoding="utf-8")
             has_criteria = "- [ ]" in content or "- [x]" in content
             rel_path = spec_file.relative_to(specs_dir)
-            checks.append({
-                "name": f"spec_criteria_{rel_path}",
-                "passed": has_criteria,
-                "detail": (
-                    f"specs/{rel_path} tem criterios de aceite" if has_criteria
-                    else f"specs/{rel_path} NAO tem criterios de aceite (adicione checklist '- [ ]')"
-                ),
-            })
+            checks.append(
+                {
+                    "name": f"spec_criteria_{rel_path}",
+                    "passed": has_criteria,
+                    "detail": (
+                        f"specs/{rel_path} tem criterios de aceite"
+                        if has_criteria
+                        else f"specs/{rel_path} NAO tem criterios de aceite (adicione checklist '- [ ]')"
+                    ),
+                }
+            )
         except (OSError, UnicodeDecodeError):
             pass
 
@@ -136,21 +146,25 @@ def collect_artifact_issues(change_dir: Path) -> list[dict]:
             pending = len(re.findall(r"- \[ \]", content))
             done = len(re.findall(r"- \[x\]", content))
             total = pending + done
-            checks.append({
-                "name": "tasks_minimum",
-                "passed": total >= 3,
-                "detail": (
-                    f"tasks.md tem {total} itens ({done} concluidos, {pending} pendentes)"
-                    if total >= 3
-                    else f"tasks.md tem apenas {total} itens (minimo 3)"
-                ),
-            })
+            checks.append(
+                {
+                    "name": "tasks_minimum",
+                    "passed": total >= 3,
+                    "detail": (
+                        f"tasks.md tem {total} itens ({done} concluidos, {pending} pendentes)"
+                        if total >= 3
+                        else f"tasks.md tem apenas {total} itens (minimo 3)"
+                    ),
+                }
+            )
         except (OSError, UnicodeDecodeError):
-            checks.append({
-                "name": "tasks_minimum",
-                "passed": False,
-                "detail": "Erro ao ler tasks.md",
-            })
+            checks.append(
+                {
+                    "name": "tasks_minimum",
+                    "passed": False,
+                    "detail": "Erro ao ler tasks.md",
+                }
+            )
 
     return checks
 
@@ -210,10 +224,7 @@ def _verify_spec_completion(workspace: str) -> list[str]:
     if not changes_dir.exists():
         return ["Diretorio openspec/changes nao encontrado"]
 
-    active_changes = [
-        d for d in changes_dir.iterdir()
-        if d.is_dir() and d.name != "archive"
-    ]
+    active_changes = [d for d in changes_dir.iterdir() if d.is_dir() and d.name != "archive"]
     if not active_changes:
         return ["Nenhuma change ativa encontrada"]
 
@@ -222,14 +233,17 @@ def _verify_spec_completion(workspace: str) -> list[str]:
 
 
 def _verify_dev_completion(
-    workspace: str, agents_dir: Path, running_agents: dict,
+    workspace: str,
+    agents_dir: Path,
+    running_agents: dict,
 ) -> list[str]:
     """Verifica se Dev concluiu.
 
     Multi-dev awareness: se outro dev está rodando, aceita conclusão parcial.
     """
     dev_agents_running = [
-        name for name, ra in running_agents.items()
+        name
+        for name, ra in running_agents.items()
         if ra.status == "running" and classify_agent_role(name, agents_dir) == "dev"
     ]
     if dev_agents_running:
@@ -246,8 +260,7 @@ def _verify_review_completion(resultado: str) -> list[str]:
     """Verifica se agente de revisão concluiu com veredicto."""
     resultado_lower = resultado.lower()
     has_verdict = any(
-        word in resultado_lower
-        for word in ("aprovado", "approved", "rejeitado", "rejected")
+        word in resultado_lower for word in ("aprovado", "approved", "rejeitado", "rejected")
     )
     if not has_verdict:
         return ["Resultado nao contem veredicto ('APROVADO' ou 'REJEITADO')"]

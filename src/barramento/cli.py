@@ -20,9 +20,7 @@ class CLIMessageBus(MessageBus):
         """Exibe mensagem no stdout."""
         print(f"[{user_id}] {text}")
 
-    async def send_approval_request(
-        self, user_id: str, question: str, options: list[str]
-    ) -> str:
+    async def send_approval_request(self, user_id: str, question: str, options: list[str]) -> str:
         """Solicita aprovação via stdin com opções numeradas."""
         print(f"\n[Aprovação para {user_id}] {question}")
         for i, option in enumerate(options, 1):
@@ -30,9 +28,7 @@ class CLIMessageBus(MessageBus):
 
         while True:
             try:
-                resposta = await asyncio.to_thread(
-                    input, "Escolha (número): "
-                )
+                resposta = await asyncio.to_thread(input, "Escolha (número): ")
                 indice = int(resposta) - 1
                 if 0 <= indice < len(options):
                     return options[indice]

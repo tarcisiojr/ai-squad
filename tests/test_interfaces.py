@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.models import AgentStatus, DemandState, VALID_TRANSITIONS
+from src.models import AgentStatus
 from src.barramento.interface import MessageBus
 from src.adapters.interface import AIAgentAdapter
 
@@ -31,66 +31,6 @@ class TestAgentStatus:
         """Verifica que valor inválido levanta ValueError."""
         with pytest.raises(ValueError):
             AgentStatus("inexistente")
-
-
-class TestDemandState:
-    """Testes para o enum DemandState."""
-
-    def test_valores_existem(self):
-        """Verifica que todos os estados esperados existem."""
-        assert DemandState.IDLE.value == "idle"
-        assert DemandState.PO_WORKING.value == "po_working"
-        assert DemandState.AWAITING_PLAN_APPROVAL.value == "awaiting_plan_approval"
-        assert DemandState.DEV_WORKING.value == "dev_working"
-        assert DemandState.AWAITING_PR_APPROVAL.value == "awaiting_pr_approval"
-        assert DemandState.CI_RUNNING.value == "ci_running"
-        assert DemandState.QA_VALIDATING.value == "qa_validating"
-        assert DemandState.DONE.value == "done"
-
-    def test_total_de_estados(self):
-        """Verifica que existem exatamente 8 estados."""
-        assert len(DemandState) == 8
-
-    def test_criacao_por_valor(self):
-        """Verifica criação de enum por valor string."""
-        assert DemandState("idle") == DemandState.IDLE
-        assert DemandState("done") == DemandState.DONE
-
-
-class TestValidTransitions:
-    """Testes para as transições válidas de estado."""
-
-    def test_idle_transiciona_para_po_working(self):
-        """Verifica que idle só vai para po_working."""
-        assert VALID_TRANSITIONS[DemandState.IDLE] == [DemandState.PO_WORKING]
-
-    def test_done_nao_tem_transicao(self):
-        """Verifica que done é estado final."""
-        assert VALID_TRANSITIONS[DemandState.DONE] == []
-
-    def test_todos_estados_tem_transicao_definida(self):
-        """Verifica que todos os estados têm transições definidas."""
-        for state in DemandState:
-            assert state in VALID_TRANSITIONS
-
-    def test_ciclo_completo_valido(self):
-        """Verifica que o ciclo completo de transições é válido."""
-        ciclo = [
-            DemandState.IDLE,
-            DemandState.PO_WORKING,
-            DemandState.AWAITING_PLAN_APPROVAL,
-            DemandState.DEV_WORKING,
-            DemandState.AWAITING_PR_APPROVAL,
-            DemandState.CI_RUNNING,
-            DemandState.QA_VALIDATING,
-            DemandState.DONE,
-        ]
-        for i in range(len(ciclo) - 1):
-            atual = ciclo[i]
-            proximo = ciclo[i + 1]
-            assert proximo in VALID_TRANSITIONS[atual], (
-                f"Transição {atual} → {proximo} deveria ser válida"
-            )
 
 
 class TestMessageBusABC:

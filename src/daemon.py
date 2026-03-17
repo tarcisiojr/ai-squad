@@ -10,12 +10,11 @@ import unicodedata
 import uuid
 from pathlib import Path
 
-import yaml
 from dotenv import load_dotenv
 
 from src.adapters.claude_agent_sdk import ClaudeAgentSDKAdapter
 from src.barramento.telegram import TelegramMessageBus
-from src.factory import PlatformConfig, PlatformFactory
+from src.factory import PlatformConfig
 from src.orchestrator.engine import OrchestrationEngine
 from src.orchestrator.journal import JournalStore
 from src.orchestrator.state import StateManager
@@ -136,6 +135,7 @@ class Daemon:
         else:
             # Fallback direto (antes de _load_config ou em testes)
             from src.factory import _PLACEHOLDER_PREFIX
+
             required = {
                 "CLAUDE_CODE_OAUTH_TOKEN": os.environ.get("CLAUDE_CODE_OAUTH_TOKEN", ""),
                 "GITHUB_TOKEN": os.environ.get("GITHUB_TOKEN", ""),
@@ -171,7 +171,9 @@ class Daemon:
 
         # Monta o engine de orquestracao
         self._engine = OrchestrationEngine(
-            adapter, self._bus, state_mgr,
+            adapter,
+            self._bus,
+            state_mgr,
             workspace="/workspace",
             personas=self._config.agents,
             agents_dir="/app/agents",
@@ -208,13 +210,17 @@ class Daemon:
         # 2. Changes ativas no workspace via openspec
         try:
             import subprocess as sp
+
             result = sp.run(
                 ["openspec", "list", "--json"],
-                capture_output=True, text=True,
-                cwd="/workspace", timeout=15,
+                capture_output=True,
+                text=True,
+                cwd="/workspace",
+                timeout=15,
             )
             if result.returncode == 0 and result.stdout.strip():
                 import json
+
                 changes = json.loads(result.stdout)
                 active = [c for c in changes if c.get("status") != "archived"]
                 if active:
@@ -322,14 +328,11 @@ class Daemon:
         for cmd, agent_id in agent_commands.items():
             if text.strip().lower().startswith(cmd):
                 target_agent = agent_id
-                demand_text = text.strip()[len(cmd):].strip()
+                demand_text = text.strip()[len(cmd) :].strip()
                 if not demand_text:
-                    agent_cfg = self._config.agents.get(agent_id)
-                    nome = agent_cfg.name if agent_cfg else agent_id
                     await self._bus.send_message(
                         chat_id,
-                        f"Use: {cmd} <sua mensagem>\n"
-                        f"Exemplo: {cmd} Criar API de autenticacao",
+                        f"Use: {cmd} <sua mensagem>\nExemplo: {cmd} Criar API de autenticacao",
                     )
                     return
                 break
@@ -348,7 +351,9 @@ class Daemon:
                 demand_id = self._squad_lead_conversation_id
                 logger.info("Squad Lead: %s", demand_text[:50])
                 await self._engine.run_squad_lead(
-                    demand_id, chat_id, demand_text,
+                    demand_id,
+                    chat_id,
+                    demand_text,
                 )
         except Exception as e:
             logger.error("Erro ao processar mensagem: %s", e, exc_info=True)
@@ -362,7 +367,7 @@ class Daemon:
         sl = self._config.squad_lead if self._config else None
         sl_name = sl.name if sl else "Squad Lead"
 
-        lines = [f"Comandos disponiveis:\n"]
+        lines = ["Comandos disponiveis:\n"]
 
         if self._config and self._config.agents:
             for agent_id, agent_cfg in self._config.agents.items():
@@ -374,8 +379,9 @@ class Daemon:
         lines.append("/stop <agente> - Parar agente especifico")
         lines.append("/skills - Ver skills disponiveis")
         lines.append("/help - Esta mensagem")
-        lines.append(f"\nOu envie uma mensagem direta para falar com o {sl_name} "
-                     "(ele coordena o time).")
+        lines.append(
+            f"\nOu envie uma mensagem direta para falar com o {sl_name} (ele coordena o time)."
+        )
 
         await self._bus.send_message(chat_id, "\n".join(lines))
 
@@ -386,7 +392,9 @@ class Daemon:
         # 1. Globais
         global_dir = Path("/app/global-skills")
         if global_dir.exists():
-            skills = [d.name for d in global_dir.iterdir() if d.is_dir() and (d / "SKILL.md").exists()]
+            skills = [
+                d.name for d in global_dir.iterdir() if d.is_dir() and (d / "SKILL.md").exists()
+            ]
             if skills:
                 lines.append("Globais:")
                 for s in sorted(skills):
@@ -397,7 +405,11 @@ class Daemon:
             # Fallback para ambiente local
             local_global = Path.home() / ".ai-dev-team" / "skills"
             if local_global.exists():
-                skills = [d.name for d in local_global.iterdir() if d.is_dir() and (d / "SKILL.md").exists()]
+                skills = [
+                    d.name
+                    for d in local_global.iterdir()
+                    if d.is_dir() and (d / "SKILL.md").exists()
+                ]
                 if skills:
                     lines.append("Globais:")
                     for s in sorted(skills):
@@ -420,7 +432,9 @@ class Daemon:
                 skills_dir = agent_dir / "skills"
                 if not skills_dir.exists():
                     continue
-                skills = [d.name for d in skills_dir.iterdir() if d.is_dir() and (d / "SKILL.md").exists()]
+                skills = [
+                    d.name for d in skills_dir.iterdir() if d.is_dir() and (d / "SKILL.md").exists()
+                ]
                 if skills:
                     lines.append(f"  {agent_dir.name}: {', '.join(sorted(skills))}")
 
@@ -430,9 +444,11 @@ class Daemon:
             ws_skills = Path(self._config.repo_path) / ".claude" / "skills"
 
         if ws_skills.exists():
-            skills = [d.name for d in ws_skills.iterdir() if d.is_dir() and (d / "SKILL.md").exists()]
+            skills = [
+                d.name for d in ws_skills.iterdir() if d.is_dir() and (d / "SKILL.md").exists()
+            ]
             if skills:
-                lines.append(f"\nProjeto:")
+                lines.append("\nProjeto:")
                 for s in sorted(skills):
                     lines.append(f"  - {s}")
 
@@ -467,17 +483,26 @@ class Daemon:
             labels = ", ".join(self._engine._get_agent_label(n) for n in stopped)
             await self._bus.send_message(chat_id, f"Agentes parados: {labels}")
         elif target:
-            await self._bus.send_message(chat_id, f"Agente '{target}' nao encontrado ou nao esta rodando.")
+            await self._bus.send_message(
+                chat_id, f"Agente '{target}' nao encontrado ou nao esta rodando."
+            )
         else:
             await self._bus.send_message(chat_id, "Nenhum agente em execucao para parar.")
 
     async def _run_direct_agent(
-        self, demand_id: str, user_id: str, agent_name: str, text: str,
+        self,
+        demand_id: str,
+        user_id: str,
+        agent_name: str,
+        text: str,
     ) -> None:
         """Executa conversa direta com agente em background task."""
         try:
             await self._engine.direct_agent_conversation(
-                demand_id, user_id, agent_name, text,
+                demand_id,
+                user_id,
+                agent_name,
+                text,
             )
         except Exception as e:
             logger.error("Erro na conversa com %s: %s", agent_name, e, exc_info=True)
@@ -512,7 +537,9 @@ class Daemon:
 
         logger.info(
             "Heartbeat ativo (intervalo: %ds, stall: %ds, reminder: %ds)",
-            hb.interval, hb.stall_timeout, hb.reminder_timeout,
+            hb.interval,
+            hb.stall_timeout,
+            hb.reminder_timeout,
         )
 
         while not self._shutdown_event.is_set():
@@ -525,7 +552,8 @@ class Daemon:
                     if retries >= hb.max_auto_retries:
                         logger.warning(
                             "Demanda %s atingiu max retries (%d)",
-                            demand["demand_id"], retries,
+                            demand["demand_id"],
+                            retries,
                         )
                         continue
 
@@ -536,7 +564,8 @@ class Daemon:
 
                     logger.info("Retomando demanda parada: %s", demand["demand_id"])
                     await self._engine.run_squad_lead(
-                        demand["demand_id"], chat_id,
+                        demand["demand_id"],
+                        chat_id,
                         f"RETOMADA AUTOMATICA: A demanda '{demand_text}' esta parada. "
                         f"Ultimo estado: {demand.get('current_phase', '?')}. "
                         f"Proximo esperado: {desc}. "

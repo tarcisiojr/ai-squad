@@ -13,28 +13,61 @@ logger = logging.getLogger("ai-dev-team.model-router")
 # Palavras-chave que indicam necessidade de modelo pesado
 _HEAVY_KEYWORDS = {
     # Delegação e coordenação
-    "implementar", "implementa", "criar", "crie", "desenvolver", "desenvolva",
-    "refatorar", "refatora", "migrar", "migra", "deploy", "deploye",
+    "implementar",
+    "implementa",
+    "criar",
+    "crie",
+    "desenvolver",
+    "desenvolva",
+    "refatorar",
+    "refatora",
+    "migrar",
+    "migra",
+    "deploy",
+    "deploye",
     # Especificação
-    "especificar", "especifique", "demandar", "demanda", "planejar",
-    "spec", "openspec", "proposal", "design",
+    "especificar",
+    "especifique",
+    "demandar",
+    "demanda",
+    "planejar",
+    "spec",
+    "openspec",
+    "proposal",
+    "design",
     # Código e técnico
-    "bug", "erro", "fix", "corrigir", "debug", "teste", "test",
-    "commit", "pull", "merge", "branch",
+    "bug",
+    "erro",
+    "fix",
+    "corrigir",
+    "debug",
+    "teste",
+    "test",
+    "commit",
+    "pull",
+    "merge",
+    "branch",
     # Agentes
-    "delegar", "delegue", "start_agent", "agente",
+    "delegar",
+    "delegue",
+    "start_agent",
+    "agente",
     # Análise complexa
-    "analisar", "analise", "revisar", "review", "arquitetura",
+    "analisar",
+    "analise",
+    "revisar",
+    "review",
+    "arquitetura",
 }
 
 # Padrões que indicam código
 _CODE_PATTERNS = [
-    re.compile(r'```'),           # code blocks
-    re.compile(r'def\s+\w+'),     # python function
-    re.compile(r'class\s+\w+'),   # class definition
-    re.compile(r'import\s+\w+'),  # imports
-    re.compile(r'\w+\.\w+\('),    # method calls
-    re.compile(r'->|=>'),         # arrows
+    re.compile(r"```"),  # code blocks
+    re.compile(r"def\s+\w+"),  # python function
+    re.compile(r"class\s+\w+"),  # class definition
+    re.compile(r"import\s+\w+"),  # imports
+    re.compile(r"\w+\.\w+\("),  # method calls
+    re.compile(r"->|=>"),  # arrows
 ]
 
 
@@ -68,7 +101,7 @@ def classify_complexity(message: str) -> str:
     text_lower = text.lower()
 
     # Verifica palavras-chave técnicas
-    words = set(re.findall(r'\b\w+\b', text_lower))
+    words = set(re.findall(r"\b\w+\b", text_lower))
     if words & _HEAVY_KEYWORDS:
         return "heavy"
 
@@ -97,7 +130,9 @@ def select_model(
 
     logger.debug(
         "Model routing: '%s...' → %s → %s",
-        message[:40], complexity, selected,
+        message[:40],
+        complexity,
+        selected,
     )
 
     return selected

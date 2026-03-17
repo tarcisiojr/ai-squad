@@ -157,7 +157,8 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
             if adapter_ref._progress_callback and message:
                 try:
                     await adapter_ref._progress_callback(
-                        adapter_ref._current_agent_name, message,
+                        adapter_ref._current_agent_name,
+                        message,
                     )
                 except Exception as e:
                     logger.warning("Erro ao enviar progresso: %s", e)
@@ -398,16 +399,18 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
             max_turns = context.get("max_turns", 30)
             timeout = context.get("timeout", self._timeout)
             resultado = await self._execute_sdk(
-                prompt_completo, conversation_id, max_turns, agent_name, timeout,
+                prompt_completo,
+                conversation_id,
+                max_turns,
+                agent_name,
+                timeout,
             )
             self._status = AgentStatus.DONE
             return resultado
 
         except asyncio.TimeoutError:
             self._status = AgentStatus.ERROR
-            raise TimeoutError(
-                f"Claude Agent SDK excedeu timeout de {self._timeout}s"
-            )
+            raise TimeoutError(f"Claude Agent SDK excedeu timeout de {self._timeout}s")
         except Exception as e:
             self._status = AgentStatus.ERROR
             raise RuntimeError(f"Erro no Claude Agent SDK: {e}") from e
@@ -421,8 +424,12 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
     RETRY_BASE_DELAY = 2  # segundos (backoff: 2, 4, 8)
 
     async def _execute_sdk(
-        self, prompt: str, conversation_id: str = "", max_turns: int = 30,
-        agent_name: str = "", timeout: int = 0,
+        self,
+        prompt: str,
+        conversation_id: str = "",
+        max_turns: int = 30,
+        agent_name: str = "",
+        timeout: int = 0,
     ) -> str:
         """Executa query via SDK com retry e backoff exponencial.
 
@@ -453,7 +460,8 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
                     self._sessions[conversation_id] = session_id
                     logger.info(
                         "Sessao salva: %s → %s",
-                        conversation_id, session_id[:16] + "...",
+                        conversation_id,
+                        session_id[:16] + "...",
                     )
 
                 return "\n".join(partes_texto).strip()
@@ -466,7 +474,9 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
                 if "context_length_exceeded" in error_msg or "too long" in error_msg:
                     logger.warning(
                         "[%s] Context length exceeded (tentativa %d/%d). Comprimindo prompt...",
-                        agent_name, attempt + 1, self.MAX_RETRIES + 1,
+                        agent_name,
+                        attempt + 1,
+                        self.MAX_RETRIES + 1,
                     )
                     prompt = self._compress_prompt(prompt)
                     # Limpa sessao para forcar nova conversa
@@ -480,10 +490,14 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
 
                 # Outros erros: retry com backoff
                 if attempt < self.MAX_RETRIES:
-                    delay = self.RETRY_BASE_DELAY * (2 ** attempt)
+                    delay = self.RETRY_BASE_DELAY * (2**attempt)
                     logger.warning(
                         "[%s] Erro na execucao (tentativa %d/%d): %s. Retry em %ds...",
-                        agent_name, attempt + 1, self.MAX_RETRIES + 1, e, delay,
+                        agent_name,
+                        attempt + 1,
+                        self.MAX_RETRIES + 1,
+                        e,
+                        delay,
                     )
                     await asyncio.sleep(delay)
                 else:
@@ -549,7 +563,9 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
         return dirs
 
     def _build_options(
-        self, conversation_id: str = "", max_turns: int = 30,
+        self,
+        conversation_id: str = "",
+        max_turns: int = 30,
         agent_name: str = "",
     ) -> ClaudeAgentOptions:
         """Constroi opcoes do SDK. Retoma sessao se existir."""
@@ -609,7 +625,8 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
 
         # Filtra chaves internas do contexto
         display_context = {
-            k: v for k, v in context.items()
+            k: v
+            for k, v in context.items()
             if k not in ("demand_id", "agent_name", "fase", "max_turns")
         }
         if display_context:
@@ -645,9 +662,7 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
     async def request_human_approval(self, question: str) -> str:
         """Solicita aprovacao humana via callback registrado."""
         if self._human_needed_callback is None:
-            raise RuntimeError(
-                "Nenhum callback registrado para intervencao humana"
-            )
+            raise RuntimeError("Nenhum callback registrado para intervencao humana")
 
         self._status = AgentStatus.WAITING_HUMAN
         resultado = await self._human_needed_callback(question)

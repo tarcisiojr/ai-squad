@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.models import DemandState, AgentStatus
+from src.models import AgentStatus
 from src.factory import PersonaConfig
 from src.orchestrator.engine import OrchestrationEngine
 from src.orchestrator.state import StateManager

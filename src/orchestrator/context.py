@@ -1,6 +1,5 @@
 """Coletor de contexto do produto para injeção nos prompts dos agentes."""
 
-import os
 import time
 from pathlib import Path
 
@@ -73,7 +72,7 @@ class ProductContextCollector:
                 try:
                     content = path.read_text(encoding="utf-8")
                     if len(content) > self.MAX_CLAUDE_MD_CHARS:
-                        content = content[:self.MAX_CLAUDE_MD_CHARS] + "\n\n[truncado]"
+                        content = content[: self.MAX_CLAUDE_MD_CHARS] + "\n\n[truncado]"
                     return f"### Regras do Projeto (raiz)\n\n{content}"
                 except (OSError, UnicodeDecodeError):
                     pass
@@ -91,7 +90,7 @@ class ProductContextCollector:
                 try:
                     content = path.read_text(encoding="utf-8")
                     if len(content) > self.MAX_CLAUDE_MD_CHARS:
-                        content = content[:self.MAX_CLAUDE_MD_CHARS] + "\n\n[truncado]"
+                        content = content[: self.MAX_CLAUDE_MD_CHARS] + "\n\n[truncado]"
                     return f"### Regras do Submodulo ({submodule_path})\n\n{content}"
                 except (OSError, UnicodeDecodeError):
                     pass
@@ -106,7 +105,7 @@ class ProductContextCollector:
         try:
             content = readme_path.read_text(encoding="utf-8")
             if len(content) > self.MAX_README_CHARS:
-                content = content[:self.MAX_README_CHARS] + "\n\n[truncado]"
+                content = content[: self.MAX_README_CHARS] + "\n\n[truncado]"
             return f"### README.md\n\n{content}"
         except (OSError, UnicodeDecodeError):
             return ""
@@ -131,9 +130,18 @@ class ProductContextCollector:
 
         # Diretórios e arquivos a ignorar
         ignore = {
-            ".git", "__pycache__", "node_modules", ".venv",
-            "venv", ".tox", ".mypy_cache", ".pytest_cache",
-            "dist", "build", ".eggs", "*.egg-info",
+            ".git",
+            "__pycache__",
+            "node_modules",
+            ".venv",
+            "venv",
+            ".tox",
+            ".mypy_cache",
+            ".pytest_cache",
+            "dist",
+            "build",
+            ".eggs",
+            "*.egg-info",
         }
 
         try:

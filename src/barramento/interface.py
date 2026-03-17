@@ -12,14 +12,12 @@ class MessageBus(ABC):
     """
 
     @abstractmethod
-    async def send_message(self, user_id: str, text: str) -> None:
+    async def send_message(self, user_id: str, text: str, **kwargs: str) -> None:
         """Envia mensagem de texto ao usuário."""
         ...
 
     @abstractmethod
-    async def send_approval_request(
-        self, user_id: str, question: str, options: list[str]
-    ) -> str:
+    async def send_approval_request(self, user_id: str, question: str, options: list[str]) -> str:
         """Envia pedido de aprovação com opções e retorna a escolha."""
         ...
 
@@ -44,7 +42,10 @@ class MessageBus(ABC):
         ...
 
     async def send_photo(
-        self, user_id: str, photo_path: str, caption: str = "",
+        self,
+        user_id: str,
+        photo_path: str,
+        caption: str = "",
     ) -> None:
         """Envia imagem ao usuário. Opcional — implementações sem suporte ignoram."""
 

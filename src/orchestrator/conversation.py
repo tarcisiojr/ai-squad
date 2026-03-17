@@ -2,9 +2,10 @@
 
 import json
 import logging
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable
+from typing import Any
 
 from src.orchestrator.atomic_write import write_json_atomic, write_text_atomic
 
@@ -26,12 +27,12 @@ class ConversationStore:
     SUMMARIZE_THRESHOLD = 20
     KEEP_RECENT = 10
 
-    def __init__(self, state_dir: str = "state") -> None:
+    def __init__(self, state_dir: str | Path = "state") -> None:
         self._state_dir = Path(state_dir)
         # Callback para sumarização via LLM (registrado pelo engine)
-        self._summarize_fn: Callable[[str], str] | None = None
+        self._summarize_fn: Callable[..., Any] | None = None
 
-    def set_summarize_callback(self, callback: Callable[[str], str]) -> None:
+    def set_summarize_callback(self, callback: Callable[..., Any]) -> None:
         """Registra callback async para sumarizar texto via LLM.
 
         O callback recebe o texto a sumarizar e retorna o resumo.
@@ -62,12 +63,14 @@ class ConversationStore:
         path = self._conversation_path(demand_id)
 
         messages = self.load(demand_id)
-        messages.append({
-            "role": role,
-            "agent_name": agent_name,
-            "content": content,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        })
+        messages.append(
+            {
+                "role": role,
+                "agent_name": agent_name,
+                "content": content,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        )
 
         self._write_atomic(path, messages)
 
@@ -116,8 +119,8 @@ class ConversationStore:
             return False
 
         # Separa mensagens antigas das recentes
-        antigas = messages[:-self.KEEP_RECENT]
-        recentes = messages[-self.KEEP_RECENT:]
+        antigas = messages[: -self.KEEP_RECENT]
+        recentes = messages[-self.KEEP_RECENT :]
 
         # Formata mensagens antigas para sumarização
         texto_antigas = self._format_messages_for_summary(antigas)
@@ -152,7 +155,9 @@ class ConversationStore:
 
                 logger.info(
                     "Sumarizacao: %d mensagens → resumo + %d recentes (demand: %s)",
-                    len(antigas), len(recentes), demand_id,
+                    len(antigas),
+                    len(recentes),
+                    demand_id,
                 )
                 return True
         except Exception as e:
@@ -180,12 +185,14 @@ class ConversationStore:
         summary = self.load_summary(demand_id)
         prefix: list[dict] = []
         if summary:
-            prefix.append({
-                "role": "system",
-                "content": f"[Resumo das mensagens anteriores]\n{summary}",
-                "agent_name": "",
-                "timestamp": "",
-            })
+            prefix.append(
+                {
+                    "role": "system",
+                    "content": f"[Resumo das mensagens anteriores]\n{summary}",
+                    "agent_name": "",
+                    "timestamp": "",
+                }
+            )
 
         if len(messages) <= self.MAX_CONTEXT_MESSAGES:
             return prefix + messages
@@ -193,14 +200,16 @@ class ConversationStore:
         # Sem resumo: indica mensagens omitidas
         if not summary:
             omitidas = len(messages) - self.MAX_CONTEXT_MESSAGES
-            prefix.append({
-                "role": "system",
-                "content": f"[{omitidas} mensagens anteriores omitidas]",
-                "agent_name": "",
-                "timestamp": "",
-            })
+            prefix.append(
+                {
+                    "role": "system",
+                    "content": f"[{omitidas} mensagens anteriores omitidas]",
+                    "agent_name": "",
+                    "timestamp": "",
+                }
+            )
 
-        recentes = messages[-self.MAX_CONTEXT_MESSAGES:]
+        recentes = messages[-self.MAX_CONTEXT_MESSAGES :]
         return prefix + recentes
 
     def format_history_for_prompt(self, demand_id: str) -> str:

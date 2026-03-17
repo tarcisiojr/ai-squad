@@ -11,7 +11,9 @@ logger = logging.getLogger("ai-dev-team.media")
 
 
 async def extract_and_send_media(
-    user_id: str, text: str, message_bus: MessageBus,
+    user_id: str,
+    text: str,
+    message_bus: MessageBus,
 ) -> str:
     """Detecta caminhos de imagem e arquivos .md na resposta e envia via barramento.
 
@@ -26,7 +28,7 @@ async def extract_and_send_media(
     sent_files: set[str] = set()
 
     # 1. Detecta markdown images: ![caption](path)
-    md_img_pattern = re.compile(r'!\[([^\]]*)\]\(([^)]+)\)')
+    md_img_pattern = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
     for match in md_img_pattern.finditer(text):
         caption = match.group(1)
         path = match.group(2)
@@ -41,7 +43,8 @@ async def extract_and_send_media(
 
     # 2. Detecta caminhos soltos de imagem
     img_pattern = re.compile(
-        r'(/[\w/.-]+\.(?:png|jpg|jpeg|gif|webp))', re.IGNORECASE,
+        r"(/[\w/.-]+\.(?:png|jpg|jpeg|gif|webp))",
+        re.IGNORECASE,
     )
     for match in img_pattern.finditer(cleaned):
         path = match.group(1)
@@ -55,7 +58,7 @@ async def extract_and_send_media(
             cleaned = cleaned.replace(path, "")
 
     # 3. Detecta markdown links para .md: [titulo](path.md)
-    md_link_pattern = re.compile(r'\[([^\]]+)\]\(([^)]+\.md)\)')
+    md_link_pattern = re.compile(r"\[([^\]]+)\]\(([^)]+\.md)\)")
     for match in md_link_pattern.finditer(cleaned):
         title = match.group(1)
         path = match.group(2)
@@ -74,7 +77,7 @@ async def extract_and_send_media(
             cleaned = cleaned.replace(match.group(0), title)
 
     # 4. Detecta caminhos soltos de .md
-    md_path_pattern = re.compile(r'(/[\w/.-]+\.md)\b')
+    md_path_pattern = re.compile(r"(/[\w/.-]+\.md)\b")
     for match in md_path_pattern.finditer(cleaned):
         path = match.group(1)
         if os.path.isfile(path) and path not in sent_files:
@@ -92,5 +95,5 @@ async def extract_and_send_media(
                 logger.error("Erro ao enviar .md %s: %s", path, e)
 
     # Limpa linhas vazias duplicadas
-    cleaned = re.sub(r'\n{3,}', '\n\n', cleaned).strip()
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
     return cleaned

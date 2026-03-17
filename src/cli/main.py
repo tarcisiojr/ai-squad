@@ -9,10 +9,8 @@ from pathlib import Path
 import click
 
 from src.cli.team_manager import (
-    InvalidEnvError,
     TeamExistsError,
     TeamManager,
-    TeamNotFoundError,
 )
 
 
@@ -24,8 +22,10 @@ def _get_manager() -> TeamManager:
 def _docker_compose_cmd(team_dir: Path, *args: str) -> list[str]:
     """Monta comando docker compose para um time."""
     return [
-        "docker", "compose",
-        "-f", str(team_dir / "docker-compose.yml"),
+        "docker",
+        "compose",
+        "-f",
+        str(team_dir / "docker-compose.yml"),
         *args,
     ]
 
@@ -84,8 +84,31 @@ def _generate_wheel(source_dir: Path, output_dir: Path) -> bool:
     """Gera .whl do pacote. Tenta uv, depois python -m build, depois pip."""
     build_commands = [
         (["uv", "build", "--wheel", "--out-dir", str(output_dir), str(source_dir)], "uv"),
-        ([sys.executable, "-m", "build", "--wheel", "--outdir", str(output_dir), str(source_dir)], "python -m build"),
-        ([sys.executable, "-m", "pip", "wheel", "--no-deps", "-w", str(output_dir), str(source_dir)], "pip wheel"),
+        (
+            [
+                sys.executable,
+                "-m",
+                "build",
+                "--wheel",
+                "--outdir",
+                str(output_dir),
+                str(source_dir),
+            ],
+            "python -m build",
+        ),
+        (
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "wheel",
+                "--no-deps",
+                "-w",
+                str(output_dir),
+                str(source_dir),
+            ],
+            "pip wheel",
+        ),
     ]
 
     for cmd, name in build_commands:
@@ -97,8 +120,7 @@ def _generate_wheel(source_dir: Path, output_dir: Path) -> bool:
                 return True
 
     click.echo(
-        "Erro: não foi possível gerar o .whl.\n"
-        "Instale 'uv' ou 'build': pip install build",
+        "Erro: não foi possível gerar o .whl.\nInstale 'uv' ou 'build': pip install build",
         err=True,
     )
     return False
@@ -374,8 +396,12 @@ def build() -> None:
 @click.option("--command", "cmd", default=None, help="Comando Telegram (ex: /sec).")
 @click.option("--marker", default="---DONE---", help="Marcador de conclusão.")
 def add_agent(
-    team_name: str, agent_name: str, display_name: str | None,
-    avatar: str, cmd: str | None, marker: str,
+    team_name: str,
+    agent_name: str,
+    display_name: str | None,
+    avatar: str,
+    cmd: str | None,
+    marker: str,
 ) -> None:
     """Adiciona um novo agente a um time existente."""
     manager = _get_manager()
@@ -426,6 +452,7 @@ def add_agent(
 
     # Adiciona ao config.yaml
     import yaml
+
     config_path = team_dir / "config.yaml"
     with open(config_path, encoding="utf-8") as f:
         config = yaml.safe_load(f)
@@ -448,7 +475,9 @@ def add_agent(
     click.echo(f"  Comando: {cmd}")
     click.echo(f"  Edite: {agent_dir / 'AGENTS.md'}")
     click.echo(f"  Skills: {agent_dir / 'skills/'}")
-    click.echo(f"\nReinicie o time para aplicar: ai-dev-team stop {team_name} && ai-dev-team start {team_name}")
+    click.echo(
+        f"\nReinicie o time para aplicar: ai-dev-team stop {team_name} && ai-dev-team start {team_name}"
+    )
 
 
 @cli.command("remove-agent")
@@ -476,10 +505,12 @@ def remove_agent(team_name: str, agent_name: str) -> None:
 
     # Remove diretório
     import shutil
+
     shutil.rmtree(agent_dir)
 
     # Remove do config.yaml
     import yaml
+
     config_path = team_dir / "config.yaml"
     with open(config_path, encoding="utf-8") as f:
         config = yaml.safe_load(f)
@@ -504,13 +535,16 @@ def list_agents(team_name: str) -> None:
     team_dir = manager.get_path(team_name)
 
     import yaml
+
     config_path = team_dir / "config.yaml"
     with open(config_path, encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
     # Squad Lead
     sl = config.get("squad_lead", {})
-    click.echo(f"  {sl.get('avatar', '👨‍💼')} {sl.get('name', 'Squad Lead')} (squad-lead) — coordenador")
+    click.echo(
+        f"  {sl.get('avatar', '👨‍💼')} {sl.get('name', 'Squad Lead')} (squad-lead) — coordenador"
+    )
 
     # Agentes
     agents = config.get("agents", {})
@@ -519,7 +553,9 @@ def list_agents(team_name: str) -> None:
         skills_count = 0
         if has_skills:
             skills_dir = team_dir / "agents" / agent_id / "skills"
-            skills_count = len([d for d in skills_dir.iterdir() if d.is_dir()]) if skills_dir.exists() else 0
+            skills_count = (
+                len([d for d in skills_dir.iterdir() if d.is_dir()]) if skills_dir.exists() else 0
+            )
         skills_label = f" ({skills_count} skills)" if skills_count else ""
         click.echo(
             f"  {agent_cfg.get('avatar', '🤖')} {agent_cfg.get('name', agent_id)} "

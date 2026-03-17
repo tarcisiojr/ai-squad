@@ -2,6 +2,7 @@
 
 import json
 import logging
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -18,7 +19,7 @@ class JournalStore:
     Escrita atômica via temp + rename para prevenir corrupção.
     """
 
-    def __init__(self, state_dir: str = "state") -> None:
+    def __init__(self, state_dir: str | Path = "state") -> None:
         self._state_dir = Path(state_dir)
 
     def _journal_path(self, demand_id: str) -> Path:
@@ -62,7 +63,7 @@ class JournalStore:
             logger.warning("Erro ao ler journal %s: %s", demand_id, e)
             return None
 
-    def _update(self, demand_id: str, updater: callable) -> dict | None:
+    def _update(self, demand_id: str, updater: Callable[[dict], None]) -> dict | None:
         """Lê, aplica updater, salva. Retorna journal atualizado."""
         journal = self.read(demand_id)
         if journal is None:
@@ -74,45 +75,61 @@ class JournalStore:
 
     def add_decision(self, demand_id: str, action: str, detail: str) -> dict | None:
         """Registra decisão tomada pelo Squad Lead."""
+
         def updater(j: dict) -> None:
-            j["decisions"].append({
-                "timestamp": self._now(),
-                "action": action,
-                "detail": detail,
-            })
+            j["decisions"].append(
+                {
+                    "timestamp": self._now(),
+                    "action": action,
+                    "detail": detail,
+                }
+            )
+
         result = self._update(demand_id, updater)
         if result:
             logger.info("Decisão registrada [%s]: %s", demand_id, action)
         return result
 
     def set_next_expected(
-        self, demand_id: str, action: str, agent: str, description: str,
+        self,
+        demand_id: str,
+        action: str,
+        agent: str,
+        description: str,
     ) -> dict | None:
         """Define próxima ação esperada."""
+
         def updater(j: dict) -> None:
             j["next_expected"] = {
                 "action": action,
                 "agent": agent,
                 "description": description,
             }
+
         return self._update(demand_id, updater)
 
     def set_phase(self, demand_id: str, phase: str) -> dict | None:
         """Atualiza fase atual da demanda."""
+
         def updater(j: dict) -> None:
             j["current_phase"] = phase
+
         return self._update(demand_id, updater)
 
     def add_context_note(self, demand_id: str, note: str) -> dict | None:
         """Adiciona nota de contexto relevante."""
+
         def updater(j: dict) -> None:
             j["context_notes"].append(note)
+
         return self._update(demand_id, updater)
 
     def increment_retries(self, demand_id: str) -> dict | None:
         """Incrementa contador de retomadas automáticas."""
+
         def updater(j: dict) -> None:
             j["auto_retries"] = j.get("auto_retries", 0) + 1
+
         return self._update(demand_id, updater)
 
     def get_active_journals(self) -> list[dict]:
@@ -161,7 +178,7 @@ class JournalStore:
             next_exp = j.get("next_expected")
             updated = j.get("updated_at", "")
 
-            line = f"- **{demand_id}**: \"{demand_text}\" — fase: {phase}"
+            line = f'- **{demand_id}**: "{demand_text}" — fase: {phase}'
             if next_exp:
                 line += f" — próximo: {next_exp.get('description', '?')}"
             if updated:

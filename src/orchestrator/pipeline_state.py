@@ -4,17 +4,14 @@ Gerencia o ciclo de vida de demandas através de steps definidos
 em pipeline.yaml, com persistência em pipeline-state.json.
 """
 
-import asyncio
+import json
 import logging
-import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
 from src.orchestrator.atomic_write import write_json_atomic
 from src.orchestrator.pipeline import PipelineConfig, StepConfig
-
-import json
 
 logger = logging.getLogger("ai-dev-team.pipeline-state")
 
@@ -130,7 +127,7 @@ class PipelineExecutor:
     - Formatar estado para prompt do Squad Lead
     """
 
-    def __init__(self, state_dir: str, pipeline: PipelineConfig) -> None:
+    def __init__(self, state_dir: str | Path, pipeline: PipelineConfig) -> None:
         self._state_dir = Path(state_dir)
         self._pipeline = pipeline
         # Cache de estados em memória
@@ -213,7 +210,10 @@ class PipelineExecutor:
         return self._pipeline.get_step(state.current_step)
 
     def complete_step(
-        self, demand_id: str, step_id: str, quality_gate_result: str = "passed",
+        self,
+        demand_id: str,
+        step_id: str,
+        quality_gate_result: str = "passed",
     ) -> StepConfig | None:
         """Marca step como completo e retorna próximo step (ou None se pipeline concluiu).
 
@@ -241,7 +241,9 @@ class PipelineExecutor:
             return None
 
     def _advance_to_next(
-        self, state: PipelineState, current_step_id: str,
+        self,
+        state: PipelineState,
+        current_step_id: str,
     ) -> StepConfig | None:
         """Avança pipeline para o próximo step."""
         next_step = self._pipeline.next_step(current_step_id)
@@ -286,12 +288,14 @@ class PipelineExecutor:
 
         # Registra no histórico de revisão
         step_state.review_cycle += 1
-        step_state.review_history.append({
-            "cycle": step_state.review_cycle,
-            "result": "rejected",
-            "feedback": feedback,
-            "timestamp": self._now(),
-        })
+        step_state.review_history.append(
+            {
+                "cycle": step_state.review_cycle,
+                "result": "rejected",
+                "feedback": feedback,
+                "timestamp": self._now(),
+            }
+        )
 
         # Verifica limite de ciclos
         if step_state.review_cycle >= step_config.max_review_cycles:
@@ -300,7 +304,8 @@ class PipelineExecutor:
             self._save_state(state)
             logger.warning(
                 "Max review cycles (%d) atingido para step %s",
-                step_config.max_review_cycles, step_id,
+                step_config.max_review_cycles,
+                step_id,
             )
             return None
 
@@ -322,7 +327,10 @@ class PipelineExecutor:
 
         logger.info(
             "Reject loop: %s → %s (ciclo %d/%d)",
-            step_id, target_id, step_state.review_cycle, step_config.max_review_cycles,
+            step_id,
+            target_id,
+            step_state.review_cycle,
+            step_config.max_review_cycles,
         )
         return target_id
 
@@ -360,7 +368,11 @@ class PipelineExecutor:
         return True
 
     def update_agent_status(
-        self, demand_id: str, step_id: str, agent_name: str, status: str,
+        self,
+        demand_id: str,
+        step_id: str,
+        agent_name: str,
+        status: str,
     ) -> None:
         """Atualiza status de um agente dentro de um step."""
         state = self.load_state(demand_id)
@@ -383,7 +395,9 @@ class PipelineExecutor:
             return ""
 
         total_steps = len(self._pipeline.steps)
-        current_idx = self._pipeline.get_step_index(state.current_step) + 1 if state.current_step else 0
+        current_idx = (
+            self._pipeline.get_step_index(state.current_step) + 1 if state.current_step else 0
+        )
 
         lines = [
             f"## Pipeline: {state.pipeline_name} ({state.demand_id}) — step {current_idx}/{total_steps}\n",
@@ -445,7 +459,7 @@ class PipelineExecutor:
                 suffix = " (checkpoint)" if next_step.is_checkpoint else ""
                 lines.append(f"\nPróximo: {next_step.name}{suffix}")
 
-        lines.append(f"\n* = checkpoint (requer aprovação humana)")
+        lines.append("\n* = checkpoint (requer aprovação humana)")
 
         return "\n".join(lines)
 

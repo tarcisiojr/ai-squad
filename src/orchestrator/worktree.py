@@ -24,9 +24,12 @@ class WorktreeManager:
             branch = f"feature/{worktree_name}"
 
         cmd = [
-            "git", "worktree", "add",
+            "git",
+            "worktree",
+            "add",
             str(worktree_path),
-            "-b", branch,
+            "-b",
+            branch,
         ]
 
         subprocess.run(
@@ -64,10 +67,7 @@ class WorktreeManager:
 
     def cleanup_demand(self, demand_id: str) -> None:
         """Remove todos os worktrees de uma demanda."""
-        to_remove = [
-            name for name in self._active_worktrees
-            if name.startswith(f"{demand_id}-")
-        ]
+        to_remove = [name for name in self._active_worktrees if name.startswith(f"{demand_id}-")]
         for name in to_remove:
             parts = name.split("-", 1)
             if len(parts) == 2:
