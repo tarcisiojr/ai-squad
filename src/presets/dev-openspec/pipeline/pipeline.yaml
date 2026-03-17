@@ -1,0 +1,33 @@
+name: "Dev OpenSpec"
+description: >
+  Pipeline de desenvolvimento orientado a especificação.
+  PO especifica via OpenSpec, Dev implementa, Code Review valida,
+  QA testa. Checkpoints em aprovação de plano e revisão de código.
+
+pipeline:
+  steps:
+    - id: especificacao
+      name: "Especificação"
+      agent: po
+      type: checkpoint
+      file: steps/step-01-spec.md
+
+    - id: implementacao
+      name: "Implementação"
+      agents: [dev-backend, dev-frontend]
+      execution: background
+      model_tier: powerful
+      file: steps/step-02-dev.md
+
+    - id: revisao
+      name: "Revisão de Código"
+      agent: code-review
+      type: checkpoint
+      on_reject: implementacao
+      max_review_cycles: 3
+      file: steps/step-03-review.md
+
+    - id: qualidade
+      name: "QA"
+      agent: qa
+      file: steps/step-04-qa.md

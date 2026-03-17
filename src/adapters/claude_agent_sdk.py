@@ -28,6 +28,10 @@ _TOOL_NAMES = [
     "get_running_agents",
     "check_artifacts",
     "get_demand_state",
+    "get_pipeline_state",
+    "advance_step",
+    "skip_step",
+    "rerun_step",
     "read_journal",
     "send_image",
     "learn_lesson",
@@ -76,6 +80,10 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
         self._read_journal_callback: Callable | None = None
         self._send_image_callback: Callable | None = None
         self._learn_lesson_callback: Callable | None = None
+        self._get_pipeline_state_callback: Callable | None = None
+        self._advance_step_callback: Callable | None = None
+        self._skip_step_callback: Callable | None = None
+        self._rerun_step_callback: Callable | None = None
 
         # MCP server com todas as tools
         self._mcp_server = self._create_mcp_server()
@@ -113,6 +121,22 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
     def set_learn_lesson_callback(self, callback: Callable) -> None:
         """callback(category, problem, solution) → awaitable"""
         self._learn_lesson_callback = callback
+
+    def set_get_pipeline_state_callback(self, callback: Callable) -> None:
+        """callback() → awaitable[str]"""
+        self._get_pipeline_state_callback = callback
+
+    def set_advance_step_callback(self, callback: Callable) -> None:
+        """callback() → awaitable[str]"""
+        self._advance_step_callback = callback
+
+    def set_skip_step_callback(self, callback: Callable) -> None:
+        """callback(step_id: str) → awaitable[str]"""
+        self._skip_step_callback = callback
+
+    def set_rerun_step_callback(self, callback: Callable) -> None:
+        """callback(step_id: str) → awaitable[str]"""
+        self._rerun_step_callback = callback
 
     # --- MCP Server ---
 
@@ -263,6 +287,72 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
             except Exception as e:
                 return {"content": [{"type": "text", "text": f"Erro: {e}"}]}
 
+        @tool(
+            "get_pipeline_state",
+            "Retorna o estado completo do pipeline da demanda ativa. "
+            "Mostra cada step com status (pendente, rodando, concluido, falhou), "
+            "agentes alocados, quality gates e proximos passos. "
+            "Use ANTES de decidir qualquer acao para ter consciencia do fluxo.",
+            {},
+        )
+        async def get_pipeline_state_tool(args: dict) -> dict[str, Any]:
+            if not adapter_ref._get_pipeline_state_callback:
+                return {"content": [{"type": "text", "text": "Pipeline nao configurado."}]}
+            try:
+                result = await adapter_ref._get_pipeline_state_callback()
+                return {"content": [{"type": "text", "text": result}]}
+            except Exception as e:
+                return {"content": [{"type": "text", "text": f"Erro: {e}"}]}
+
+        @tool(
+            "advance_step",
+            "Avanca manualmente o pipeline para o proximo step. "
+            "Use quando quiser forcar o avanco sem esperar quality gate automatico.",
+            {},
+        )
+        async def advance_step_tool(args: dict) -> dict[str, Any]:
+            if not adapter_ref._advance_step_callback:
+                return {"content": [{"type": "text", "text": "Pipeline nao configurado."}]}
+            try:
+                result = await adapter_ref._advance_step_callback()
+                return {"content": [{"type": "text", "text": result}]}
+            except Exception as e:
+                return {"content": [{"type": "text", "text": f"Erro: {e}"}]}
+
+        @tool(
+            "skip_step",
+            "Pula um step do pipeline. Use quando o step nao for necessario "
+            "ou quando quiser avancar sem executar. "
+            "Exemplo: skip_step('revisao') para pular code review.",
+            {"step_id": str},
+        )
+        async def skip_step_tool(args: dict) -> dict[str, Any]:
+            step_id = args.get("step_id", "")
+            if not adapter_ref._skip_step_callback:
+                return {"content": [{"type": "text", "text": "Pipeline nao configurado."}]}
+            try:
+                result = await adapter_ref._skip_step_callback(step_id)
+                return {"content": [{"type": "text", "text": result}]}
+            except Exception as e:
+                return {"content": [{"type": "text", "text": f"Erro: {e}"}]}
+
+        @tool(
+            "rerun_step",
+            "Re-executa um step do pipeline. Use apos correcoes quando "
+            "quiser re-rodar um step que falhou. "
+            "Exemplo: rerun_step('implementacao') para re-rodar o dev.",
+            {"step_id": str},
+        )
+        async def rerun_step_tool(args: dict) -> dict[str, Any]:
+            step_id = args.get("step_id", "")
+            if not adapter_ref._rerun_step_callback:
+                return {"content": [{"type": "text", "text": "Pipeline nao configurado."}]}
+            try:
+                result = await adapter_ref._rerun_step_callback(step_id)
+                return {"content": [{"type": "text", "text": result}]}
+            except Exception as e:
+                return {"content": [{"type": "text", "text": f"Erro: {e}"}]}
+
         return create_sdk_mcp_server(
             "ai-dev-team-tools",
             tools=[
@@ -271,6 +361,10 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
                 get_running_agents_tool,
                 check_artifacts_tool,
                 get_demand_state_tool,
+                get_pipeline_state_tool,
+                advance_step_tool,
+                skip_step_tool,
+                rerun_step_tool,
                 read_journal_tool,
                 send_image_tool,
                 learn_lesson_tool,

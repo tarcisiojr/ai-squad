@@ -1,0 +1,25 @@
+name: "Infra Monitor"
+description: >
+  Pipeline de monitoramento e resposta a incidentes.
+  Triager classifica severidade, SRE investiga e aplica fix,
+  Validator confirma que métricas normalizaram.
+
+pipeline:
+  steps:
+    - id: triagem
+      name: "Triagem"
+      agent: triager
+      file: steps/step-01-triage.md
+
+    - id: remediacao
+      name: "Remediação"
+      agent: sre
+      execution: background
+      model_tier: powerful
+      file: steps/step-02-remediate.md
+
+    - id: validacao
+      name: "Validação"
+      agent: validator
+      type: checkpoint
+      file: steps/step-03-validate.md

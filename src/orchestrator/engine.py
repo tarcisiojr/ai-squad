@@ -17,6 +17,8 @@ from src.orchestrator.journal import JournalStore
 from src.orchestrator.lessons import LessonsStore
 from src.orchestrator.media import extract_and_send_media
 from src.orchestrator.model_router import select_model
+from src.orchestrator.pipeline import PipelineLoader
+from src.orchestrator.pipeline_state import PipelineExecutor
 from src.orchestrator.state import StateManager
 from src.orchestrator.verification import (
     check_artifacts_enriched,
@@ -79,6 +81,7 @@ class OrchestrationEngine:
         dev_timeout: int = 600,
         light_model: str | None = None,
         heavy_model: str | None = None,
+        pipeline_dir: str = "",
     ) -> None:
         self._adapter = adapter
         self._message_bus = message_bus
@@ -96,6 +99,20 @@ class OrchestrationEngine:
         self._lessons = LessonsStore(state_dir=state_manager._state_dir)
         self._daily_notes = DailyNotes(state_dir=state_manager._state_dir)
         self._demand_statuses: dict[str, DemandStatus] = {}
+
+        # Pipeline declarativo (opcional — modo legado se não configurado)
+        self._pipeline_executor: PipelineExecutor | None = None
+        if pipeline_dir:
+            loader = PipelineLoader(pipeline_dir)
+            pipeline = loader.load()
+            if pipeline:
+                self._pipeline_executor = PipelineExecutor(
+                    state_dir=state_manager._state_dir, pipeline=pipeline,
+                )
+                logger.info(
+                    "Pipeline carregado: %s (%d steps)",
+                    pipeline.name, len(pipeline.steps),
+                )
 
         # Agentes em background: agent_name → RunningAgent
         self._running_agents: dict[str, RunningAgent] = {}
@@ -126,6 +143,14 @@ class OrchestrationEngine:
             self._adapter.set_send_image_callback(self._handle_send_image)
         if hasattr(self._adapter, "set_learn_lesson_callback"):
             self._adapter.set_learn_lesson_callback(self._handle_learn_lesson)
+        if hasattr(self._adapter, "set_get_pipeline_state_callback"):
+            self._adapter.set_get_pipeline_state_callback(self._handle_get_pipeline_state)
+        if hasattr(self._adapter, "set_advance_step_callback"):
+            self._adapter.set_advance_step_callback(self._handle_advance_step)
+        if hasattr(self._adapter, "set_skip_step_callback"):
+            self._adapter.set_skip_step_callback(self._handle_skip_step)
+        if hasattr(self._adapter, "set_rerun_step_callback"):
+            self._adapter.set_rerun_step_callback(self._handle_rerun_step)
 
         # Registra callback de sumarização no conversation store
         self._conversation.set_summarize_callback(self._summarize_via_llm)
@@ -328,6 +353,56 @@ class OrchestrationEngine:
     async def _extract_and_send_images(self, user_id: str, text: str) -> str:
         """Delega detecção de imagens/arquivos ao módulo media."""
         return await extract_and_send_media(user_id, text, self._message_bus)
+
+    # --- Pipeline tools callbacks ---
+
+    async def _handle_get_pipeline_state(self) -> str:
+        """Callback da MCP tool get_pipeline_state."""
+        if not self._pipeline_executor:
+            return "Pipeline nao configurado. Operando em modo legado."
+        demand_id = self._default_demand_id
+        if not demand_id:
+            return "Nenhuma demanda ativa."
+        return self._pipeline_executor.format_state_for_prompt(demand_id)
+
+    async def _handle_advance_step(self) -> str:
+        """Callback da MCP tool advance_step."""
+        if not self._pipeline_executor:
+            return "Pipeline nao configurado."
+        demand_id = self._default_demand_id
+        if not demand_id:
+            return "Nenhuma demanda ativa."
+        current = self._pipeline_executor.get_current_step(demand_id)
+        if not current:
+            return "Nenhum step ativo para avancar."
+        next_step = self._pipeline_executor.complete_step(demand_id, current.id)
+        if next_step:
+            return f"Avancado para step: {next_step.name} ({next_step.id})"
+        return "Pipeline concluido."
+
+    async def _handle_skip_step(self, step_id: str) -> str:
+        """Callback da MCP tool skip_step."""
+        if not self._pipeline_executor:
+            return "Pipeline nao configurado."
+        demand_id = self._default_demand_id
+        if not demand_id:
+            return "Nenhuma demanda ativa."
+        next_step = self._pipeline_executor.skip_step(demand_id, step_id)
+        if next_step:
+            return f"Step '{step_id}' pulado. Proximo: {next_step.name}"
+        return f"Step '{step_id}' pulado. Pipeline concluido."
+
+    async def _handle_rerun_step(self, step_id: str) -> str:
+        """Callback da MCP tool rerun_step."""
+        if not self._pipeline_executor:
+            return "Pipeline nao configurado."
+        demand_id = self._default_demand_id
+        if not demand_id:
+            return "Nenhuma demanda ativa."
+        ok = self._pipeline_executor.rerun_step(demand_id, step_id)
+        if ok:
+            return f"Step '{step_id}' re-iniciado."
+        return f"Step '{step_id}' nao encontrado."
 
     # --- Agentes em background ---
 
@@ -690,6 +765,12 @@ class OrchestrationEngine:
         daily_notes = self._daily_notes.load_recent()
         if daily_notes:
             prompt_parts.append(daily_notes)
+
+        # Injeta estado do pipeline (se configurado)
+        if self._pipeline_executor:
+            pipeline_state = self._pipeline_executor.format_state_for_prompt(demand_id)
+            if pipeline_state:
+                prompt_parts.append(pipeline_state)
 
         # Contexto do produto
         product_context = self._context_collector.collect()
