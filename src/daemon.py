@@ -44,6 +44,24 @@ class Daemon:
         self._squad_lead_conversation_id = "squad-lead-session"
         self._team_name = os.environ.get("TEAM_NAME", "default")
 
+    @property
+    def engine(self) -> OrchestrationEngine:
+        """Acesso seguro ao engine — falha se não inicializado."""
+        assert self._engine is not None, "Engine não inicializado — chame _setup_components primeiro"
+        return self._engine
+
+    @property
+    def bus(self) -> TelegramMessageBus:
+        """Acesso seguro ao message bus — falha se não inicializado."""
+        assert self._bus is not None, "MessageBus não inicializado — chame _setup_components primeiro"
+        return self._bus
+
+    @property
+    def config(self) -> PlatformConfig:
+        """Acesso seguro à config — falha se não carregada."""
+        assert self._config is not None, "Config não carregada — chame _load_config primeiro"
+        return self._config
+
     def _load_config(self) -> PlatformConfig:
         """Carrega configuração de config.yaml + variáveis de ambiente."""
         # Carrega .env se existir
@@ -78,17 +96,17 @@ class Daemon:
     def _create_adapter(self):
         """Cria adapter de IA via Claude Agent SDK."""
         kwargs = {
-            "timeout": self._config.dev_timeout,  # timeout maximo (dev), agentes menores usam agent_timeout
+            "timeout": self.config.dev_timeout,  # timeout maximo (dev), agentes menores usam agent_timeout
             "working_dir": "/workspace",
             "allowed_tools": ["WebSearchTool"],
             "agents_dir": "/app/agents",
             "global_skills_dir": "/app/global-skills",
         }
 
-        if self._config.ai_model:
-            kwargs["model"] = self._config.ai_model
+        if self.config.ai_model:
+            kwargs["model"] = self.config.ai_model
 
-        logger.info("Usando adapter: Claude Agent SDK (model: %s)", self._config.ai_model)
+        logger.info("Usando adapter: Claude Agent SDK (model: %s)", self.config.ai_model)
         adapter = ClaudeAgentSDKAdapter(**kwargs)
 
         # Configura subagentes nativos do SDK a partir dos AGENTS.md
@@ -106,10 +124,10 @@ class Daemon:
         agents_dir = Path("/app/agents")
         defs = {}
 
-        if not self._config or not self._config.agents:
+        if not self._config or not self.config.agents:
             return defs
 
-        for agent_id, agent_cfg in self._config.agents.items():
+        for agent_id, agent_cfg in self.config.agents.items():
             agents_md_path = agents_dir / agent_id / "AGENTS.md"
             prompt = ""
             if agents_md_path.exists():
@@ -167,7 +185,7 @@ class Daemon:
         )
 
         # Configura state manager
-        state_mgr = StateManager(state_dir=self._config.state_dir)
+        state_mgr = StateManager(state_dir=self.config.state_dir)
 
         # Monta o engine de orquestracao
         self._engine = OrchestrationEngine(
@@ -175,10 +193,10 @@ class Daemon:
             self._bus,
             state_mgr,
             workspace="/workspace",
-            personas=self._config.agents,
+            personas=self.config.agents,
             agents_dir="/app/agents",
-            agent_timeout=self._config.agent_timeout,
-            dev_timeout=self._config.dev_timeout,
+            agent_timeout=self.config.agent_timeout,
+            dev_timeout=self.config.dev_timeout,
         )
 
         self._state_manager = state_mgr
@@ -200,7 +218,7 @@ class Daemon:
 
         # 1. Journal — decisoes anteriores e proxima acao esperada
         try:
-            journal_summary = self._engine._journal.get_active_summaries()
+            journal_summary = self.engine._journal.get_active_summaries()
             if journal_summary and journal_summary != "Nenhuma demanda ativa.":
                 resume_parts.append(f"DECISOES ANTERIORES:\n{journal_summary}")
                 has_pending = True
@@ -261,7 +279,7 @@ class Daemon:
 
         logger.info("Retomando trabalho pendente apos restart")
         try:
-            await self._engine.run_squad_lead(
+            await self.engine.run_squad_lead(
                 self._squad_lead_conversation_id,
                 chat_id,
                 resume_prompt,
@@ -290,8 +308,8 @@ class Daemon:
     def _build_agent_commands(self) -> dict[str, str]:
         """Gera mapeamento comando → agente a partir dos agents da config."""
         commands = {}
-        if self._config and self._config.agents:
-            for agent_id, agent_cfg in self._config.agents.items():
+        if self._config and self.config.agents:
+            for agent_id, agent_cfg in self.config.agents.items():
                 cmd = agent_cfg.command or f"/{agent_id}"
                 commands[cmd] = agent_id
         return commands
@@ -330,7 +348,7 @@ class Daemon:
                 target_agent = agent_id
                 demand_text = text.strip()[len(cmd) :].strip()
                 if not demand_text:
-                    await self._bus.send_message(
+                    await self.bus.send_message(
                         chat_id,
                         f"Use: {cmd} <sua mensagem>\nExemplo: {cmd} Criar API de autenticacao",
                     )
@@ -350,7 +368,7 @@ class Daemon:
                 # Mensagem sem comando → Squad Lead (responde rapido)
                 demand_id = self._squad_lead_conversation_id
                 logger.info("Squad Lead: %s", demand_text[:50])
-                await self._engine.run_squad_lead(
+                await self.engine.run_squad_lead(
                     demand_id,
                     chat_id,
                     demand_text,
@@ -358,19 +376,19 @@ class Daemon:
         except Exception as e:
             logger.error("Erro ao processar mensagem: %s", e, exc_info=True)
             try:
-                await self._bus.notify(chat_id, f"Erro ao processar: {e}")
+                await self.bus.notify(chat_id, f"Erro ao processar: {e}")
             except Exception:
                 logger.error("Falha ao notificar erro via Telegram")
 
     async def _send_help(self, chat_id: str) -> None:
         """Envia mensagem de ajuda com comandos disponíveis."""
-        sl = self._config.squad_lead if self._config else None
+        sl = self.config.squad_lead if self._config else None
         sl_name = sl.name if sl else "Squad Lead"
 
         lines = ["Comandos disponiveis:\n"]
 
-        if self._config and self._config.agents:
-            for agent_id, agent_cfg in self._config.agents.items():
+        if self._config and self.config.agents:
+            for agent_id, agent_cfg in self.config.agents.items():
                 cmd = agent_cfg.command or f"/{agent_id}"
                 lines.append(f"{cmd} <mensagem> - Falar com {agent_cfg.name}")
 
@@ -383,7 +401,7 @@ class Daemon:
             f"\nOu envie uma mensagem direta para falar com o {sl_name} (ele coordena o time)."
         )
 
-        await self._bus.send_message(chat_id, "\n".join(lines))
+        await self.bus.send_message(chat_id, "\n".join(lines))
 
     async def _send_skills(self, chat_id: str) -> None:
         """Lista skills disponiveis nos 3 niveis."""
@@ -440,8 +458,8 @@ class Daemon:
 
         # 3. Projeto
         ws_skills = Path("/workspace/.claude/skills")
-        if not ws_skills.exists() and self._config and self._config.repo_path:
-            ws_skills = Path(self._config.repo_path) / ".claude" / "skills"
+        if not ws_skills.exists() and self._config and self.config.repo_path:
+            ws_skills = Path(self.config.repo_path) / ".claude" / "skills"
 
         if ws_skills.exists():
             skills = [
@@ -455,16 +473,16 @@ class Daemon:
         if len(lines) == 1:
             lines.append("Nenhuma skill configurada.")
 
-        await self._bus.send_message(chat_id, "\n".join(lines))
+        await self.bus.send_message(chat_id, "\n".join(lines))
 
     async def _stop_agents(self, chat_id: str, text: str) -> None:
         """Para agentes em execucao. /stop para todos, /stop <nome> para especifico."""
         parts = text.strip().split(maxsplit=1)
         target = parts[1].strip() if len(parts) > 1 else None
 
-        running = self._engine._running_agents
+        running = self.engine._running_agents
         if not running:
-            await self._bus.send_message(chat_id, "Nenhum agente rodando no momento.")
+            await self.bus.send_message(chat_id, "Nenhum agente rodando no momento.")
             return
 
         stopped = []
@@ -480,14 +498,14 @@ class Daemon:
             logger.info("[%s] Agente cancelado pelo usuario", name)
 
         if stopped:
-            labels = ", ".join(self._engine._get_agent_label(n) for n in stopped)
-            await self._bus.send_message(chat_id, f"Agentes parados: {labels}")
+            labels = ", ".join(self.engine._get_agent_label(n) for n in stopped)
+            await self.bus.send_message(chat_id, f"Agentes parados: {labels}")
         elif target:
-            await self._bus.send_message(
+            await self.bus.send_message(
                 chat_id, f"Agente '{target}' nao encontrado ou nao esta rodando."
             )
         else:
-            await self._bus.send_message(chat_id, "Nenhum agente em execucao para parar.")
+            await self.bus.send_message(chat_id, "Nenhum agente em execucao para parar.")
 
     async def _run_direct_agent(
         self,
@@ -498,7 +516,7 @@ class Daemon:
     ) -> None:
         """Executa conversa direta com agente em background task."""
         try:
-            await self._engine.direct_agent_conversation(
+            await self.engine.direct_agent_conversation(
                 demand_id,
                 user_id,
                 agent_name,
@@ -507,14 +525,14 @@ class Daemon:
         except Exception as e:
             logger.error("Erro na conversa com %s: %s", agent_name, e, exc_info=True)
             try:
-                await self._bus.notify(user_id, f"Erro na conversa com {agent_name}: {e}")
+                await self.bus.notify(user_id, f"Erro na conversa com {agent_name}: {e}")
             except Exception:
                 pass
 
     async def _send_status(self, chat_id: str) -> None:
         """Envia status dos agentes ativos."""
-        status = self._engine._get_running_agents_status()
-        await self._bus.send_message(chat_id, status)
+        status = self.engine._get_running_agents_status()
+        await self.bus.send_message(chat_id, status)
 
     def _write_healthcheck(self) -> None:
         """Escreve arquivo de heartbeat para health check do Docker."""
@@ -528,11 +546,11 @@ class Daemon:
 
     async def _heartbeat_loop(self) -> None:
         """Verifica periodicamente demandas paradas e envia lembretes."""
-        if not self._config or not self._config.heartbeat.enabled:
+        if not self._config or not self.config.heartbeat.enabled:
             return
 
-        hb = self._config.heartbeat
-        journal = JournalStore(state_dir=self._config.state_dir)
+        hb = self.config.heartbeat
+        journal = JournalStore(state_dir=self.config.state_dir)
         chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
 
         logger.info(
@@ -563,7 +581,7 @@ class Daemon:
                     desc = next_exp.get("description", demand_text)
 
                     logger.info("Retomando demanda parada: %s", demand["demand_id"])
-                    await self._engine.run_squad_lead(
+                    await self.engine.run_squad_lead(
                         demand["demand_id"],
                         chat_id,
                         f"RETOMADA AUTOMATICA: A demanda '{demand_text}' esta parada. "
@@ -600,13 +618,13 @@ class Daemon:
         self._setup_components()
 
         # Registra handler de mensagens
-        await self._bus.receive_message(self._handle_new_demand)
+        await self.bus.receive_message(self._handle_new_demand)
 
         # Registra handler de voz (transcrição → texto → demanda)
         async def _voice_handler(text: str) -> None:
             await self._handle_new_demand(text)
 
-        await self._bus.receive_voice(_voice_handler)
+        await self.bus.receive_voice(_voice_handler)
 
         # Registra signal handlers para graceful shutdown
         loop = asyncio.get_event_loop()
@@ -618,7 +636,7 @@ class Daemon:
 
         # Notifica início via Telegram
         chat_id = os.environ["TELEGRAM_CHAT_ID"]
-        await self._bus.notify(
+        await self.bus.notify(
             chat_id,
             f"Time '{self._team_name}' online e escutando. "
             "Envie uma mensagem para criar uma demanda.",
@@ -627,7 +645,7 @@ class Daemon:
         logger.info("Daemon pronto. Escutando Telegram...")
 
         # Inicia Telegram polling + healthcheck
-        await self._bus._ensure_app()
+        await self.bus._ensure_app()
 
         # Healthcheck em background
         health_task = asyncio.create_task(self._healthcheck_loop())
@@ -635,11 +653,15 @@ class Daemon:
         # Heartbeat para retomada de demandas paradas
         heartbeat_task = asyncio.create_task(self._heartbeat_loop())
 
+        app = self.bus._app
+        assert app is not None, "Telegram app não inicializado após _ensure_app"
+        assert app.updater is not None, "Telegram updater não disponível"
+
         try:
             # Inicia polling do Telegram (bloqueante)
-            await self._bus._app.initialize()
-            await self._bus._app.start()
-            await self._bus._app.updater.start_polling()
+            await app.initialize()
+            await app.start()
+            await app.updater.start_polling()
 
             # Aguarda sinal de shutdown
             await self._shutdown_event.wait()
@@ -648,11 +670,11 @@ class Daemon:
             heartbeat_task.cancel()
 
             # Para polling do Telegram
-            if self._bus._app.updater.running:
-                await self._bus._app.updater.stop()
-            if self._bus._app.running:
-                await self._bus._app.stop()
-            await self._bus._app.shutdown()
+            if app.updater.running:
+                await app.updater.stop()
+            if app.running:
+                await app.stop()
+            await app.shutdown()
 
             self._remove_healthcheck()
             logger.info("Daemon encerrado.")

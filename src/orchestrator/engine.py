@@ -122,29 +122,29 @@ class OrchestrationEngine:
         # Registra callbacks no adapter
         self._adapter.on_human_needed(self._handle_human_needed)
         if hasattr(self._adapter, "set_progress_callback"):
-            self._adapter.set_progress_callback(self._handle_progress)
+            self._adapter.set_progress_callback(self._handle_progress)  # type: ignore[attr-defined]
         if hasattr(self._adapter, "set_start_agent_callback"):
-            self._adapter.set_start_agent_callback(self._handle_start_agent)
+            self._adapter.set_start_agent_callback(self._handle_start_agent)  # type: ignore[attr-defined]
         if hasattr(self._adapter, "set_get_agents_callback"):
-            self._adapter.set_get_agents_callback(self._handle_get_agents)
+            self._adapter.set_get_agents_callback(self._handle_get_agents)  # type: ignore[attr-defined]
         if hasattr(self._adapter, "set_check_artifacts_callback"):
-            self._adapter.set_check_artifacts_callback(self._handle_check_artifacts)
+            self._adapter.set_check_artifacts_callback(self._handle_check_artifacts)  # type: ignore[attr-defined]
         if hasattr(self._adapter, "set_get_demand_state_callback"):
-            self._adapter.set_get_demand_state_callback(self._handle_get_demand_state)
+            self._adapter.set_get_demand_state_callback(self._handle_get_demand_state)  # type: ignore[attr-defined]
         if hasattr(self._adapter, "set_read_journal_callback"):
-            self._adapter.set_read_journal_callback(self._handle_read_journal)
+            self._adapter.set_read_journal_callback(self._handle_read_journal)  # type: ignore[attr-defined]
         if hasattr(self._adapter, "set_send_image_callback"):
-            self._adapter.set_send_image_callback(self._handle_send_image)
+            self._adapter.set_send_image_callback(self._handle_send_image)  # type: ignore[attr-defined]
         if hasattr(self._adapter, "set_learn_lesson_callback"):
-            self._adapter.set_learn_lesson_callback(self._handle_learn_lesson)
+            self._adapter.set_learn_lesson_callback(self._handle_learn_lesson)  # type: ignore[attr-defined]
         if hasattr(self._adapter, "set_get_pipeline_state_callback"):
-            self._adapter.set_get_pipeline_state_callback(self._handle_get_pipeline_state)
+            self._adapter.set_get_pipeline_state_callback(self._handle_get_pipeline_state)  # type: ignore[attr-defined]
         if hasattr(self._adapter, "set_advance_step_callback"):
-            self._adapter.set_advance_step_callback(self._handle_advance_step)
+            self._adapter.set_advance_step_callback(self._handle_advance_step)  # type: ignore[attr-defined]
         if hasattr(self._adapter, "set_skip_step_callback"):
-            self._adapter.set_skip_step_callback(self._handle_skip_step)
+            self._adapter.set_skip_step_callback(self._handle_skip_step)  # type: ignore[attr-defined]
         if hasattr(self._adapter, "set_rerun_step_callback"):
-            self._adapter.set_rerun_step_callback(self._handle_rerun_step)
+            self._adapter.set_rerun_step_callback(self._handle_rerun_step)  # type: ignore[attr-defined]
 
         # Registra callback de sumarização no conversation store
         self._conversation.set_summarize_callback(self._summarize_via_llm)
@@ -236,7 +236,7 @@ class OrchestrationEngine:
             await self._message_bus.send_message(
                 user_id,
                 message,
-                sender=label,
+                sender=label,  # type: ignore[call-arg]
             )
         except Exception as e:
             logger.warning("[%s] Falha ao enviar progresso: %s", agent_name, e)
@@ -315,7 +315,7 @@ class OrchestrationEngine:
                 category=category,
                 problem=problem,
                 solution=solution,
-                agent_name=self._adapter._current_agent_name,
+                agent_name=self._adapter._current_agent_name,  # type: ignore[attr-defined]
                 demand_id=self._default_demand_id,
             )
             logger.info("Licao registrada: [%s] %s", category, problem[:60])
@@ -539,7 +539,7 @@ class OrchestrationEngine:
                 await self._message_bus.send_message(
                     user_id,
                     f"Concluido!\n\n{preview}",
-                    sender=label,
+                    sender=label,  # type: ignore[call-arg]
                 )
 
                 # Dispara Squad Lead com contexto completo
@@ -565,7 +565,7 @@ class OrchestrationEngine:
                     user_id,
                     f"Verificacao falhou: {verification.details}. "
                     f"Re-invocando (tentativa {running.retries + 1}/{self.MAX_RETRIES + 1})...",
-                    sender=label,
+                    sender=label,  # type: ignore[call-arg]
                 )
 
                 # Re-invoca com feedback
@@ -604,7 +604,7 @@ class OrchestrationEngine:
                     user_id,
                     f"Incompleto apos {self.MAX_RETRIES + 1} tentativas. "
                     f"Problema: {verification.details}",
-                    sender=label,
+                    sender=label,  # type: ignore[call-arg]
                 )
 
                 await self._trigger_squad_lead_for_agent(
@@ -637,7 +637,7 @@ class OrchestrationEngine:
             await self._message_bus.send_message(
                 user_id,
                 f"Erro: {e}",
-                sender=label,
+                sender=label,  # type: ignore[call-arg]
             )
 
             await self._trigger_squad_lead_for_agent(
@@ -862,7 +862,7 @@ class OrchestrationEngine:
             await self._message_bus.send_message(
                 user_id,
                 resposta_limpa,
-                sender=label,
+                sender=label,  # type: ignore[call-arg]
             )
             # Monitor: resposta ok, reseta contador
             self._squad_lead_empty_count = 0
@@ -877,7 +877,7 @@ class OrchestrationEngine:
 
             if self._squad_lead_empty_count >= self._squad_lead_max_empty:
                 logger.warning("Squad Lead travado — resetando sessao")
-                self._adapter.clear_session(demand_id)
+                self._adapter.clear_session(demand_id)  # type: ignore[attr-defined]
                 self._squad_lead_empty_count = 0
                 await self._message_bus.notify(
                     user_id,
@@ -958,7 +958,7 @@ class OrchestrationEngine:
                         await self._message_bus.send_message(
                             user_id,
                             f"Trabalhando... ({tempo})",
-                            sender=label,
+                            sender=label,  # type: ignore[call-arg]
                         )
                     except Exception:
                         pass
@@ -1092,7 +1092,7 @@ class OrchestrationEngine:
             await self._message_bus.send_message(
                 user_id,
                 self._strip_markers(resposta_agente),
-                sender=agent_label,
+                sender=agent_label,  # type: ignore[call-arg]
             )
 
             if turno >= self.MAX_TURNS_WITHOUT_MARKER:

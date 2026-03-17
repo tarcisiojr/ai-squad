@@ -58,7 +58,7 @@ class TelegramMessageBus(MessageBus):
 
             # Mostra "digitando..." imediatamente
             try:
-                await self._app.bot.send_chat_action(chat_id=user_id, action="typing")
+                await self._app.bot.send_chat_action(chat_id=user_id, action="typing")  # type: ignore[union-attr]
             except Exception:
                 pass
 
@@ -102,7 +102,7 @@ class TelegramMessageBus(MessageBus):
             file = await context.bot.get_file(voice.file_id)
             audio_bytes = await file.download_as_bytearray()
 
-            import aiohttp
+            import aiohttp  # type: ignore[import-not-found]
 
             async with aiohttp.ClientSession() as session:
                 data = aiohttp.FormData()
@@ -139,6 +139,7 @@ class TelegramMessageBus(MessageBus):
     async def send_typing(self, chat_id: str) -> None:
         """Envia acao 'digitando...' no Telegram."""
         await self._ensure_app()
+        assert self._app is not None
         try:
             await self._app.bot.send_chat_action(chat_id=chat_id, action="typing")
         except Exception:
@@ -184,6 +185,7 @@ class TelegramMessageBus(MessageBus):
                 msg = await self._send(chat_id, part, **part_kwargs)
             return msg
 
+        assert self._app is not None
         # Tenta enviar com Markdown primeiro, fallback para texto plano
         try:
             return await self._app.bot.send_message(
@@ -227,6 +229,7 @@ class TelegramMessageBus(MessageBus):
             reply_markup=reply_markup,
         )
 
+        assert msg is not None, "Falha ao enviar mensagem de aprovação"
         key = f"{user_id}:{msg.message_id}"
         future: asyncio.Future = asyncio.get_event_loop().create_future()
         self._pending_approvals[key] = future
@@ -264,6 +267,7 @@ class TelegramMessageBus(MessageBus):
     async def send_photo(self, user_id: str, photo_path: str, caption: str = "") -> None:
         """Envia foto via Telegram."""
         await self._ensure_app()
+        assert self._app is not None
         try:
             with open(photo_path, "rb") as f:
                 await self._app.bot.send_photo(
