@@ -1,2 +1,0 @@
-[console_scripts]
-ai-dev-team = src.cli.main:cli

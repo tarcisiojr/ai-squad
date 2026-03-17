@@ -114,12 +114,11 @@ class TeamManager:
                 shutil.copytree(source, dest, dirs_exist_ok=True)
                 return
 
-    def _copy_default_agents(self, team_dir: Path) -> None:
-        """Copia agents/ padrão para o diretório do time."""
-        # Procura agents/ no source do projeto
+    def _copy_default_agents(self, team_dir: Path, preset: str = "dev-openspec") -> None:
+        """Copia agents/ do preset para o diretório do time."""
         sources = [
-            Path(__file__).resolve().parent.parent.parent / "agents",
-            Path.cwd() / "agents",
+            Path(__file__).resolve().parent.parent / "presets" / preset / "agents",
+            Path.cwd() / "src" / "presets" / preset / "agents",
         ]
 
         for source in sources:

@@ -1,4 +1,33 @@
+# Python
+__pycache__/
 *.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+*.whl
+
+# Ambiente virtual
+.venv/
+venv/
+
+# Testes e cobertura
 .coverage
+htmlcov/
+.pytest_cache/
+
+# IDE e OS
+.DS_Store
+.vscode/
+.idea/
+
+# Ferramentas
+.ruff_cache/
+.mypy_cache/
+.playwright/
+
+# Projeto
 .env
-ai_dev_template.egg-info
+state/
+*.log
+*.tmp
