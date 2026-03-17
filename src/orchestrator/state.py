@@ -72,6 +72,8 @@ class StateManager:
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
+                f.flush()
+                os.fsync(f.fileno())
             os.replace(tmp_path, path)
         except Exception:
             if os.path.exists(tmp_path):
@@ -158,6 +160,8 @@ class StateManager:
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
+                f.flush()
+                os.fsync(f.fileno())
             os.replace(tmp_path, path)
         except Exception:
             if os.path.exists(tmp_path):

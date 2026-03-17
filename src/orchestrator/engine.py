@@ -12,8 +12,10 @@ from src.adapters.interface import AIAgentAdapter
 from src.barramento.interface import MessageBus
 from src.orchestrator.context import ProductContextCollector
 from src.orchestrator.conversation import ConversationStore
+from src.orchestrator.daily_notes import DailyNotes
 from src.orchestrator.journal import JournalStore
 from src.orchestrator.lessons import LessonsStore
+from src.orchestrator.model_router import select_model
 from src.orchestrator.state import StateManager
 from src.orchestrator.tools import (
     AgentResult, DemandStatus, RunningAgent, VerificationResult, check_workspace,
@@ -63,6 +65,8 @@ class OrchestrationEngine:
         agents_dir: str = "/app/agents",
         agent_timeout: int = 300,
         dev_timeout: int = 600,
+        light_model: str | None = None,
+        heavy_model: str | None = None,
     ) -> None:
         self._adapter = adapter
         self._message_bus = message_bus
@@ -72,10 +76,13 @@ class OrchestrationEngine:
         self._agents_dir = Path(agents_dir)
         self._agent_timeout = agent_timeout
         self._dev_timeout = dev_timeout
+        self._light_model = light_model
+        self._heavy_model = heavy_model
         self._context_collector = ProductContextCollector(workspace)
         self._conversation = ConversationStore(state_manager._state_dir)
         self._journal = JournalStore(state_dir=state_manager._state_dir)
         self._lessons = LessonsStore(state_dir=state_manager._state_dir)
+        self._daily_notes = DailyNotes(state_dir=state_manager._state_dir)
         self._demand_statuses: dict[str, DemandStatus] = {}
 
         # Agentes em background: agent_name → RunningAgent
@@ -107,6 +114,24 @@ class OrchestrationEngine:
             self._adapter.set_send_image_callback(self._handle_send_image)
         if hasattr(self._adapter, "set_learn_lesson_callback"):
             self._adapter.set_learn_lesson_callback(self._handle_learn_lesson)
+
+        # Registra callback de sumarização no conversation store
+        self._conversation.set_summarize_callback(self._summarize_via_llm)
+
+    # --- Sumarização de contexto ---
+
+    async def _summarize_via_llm(self, text: str) -> str:
+        """Sumariza texto via chamada curta ao LLM."""
+        return await self._adapter.ask(text)
+
+    async def _maybe_summarize(self, demand_id: str) -> None:
+        """Tenta sumarizar conversa se necessário. Tolerante a falha."""
+        try:
+            done = await self._conversation.summarize_if_needed(demand_id)
+            if done:
+                logger.info("Conversa sumarizada para demand: %s", demand_id)
+        except Exception as e:
+            logger.warning("Falha ao sumarizar conversa: %s", e)
 
     # --- Helpers ---
 
@@ -533,6 +558,11 @@ class OrchestrationEngine:
                 running.status = "done"
                 logger.info("[%s] Verificacao passou: %s", agent_name, verification.details)
 
+                # Registra na nota diária
+                self._daily_notes.add_agent_event(
+                    agent_name, f"Concluiu com sucesso ({running.elapsed_str()})",
+                )
+
                 # Registra no journal
                 if running.demand_id:
                     self._journal.add_decision(
@@ -625,6 +655,11 @@ class OrchestrationEngine:
             running.status = "error"
             running.error = str(e)
             logger.error("[%s] Agente falhou em background: %s", agent_name, e)
+
+            # Registra erro na nota diária
+            self._daily_notes.add_agent_event(
+                agent_name, f"Erro: {str(e)[:100]}",
+            )
 
             # Registra licao aprendida com o erro
             self._lessons.add(
@@ -1094,6 +1129,11 @@ class OrchestrationEngine:
         if lessons:
             prompt_parts.append(lessons)
 
+        # Injeta notas diárias (continuidade entre sessões)
+        daily_notes = self._daily_notes.load_recent()
+        if daily_notes:
+            prompt_parts.append(daily_notes)
+
         # Contexto do produto
         product_context = self._context_collector.collect()
         if product_context:
@@ -1114,12 +1154,22 @@ class OrchestrationEngine:
         )
 
         try:
+            # Model routing: seleciona modelo baseado na complexidade
+            selected_model = select_model(
+                demand_text,
+                light_model=self._light_model,
+                heavy_model=self._heavy_model,
+            )
+
             context = {
                 "demand_id": demand_id,
                 "agent_name": "squad-lead",
                 "fase": "coordenacao",
                 "max_turns": self.SQUAD_LEAD_MAX_TURNS,
             }
+            if selected_model:
+                context["model_override"] = selected_model
+
             resposta = await self._adapter.run(full_prompt, context)
         finally:
             typing_task.cancel()
@@ -1138,6 +1188,9 @@ class OrchestrationEngine:
             self._conversation.save_message(
                 demand_id, "assistant", resposta_limpa, agent_name="squad-lead",
             )
+
+            # Sumariza conversa se ultrapassou threshold
+            await self._maybe_summarize(demand_id)
 
             await self._message_bus.send_message(
                 user_id, resposta_limpa, sender=label,

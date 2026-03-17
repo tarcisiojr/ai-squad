@@ -5,6 +5,10 @@ messaging_provider: cli
 # Modelo de IA (opcional, usa padrão do SDK se ausente)
 ai_model: claude-sonnet-4-20250514
 
+# Model routing — roteia mensagens simples para modelo leve (opcional)
+# light_model: claude-haiku-4-5-20251001
+# heavy_model: claude-sonnet-4-20250514
+
 # Timeout padrão para execução de agentes (segundos)
 agent_timeout: 300
 

@@ -27,7 +27,9 @@ ai-dev-platform/
 │   │   └── claude_agent_sdk.py # Claude Agent SDK com MCP tools
 │   ├── orchestrator/
 │   │   ├── engine.py          # Squad Lead hub-spoke + delegação async
-│   │   ├── state.py           # Persistência JSON com escrita atômica
+│   │   ├── model_router.py    # Roteamento de modelo por complexidade (light/heavy)
+│   │   ├── daily_notes.py     # Notas diárias para continuidade entre sessões
+│   │   ├── state.py           # Persistência JSON com escrita atômica (fsync)
 │   │   ├── journal.py         # Decisões e estado por demanda
 │   │   ├── conversation.py    # Histórico de conversa (sobrevive restart)
 │   │   ├── lessons.py         # Aprendizado entre demandas
@@ -59,6 +61,11 @@ ai-dev-platform/
 - **AGENTS.md como fonte única** — CLAUDE.md, GEMINI.md etc. são symlinks para AGENTS.md
 - **Respostas conversacionais no Telegram** — agentes nunca expõem raciocínio interno (classificações, labels de intent, passos numerados). O usuário quer conversa natural, não debug <!-- Aprendido em: 2026-03-15 -->
 - **Dockerfile: user agent para runtime** — dependências de sistema (apt, install-deps) rodam como root, mas browsers do Playwright e outros artefatos de runtime devem ser instalados APÓS `USER agent` para ficarem acessíveis ao processo <!-- Aprendido em: 2026-03-15 -->
+- **Sumarização automática de contexto** — quando conversa excede 20 mensagens, sumariza as antigas via LLM e mantém apenas as recentes + resumo acumulado. Previne perda de contexto em conversas longas <!-- Aprendido em: 2026-03-16 -->
+- **Model routing por complexidade** — classifica mensagens do usuário como light/heavy via regras (tamanho, palavras-chave, padrões de código) e roteia para modelo apropriado. Configurável via `light_model`/`heavy_model` no platform.yaml <!-- Aprendido em: 2026-03-16 -->
+- **Notas diárias** — resumo do que foi feito por dia em `state/daily/YYYY-MM-DD.md`, últimos 3 dias injetados no prompt do Squad Lead para continuidade entre sessões <!-- Aprendido em: 2026-03-16 -->
+- **Retry com backoff exponencial** — em erros transientes, adapter retenta até 3 vezes com backoff 2/4/8s. Em `context_length_exceeded`, comprime prompt automaticamente <!-- Aprendido em: 2026-03-16 -->
+- **Escrita atômica com fsync** — todas as escritas atômicas (state, journal, conversation) agora incluem `fsync` antes do rename para garantir durabilidade em caso de crash <!-- Aprendido em: 2026-03-16 -->
 
 ## Ciclo de Vida de uma Demanda
 

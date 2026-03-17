@@ -72,6 +72,8 @@ class PlatformConfig:
     state_dir: str = "state/"
     repo_path: str = ""
     ai_model: str | None = None
+    light_model: str | None = None  # modelo leve para mensagens simples
+    heavy_model: str | None = None  # modelo pesado para mensagens complexas
     squad_lead: SquadLeadConfig = field(default_factory=SquadLeadConfig)
     heartbeat: HeartbeatConfig = field(default_factory=HeartbeatConfig)
     agents: dict[str, AgentConfig] = field(default_factory=dict)
@@ -152,6 +154,8 @@ class PlatformConfig:
             state_dir=data.get("state_dir", "state/"),
             repo_path=data.get("repo_path", ""),
             ai_model=data.get("ai_model"),
+            light_model=data.get("light_model"),
+            heavy_model=data.get("heavy_model"),
             squad_lead=squad_lead,
             heartbeat=heartbeat,
             agents=agents,

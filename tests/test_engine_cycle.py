@@ -60,7 +60,7 @@ class CycleBus(MessageBus):
         self.mensagens = []
         self.notificacoes = []
 
-    async def send_message(self, user_id: str, text: str) -> None:
+    async def send_message(self, user_id: str, text: str, **kwargs) -> None:
         self.mensagens.append((user_id, text))
 
     async def send_approval_request(

@@ -37,7 +37,7 @@ class MockBus:
     def __init__(self):
         self.mensagens = []
 
-    async def send_message(self, user_id, text):
+    async def send_message(self, user_id, text, **kwargs):
         self.mensagens.append((user_id, text))
 
     async def notify(self, user_id, text):

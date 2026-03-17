@@ -292,6 +292,12 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
         # Mantém para compatibilidade com report_progress
         self._current_agent_name = agent_name
 
+        # Model override temporário (model routing por complexidade)
+        model_override = context.pop("model_override", None)
+        original_model = self._model
+        if model_override:
+            self._model = model_override
+
         try:
             prompt_completo = self._build_prompt(prompt, context)
             conversation_id = context.get("demand_id", "")
@@ -311,36 +317,118 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
         except Exception as e:
             self._status = AgentStatus.ERROR
             raise RuntimeError(f"Erro no Claude Agent SDK: {e}") from e
+        finally:
+            # Restaura modelo original após model routing
+            if model_override:
+                self._model = original_model
+
+    # Configuração de retry
+    MAX_RETRIES = 3
+    RETRY_BASE_DELAY = 2  # segundos (backoff: 2, 4, 8)
 
     async def _execute_sdk(
         self, prompt: str, conversation_id: str = "", max_turns: int = 30,
         agent_name: str = "", timeout: int = 0,
     ) -> str:
-        """Executa query via SDK. Retoma sessao se existir."""
-        options = self._build_options(conversation_id, max_turns, agent_name)
+        """Executa query via SDK com retry e backoff exponencial.
+
+        Tratamento especial para context_length_exceeded:
+        comprime o prompt e retenta.
+        """
         effective_timeout = timeout or self._timeout
+        last_error: Exception | None = None
 
-        partes_texto: list[str] = []
-        session_id = None
+        for attempt in range(self.MAX_RETRIES + 1):
+            options = self._build_options(conversation_id, max_turns, agent_name)
 
-        async with asyncio.timeout(effective_timeout):
-            async for message in query(prompt=prompt, options=options):
-                if isinstance(message, AssistantMessage):
-                    for block in message.content:
-                        if isinstance(block, TextBlock):
-                            partes_texto.append(block.text)
-                elif isinstance(message, ResultMessage):
-                    session_id = message.session_id
+            try:
+                partes_texto: list[str] = []
+                session_id = None
 
-        # Salva session_id para retomada futura
-        if session_id and conversation_id:
-            self._sessions[conversation_id] = session_id
-            logger.info(
-                "Sessao salva: %s → %s",
-                conversation_id, session_id[:16] + "...",
+                async with asyncio.timeout(effective_timeout):
+                    async for message in query(prompt=prompt, options=options):
+                        if isinstance(message, AssistantMessage):
+                            for block in message.content:
+                                if isinstance(block, TextBlock):
+                                    partes_texto.append(block.text)
+                        elif isinstance(message, ResultMessage):
+                            session_id = message.session_id
+
+                # Salva session_id para retomada futura
+                if session_id and conversation_id:
+                    self._sessions[conversation_id] = session_id
+                    logger.info(
+                        "Sessao salva: %s → %s",
+                        conversation_id, session_id[:16] + "...",
+                    )
+
+                return "\n".join(partes_texto).strip()
+
+            except Exception as e:
+                last_error = e
+                error_msg = str(e).lower()
+
+                # Context length exceeded: comprime prompt e retenta
+                if "context_length_exceeded" in error_msg or "too long" in error_msg:
+                    logger.warning(
+                        "[%s] Context length exceeded (tentativa %d/%d). Comprimindo prompt...",
+                        agent_name, attempt + 1, self.MAX_RETRIES + 1,
+                    )
+                    prompt = self._compress_prompt(prompt)
+                    # Limpa sessao para forcar nova conversa
+                    if conversation_id and conversation_id in self._sessions:
+                        del self._sessions[conversation_id]
+                    continue
+
+                # Timeout: não faz retry (já consumiu o tempo)
+                if isinstance(e, (asyncio.TimeoutError, TimeoutError)):
+                    raise
+
+                # Outros erros: retry com backoff
+                if attempt < self.MAX_RETRIES:
+                    delay = self.RETRY_BASE_DELAY * (2 ** attempt)
+                    logger.warning(
+                        "[%s] Erro na execucao (tentativa %d/%d): %s. Retry em %ds...",
+                        agent_name, attempt + 1, self.MAX_RETRIES + 1, e, delay,
+                    )
+                    await asyncio.sleep(delay)
+                else:
+                    raise
+
+        # Nunca deve chegar aqui, mas para segurança
+        raise last_error or RuntimeError("Falha apos todas as tentativas")
+
+    @staticmethod
+    def _compress_prompt(prompt: str) -> str:
+        """Comprime prompt removendo seções menos críticas.
+
+        Estratégia: remove seções de contexto intermediárias,
+        mantendo instruções do sistema e mensagem do usuário.
+        """
+        lines = prompt.split("\n")
+        total = len(lines)
+
+        if total <= 50:
+            # Prompt curto: mantém início e fim, remove o meio
+            keep = total // 3
+            removed = total - (keep * 2)
+            return "\n".join(
+                lines[:keep]
+                + [f"\n[... {removed} linhas de contexto comprimido ...]\n"]
+                + lines[-keep:]
             )
 
-        return "\n".join(partes_texto).strip()
+        # Remove metade das linhas intermediárias
+        keep_start = total // 4
+        keep_end = total // 4
+        removed = total - keep_start - keep_end
+
+        compressed = (
+            lines[:keep_start]
+            + [f"\n[... {removed} linhas de contexto removidas para caber no limite ...]\n"]
+            + lines[-keep_end:]
+        )
+        return "\n".join(compressed)
 
     def _build_add_dirs(self, agent_name: str = "") -> list[str]:
         """Monta lista de diretorios adicionais para skills.

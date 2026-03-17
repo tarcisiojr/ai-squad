@@ -34,6 +34,8 @@ class JournalStore:
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
             os.replace(tmp_path, str(path))
         except Exception:
             # Remove temp em caso de erro
