@@ -100,39 +100,20 @@ def get_demand_state_summary(
     running_agents: dict,
     personas: dict,
 ) -> str:
-    """Retorna resumo do estado de todas as demandas ativas."""
-    # Mapeamento estado → descrição
-    state_descriptions = {
-        "idle": "Aguardando inicio",
-        "po_working": "PO especificando demanda",
-        "awaiting_plan_approval": "Esperando aprovacao do plano pelo usuario",
-        "dev_working": "Dev implementando",
-        "awaiting_pr_approval": "Esperando aprovacao do PR pelo usuario",
-        "ci_running": "CI rodando testes",
-        "qa_validating": "QA validando implementacao",
-        "done": "Concluida",
-    }
+    """Retorna resumo do estado de todas as demandas ativas.
 
-    # Mapeamento estado → próxima ação
-    next_actions = {
-        "po_working": "Aguardar PO concluir especificacao",
-        "awaiting_plan_approval": "Usuario aprovar ou rejeitar o plano",
-        "dev_working": "Aguardar Dev concluir implementacao",
-        "awaiting_pr_approval": "Usuario aprovar ou rejeitar o PR",
-        "ci_running": "Aguardar CI passar",
-        "qa_validating": "Aguardar QA concluir validacao",
-    }
-
-    # Coleta journals ativos
+    Genérico — não assume nomes de fase específicos.
+    A fase vem do journal (current_phase) e pode ser qualquer string
+    definida pelo pipeline ou pelo Squad Lead.
+    """
     active_journals = journal.get_active_journals()
 
     if not active_journals:
-        # Fallback: verifica state manager
         try:
             pending = state_manager.get_pending_demands()
             if not pending:
                 return "Nenhuma demanda ativa."
-            lines = ["Demandas ativas (sem journal):"]
+            lines = ["Demandas ativas:"]
             for d in pending:
                 state = d.get("state", "?")
                 lines.append(f"  - {d['demand_id']}: {state}")
@@ -145,18 +126,21 @@ def get_demand_state_summary(
         demand_id = j.get("demand_id", "?")
         demand_text = j.get("demand_text", "?")
         phase = j.get("current_phase", "?")
-        description = state_descriptions.get(phase, phase)
-        next_action = next_actions.get(phase, "Avaliar proximo passo")
         next_expected = j.get("next_expected")
 
         lines.append(f"### {demand_id}")
         lines.append(f"  Demanda: {demand_text}")
-        lines.append(f"  Fase: {phase} ({description})")
-        lines.append(f"  Proxima acao: {next_action}")
+        lines.append(f"  Fase: {phase}")
         if next_expected:
-            lines.append(f"  Detalhe: {next_expected.get('description', '')}")
+            desc = next_expected.get("description", "")
+            agent = next_expected.get("agent", "")
+            if desc:
+                lines.append(f"  Proximo: {desc}")
+            if agent:
+                label = _get_agent_label(agent, personas)
+                lines.append(f"  Agente esperado: {label}")
 
-        # Verifica se tem agente rodando
+        # Agentes rodando para esta demanda
         running = [
             ra
             for ra in running_agents.values()
