@@ -1,24 +1,23 @@
 # AI Dev Platform
 
-Plataforma de desenvolvimento autônomo por IA com agentes especializados (PO, Dev Backend, Dev Frontend, Code Review, QA) que orquestram o ciclo completo de entrega — da demanda à produção.
+Plataforma de orquestração multi-agente por IA com pipeline declarativo framework-agnostic. Agentes especializados executam steps definidos em YAML, com quality gates e checkpoints para aprovação humana.
 
 ## Visão Geral
 
-O usuário interage exclusivamente via barramento de mensagens (Telegram ou CLI). Agentes trabalham de forma autônoma e só solicitam intervenção humana em pontos de decisão (aprovação de plano, aprovação de PR, erros bloqueantes).
+O usuário interage via messaging (Telegram ou CLI). O Squad Lead coordena o time lendo o pipeline e delegando trabalho. Agentes trabalham de forma autônoma e só pausam em checkpoints.
 
 ## Arquitetura
 
-Monorepo Python 3.11+ com módulos desacoplados via interfaces ABC. Nenhum componente importa implementações concretas — apenas a `PlatformFactory` conhece o mapeamento provider → implementação.
+Monorepo Python 3.11+ com módulos desacoplados via interfaces ABC. Pipeline declarativo em YAML define o fluxo de trabalho — o engine é agnóstico ao domínio.
 
 ```
 ai-dev-platform/
-├── platform.yaml              # Configuração centralizada (providers, personas, timeouts)
-├── registry.yaml              # Catálogo de agentes por domínio
+├── platform.yaml              # Configuração centralizada (providers, timeouts)
 ├── src/
-│   ├── models.py              # Enums: AgentStatus, DemandState, VALID_TRANSITIONS
-│   ├── factory.py             # PlatformConfig + AgentConfig + SubmoduleConfig (DI)
+│   ├── models.py              # Enum: AgentStatus
+│   ├── factory.py             # PlatformConfig + AgentConfig (DI)
 │   ├── daemon.py              # Loop principal: Telegram polling + heartbeat
-│   ├── barramento/
+│   ├── messaging/
 │   │   ├── interface.py       # ABC MessageBus
 │   │   ├── cli.py             # CLIMessageBus (stdin/stdout)
 │   │   └── telegram.py        # TelegramMessageBus (voz, fotos, markdown)
@@ -27,67 +26,67 @@ ai-dev-platform/
 │   │   └── claude_agent_sdk.py # Claude Agent SDK com MCP tools
 │   ├── orchestrator/
 │   │   ├── engine.py          # Squad Lead hub-spoke + delegação async
-│   │   ├── model_router.py    # Roteamento de modelo por complexidade (light/heavy)
-│   │   ├── daily_notes.py     # Notas diárias para continuidade entre sessões
-│   │   ├── state.py           # Persistência JSON com escrita atômica (fsync)
-│   │   ├── journal.py         # Decisões e estado por demanda
-│   │   ├── conversation.py    # Histórico de conversa (sobrevive restart)
-│   │   ├── lessons.py         # Aprendizado entre demandas
-│   │   ├── context.py         # Contexto do produto (CLAUDE.md + submodulos)
+│   │   ├── pipeline.py        # Parser de pipeline.yaml e step files
+│   │   ├── pipeline_state.py  # Estado e executor de pipeline
+│   │   ├── verification.py    # Validação de artefatos (OpenSpec e outros)
+│   │   ├── prompt_builder.py  # Montagem de contexto para prompts
+│   │   ├── media.py           # Detecção e envio de imagens/arquivos
+│   │   ├── model_router.py    # Roteamento de modelo por complexidade
+│   │   ├── atomic_write.py    # Escrita atômica compartilhada (fsync)
+│   │   ├── state.py           # Persistência JSON de estado
+│   │   ├── journal.py         # Decisões do Squad Lead por demanda
+│   │   ├── conversation.py    # Histórico de conversa + sumarização
+│   │   ├── lessons.py         # Aprendizado FTS5 entre demandas
+│   │   ├── daily_notes.py     # Notas diárias para continuidade
+│   │   ├── context.py         # Contexto do produto (CLAUDE.md + tree)
 │   │   └── tools.py           # Modelos: RunningAgent, VerificationResult
-│   └── whisper/
-│       ├── server.py          # Serviço HTTP de transcrição de áudio
-│       └── Dockerfile         # Container dedicado para Whisper
-├── agents/                    # Personas com AGENTS.md + symlinks CLAUDE.md
-│   ├── squad-lead/            # Coordenador do time
-│   ├── po/                    # Product Owner (openspec)
-│   ├── dev-backend/           # Desenvolvedor backend
-│   ├── dev-frontend/          # Desenvolvedor frontend
-│   ├── code-review/           # Revisor de código
-│   └── qa/                    # Quality Assurance
-├── .claude/docs/              # Documentos de referência detalhados
-│   └── inteligencia.md        # Arquitetura de inteligência
-├── state/                     # Estado persistido (JSON)
-└── tests/                     # Testes, cobertura ≥ 80%
+│   ├── presets/               # Pipelines pré-configurados
+│   │   ├── dev-openspec/      # PO → Dev → Review → QA
+│   │   └── infra-monitor/     # Triager → SRE → Validator
+│   └── whisper/               # Transcrição de áudio (Whisper)
+├── tests/                     # Testes espelhando estrutura do src/
+│   ├── adapters/
+│   ├── messaging/
+│   ├── cli/
+│   └── orchestrator/
+└── openspec/                  # Artefatos OpenSpec do próprio projeto
 ```
 
 ## Decisões de Design
 
+- **Pipeline declarativo** — fluxo de trabalho definido em YAML (pipeline.yaml + step files), não em código Python. Engine é agnóstico ao domínio
+- **Quality gates híbridos** — verificações de arquivo/estrutura resolvidas em código, semânticas via LLM. Declarados nos step files
+- **Modelo C (auto + override)** — pipeline avança automaticamente entre steps; Squad Lead pode override via skip/rerun/advance
+- **Presets como templates** — `dev-openspec`, `infra-monitor` são diretórios copiáveis com pipeline + agents prontos
 - **Módulos independentes, não microserviços** — desacoplamento via ABC sem overhead de comunicação inter-serviços
 - **Factory pattern** — `PlatformFactory` é o único ponto que conhece implementações concretas
-- **Subprocess para Claude Code** — `claude --print` aproveita assinatura existente sem API key
-- **JSON para estado** — simplicidade para v1, escrita atômica (temp + rename) previne corrupção
-- **Docker para isolamento** — agentes executam em containers read-only com rede desabilitada
-- **AGENTS.md como fonte única** — CLAUDE.md, GEMINI.md etc. são symlinks para AGENTS.md
-- **Respostas conversacionais no Telegram** — agentes nunca expõem raciocínio interno (classificações, labels de intent, passos numerados). O usuário quer conversa natural, não debug <!-- Aprendido em: 2026-03-15 -->
-- **Dockerfile: user agent para runtime** — dependências de sistema (apt, install-deps) rodam como root, mas browsers do Playwright e outros artefatos de runtime devem ser instalados APÓS `USER agent` para ficarem acessíveis ao processo <!-- Aprendido em: 2026-03-15 -->
-- **Sumarização automática de contexto** — quando conversa excede 20 mensagens, sumariza as antigas via LLM e mantém apenas as recentes + resumo acumulado. Previne perda de contexto em conversas longas <!-- Aprendido em: 2026-03-16 -->
-- **Model routing por complexidade** — classifica mensagens do usuário como light/heavy via regras (tamanho, palavras-chave, padrões de código) e roteia para modelo apropriado. Configurável via `light_model`/`heavy_model` no platform.yaml <!-- Aprendido em: 2026-03-16 -->
-- **Notas diárias** — resumo do que foi feito por dia em `state/daily/YYYY-MM-DD.md`, últimos 3 dias injetados no prompt do Squad Lead para continuidade entre sessões <!-- Aprendido em: 2026-03-16 -->
-- **Retry com backoff exponencial** — em erros transientes, adapter retenta até 3 vezes com backoff 2/4/8s. Em `context_length_exceeded`, comprime prompt automaticamente <!-- Aprendido em: 2026-03-16 -->
-- **Escrita atômica com fsync** — todas as escritas atômicas (state, journal, conversation) agora incluem `fsync` antes do rename para garantir durabilidade em caso de crash <!-- Aprendido em: 2026-03-16 -->
+- **Escrita atômica com fsync** — `atomic_write.py` compartilhado por state, journal, conversation, daily_notes
+- **Sumarização automática** — quando conversa excede 20 mensagens, sumariza as antigas via LLM
+- **Model routing por complexidade** — classifica mensagens como light/heavy e roteia para modelo apropriado
+- **Notas diárias** — resumo do que foi feito por dia, últimos 3 dias injetados no prompt
+- **Retry com backoff** — erros transientes retentados com backoff 2/4/8s; context_length_exceeded comprime prompt
+- **Respostas conversacionais no Telegram** — agentes nunca expõem raciocínio interno. Conversa natural, não debug
+- **Dockerfile: user agent para runtime** — dependências rodam como root, browsers do Playwright como `USER agent`
 
-## Ciclo de Vida de uma Demanda
+## Pipeline e Steps
 
-```
-PO (openspec) → Dev Backend + Dev Frontend (paralelo) → Code Review → QA
-                        ↑                                    |
-                        └──── (se REJEITADO) ────────────────┘
-```
+O fluxo é definido em `pipeline/pipeline.yaml`. Cada step referencia um `.md` com:
 
-Squad Lead coordena o fluxo, delega via `start_agent` e verifica artefatos antes de cada transição. Detalhes da arquitetura de inteligência em `.claude/docs/inteligencia.md`.
+- **Frontmatter YAML** — agent, type, execution, model_tier, on_reject
+- **Quality Gate** — checklist de verificação (arquivo/estrutural/semântico)
+- **Veto Conditions** — condições que reprovam automaticamente
+
+Steps com `type: checkpoint` pausam para aprovação humana. Steps com `on_reject` criam loops de revisão (ex: review rejeita → volta pro dev → review re-avalia).
 
 ## Interfaces Principais
 
-### MessageBus (src/barramento/interface.py)
-- `send_message(user_id, text)` — envia texto (Telegram: `parse_mode="Markdown"` com fallback para texto plano)
-- `send_photo(user_id, photo_path, caption)` — envia imagem (Telegram only)
-- `send_approval_request(user_id, question, options) → str` — pedido de aprovação
-- `receive_message(callback)` — registra listener de texto
-- `receive_voice(callback)` — registra listener de voz
+### MessageBus (src/messaging/interface.py)
+- `send_message(user_id, text, **kwargs)` — envia texto
+- `send_photo(user_id, photo_path, caption)` — envia imagem
+- `send_approval_request(user_id, question, options) → str` — aprovação
+- `ask_user(user_id, question) → str` — pergunta texto livre
+- `send_typing(user_id)` — indicador de digitação
 - `notify(user_id, text)` — notificação
-
-O engine detecta automaticamente caminhos de imagem e `.md` nas respostas dos agentes e envia como foto ou conteúdo inline no Telegram <!-- Aprendido em: 2026-03-15 -->
 
 ### AIAgentAdapter (src/adapters/interface.py)
 - `run(prompt, context) → str` — executa agente
@@ -97,105 +96,83 @@ O engine detecta automaticamente caminhos de imagem e `.md` nas respostas dos ag
 
 ## Configuração
 
-Tudo centralizado em `platform.yaml`:
+Centralizada em `platform.yaml`:
 
 ```yaml
-ai_provider: claude-code        # Provider de IA (plugável)
-messaging_provider: cli          # Provider de mensageria (plugável)
-agent_timeout: 300               # Timeout em segundos
+ai_provider: claude-agent-sdk
+messaging_provider: cli
+ai_model: claude-sonnet-4-20250514
+
+# Model routing (opcional)
+# light_model: claude-haiku-4-5-20251001
+# heavy_model: claude-sonnet-4-20250514
+
+agent_timeout: 300
 state_dir: state/
-personas:
+
+agents:
   po:
     name: "PO Agent"
     avatar: "📋"
-```
-
-Cada agente pode ter timeout e submodules específicos:
-
-```yaml
-agents:
+    role: spec       # spec, dev, review, generic
   dev-backend:
     name: "Dev Backend"
     avatar: "⚙️"
+    role: dev
     timeout: 600
-    submodules:
-      - path: "packages/api"
-        description: "API REST"
 ```
 
-Para trocar provider, altere apenas `platform.yaml` — zero mudanças no código.
+## MCP Tools
 
-## CLI ai-dev-team
-
-```bash
-# Instalar CLI
-pip install -e .
-
-# Criar um novo time de desenvolvimento
-ai-dev-team create backend-api --repo ~/projetos/minha-api
-
-# Editar tokens no .env gerado
-# ~/.ai-dev-team/teams/backend-api/.env
-
-# Iniciar o time (sobe container Docker)
-ai-dev-team start backend-api
-
-# Listar todos os times
-ai-dev-team list
-
-# Ver logs do time
-ai-dev-team logs backend-api
-
-# Ver demandas ativas
-ai-dev-team status backend-api
-
-# Parar o time
-ai-dev-team stop backend-api
-
-# Reconstruir imagem Docker
-ai-dev-team build
-```
-
-## Comandos de Desenvolvimento
-
-```bash
-# Ativar ambiente virtual
-source .venv/bin/activate
-
-# Rodar testes com cobertura
-python -m pytest tests/ -v
-
-# Verificar cobertura mínima (80%)
-python -m pytest tests/ --cov=src --cov-fail-under=80
-```
+| Tool | Descrição |
+|------|-----------|
+| `start_agent(name, task)` | Delega trabalho a um agente |
+| `get_running_agents()` | Status dos agentes em background |
+| `get_pipeline_state()` | Estado completo do pipeline |
+| `advance_step()` | Avançar manualmente no pipeline |
+| `skip_step(step_id)` | Pular um step |
+| `rerun_step(step_id)` | Re-executar um step |
+| `check_artifacts(name)` | Validar artefatos de uma change |
+| `get_demand_state()` | Estado das demandas ativas |
+| `read_journal()` | Histórico de decisões |
+| `report_progress(msg)` | Feedback ao usuário |
+| `send_image(path, caption)` | Enviar imagem via Telegram |
+| `learn_lesson(cat, prob, sol)` | Registrar lição aprendida |
 
 ## Extensibilidade
 
 ### Novo provider de IA
-1. Criar classe que herda `AIAgentAdapter` em `src/adapters/`
-2. Registrar na factory: `factory.register_ai_adapter("nome", MinhaClasse)`
-3. Atualizar `platform.yaml`: `ai_provider: nome`
+1. Criar classe herdando `AIAgentAdapter` em `src/adapters/`
+2. Registrar: `factory.register_ai_adapter("nome", Classe)`
+3. `platform.yaml`: `ai_provider: nome`
 
-### Novo provider de mensageria
-1. Criar classe que herda `MessageBus` em `src/barramento/`
-2. Registrar na factory: `factory.register_message_bus("nome", MinhaClasse)`
-3. Atualizar `platform.yaml`: `messaging_provider: nome`
+### Novo canal de mensageria
+1. Criar classe herdando `MessageBus` em `src/messaging/`
+2. Registrar: `factory.register_message_bus("nome", Classe)`
+3. `platform.yaml`: `messaging_provider: nome`
 
 ### Novo agente
-1. Criar diretório `agents/<nome>/` com AGENTS.md
-2. Criar symlink: `ln -sf AGENTS.md CLAUDE.md`
-3. Adicionar entrada no `config.yaml` do time (agents section)
-4. Nenhuma alteração de código necessária — verificação é dinâmica pelo conteúdo do AGENTS.md
+1. Criar `AGENTS.md` no diretório do agente (no preset ou no time)
+2. Adicionar no `config.yaml` do time (seção agents)
+3. Referenciar no `pipeline.yaml` do step correspondente
 
-### MCP Tools disponíveis para agentes
-- `start_agent(agent_name, task_description)` — delega trabalho
-- `get_running_agents()` — status dos agentes em background
-- `check_artifacts(change_name)` — valida artefatos openspec
-- `get_demand_state()` — estado das demandas ativas
-- `read_journal()` — histórico de decisões
-- `report_progress(message)` — feedback ao usuário
-- `send_image(image_path, caption)` — envia foto no Telegram
-- `learn_lesson(category, problem, solution)` — registra lição aprendida
+### Novo pipeline/preset
+1. Criar `src/presets/<nome>/` com `pipeline/` e `agents/`
+2. Definir `pipeline.yaml` com steps
+3. Criar step files `.md` com quality gates
+4. `ai-dev-team create --preset <nome> meu-time --repo ~/repo`
 
-### Inteligência e memória
-- Lições aprendidas, monitor do Squad Lead, histórico de conversa, verificação dinâmica — detalhes em `.claude/docs/inteligencia.md`
+## Comandos de Desenvolvimento
+
+```bash
+source .venv/bin/activate
+
+# Testes (430+)
+python -m pytest tests/ -v
+
+# Lint + format
+ruff check src/ && ruff format src/
+
+# Type checking
+pyright src/
+```
