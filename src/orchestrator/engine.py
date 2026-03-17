@@ -15,8 +15,20 @@ from src.orchestrator.conversation import ConversationStore
 from src.orchestrator.daily_notes import DailyNotes
 from src.orchestrator.journal import JournalStore
 from src.orchestrator.lessons import LessonsStore
+from src.orchestrator.media import extract_and_send_media
 from src.orchestrator.model_router import select_model
 from src.orchestrator.state import StateManager
+from src.orchestrator.verification import (
+    check_artifacts_enriched,
+    classify_agent_role,
+    verify_completion,
+)
+from src.orchestrator.prompt_builder import (
+    read_agents_md,
+    get_agents_summary,
+    get_running_agents_status,
+    get_demand_state_summary,
+)
 from src.orchestrator.tools import (
     AgentResult, DemandStatus, RunningAgent, VerificationResult, check_workspace,
 )
@@ -167,58 +179,11 @@ class OrchestrationEngine:
 
     def _read_agents_md(self, agent_name: str) -> str:
         """Le o AGENTS.md de um agente."""
-        path = self._agents_dir / agent_name / "AGENTS.md"
-        if not path.exists():
-            return ""
-        try:
-            return path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
-            return ""
+        return read_agents_md(agent_name, self._agents_dir)
 
     def _get_agents_summary(self) -> str:
         """Gera resumo de todos os agentes para o prompt do Squad Lead."""
-        lines = ["## Agentes disponiveis\n"]
-
-        for agent_id, config in self._personas.items():
-            agents_md = self._read_agents_md(agent_id)
-
-            dominio = ""
-            quando = ""
-            criterios = ""
-            current_section = ""
-
-            for line in agents_md.splitlines():
-                if line.startswith("## Dominio"):
-                    current_section = "dominio"
-                elif line.startswith("## Quando Envolver"):
-                    current_section = "quando"
-                elif line.startswith("## Criterios de Aceite"):
-                    current_section = "criterios"
-                elif line.startswith("## "):
-                    current_section = ""
-                elif current_section == "dominio" and line.strip():
-                    dominio += line.strip() + " "
-                elif current_section == "quando" and line.strip():
-                    quando += line + "\n"
-                elif current_section == "criterios" and line.strip():
-                    criterios += line + "\n"
-
-            lines.append(f"### {config.avatar} {config.name} ({agent_id})")
-            if dominio:
-                lines.append(f"Dominio: {dominio.strip()}")
-            if quando:
-                lines.append(f"Quando envolver:\n{quando.strip()}")
-            if criterios:
-                lines.append(f"Criterios de aceite:\n{criterios.strip()}")
-            if hasattr(config, "submodules") and config.submodules:
-                subs = ", ".join(
-                    f"{s.path}" + (f" ({s.description})" if s.description else "")
-                    for s in config.submodules
-                )
-                lines.append(f"Submodulos: {subs}")
-            lines.append("")
-
-        return "\n".join(lines)
+        return get_agents_summary(self._personas, self._agents_dir)
 
     @staticmethod
     def _format_elapsed(seconds: int) -> str:
@@ -361,90 +326,8 @@ class OrchestrationEngine:
             logger.warning("Falha ao enviar imagem: %s", e)
 
     async def _extract_and_send_images(self, user_id: str, text: str) -> str:
-        """Detecta caminhos de imagem e arquivos .md na resposta e envia via Telegram.
-
-        Procura por:
-        - Markdown images: ![alt](path)
-        - Caminhos absolutos de imagem: /tmp/screenshot.png
-        - Markdown links para .md: [titulo](path.md)
-        - Caminhos soltos de .md: /workspace/openspec/changes/spec.md
-        Retorna texto limpo.
-        """
-        import os
-
-        cleaned = text
-        sent_files = set()
-
-        # 1. Detecta markdown images: ![caption](path)
-        if hasattr(self._message_bus, "send_photo"):
-            md_img_pattern = re.compile(r'!\[([^\]]*)\]\(([^)]+)\)')
-            for match in md_img_pattern.finditer(text):
-                caption = match.group(1)
-                path = match.group(2)
-                if os.path.isfile(path) and path not in sent_files:
-                    try:
-                        await self._message_bus.send_photo(user_id, path, caption)
-                        sent_files.add(path)
-                        logger.info("Imagem enviada: %s", path)
-                    except Exception as e:
-                        logger.error("Erro ao enviar imagem %s: %s", path, e)
-                cleaned = cleaned.replace(match.group(0), "")
-
-        # 2. Detecta caminhos soltos de imagem
-        if hasattr(self._message_bus, "send_photo"):
-            img_pattern = re.compile(r'(/[\w/.-]+\.(?:png|jpg|jpeg|gif|webp))', re.IGNORECASE)
-            for match in img_pattern.finditer(cleaned):
-                path = match.group(1)
-                if os.path.isfile(path) and path not in sent_files:
-                    try:
-                        await self._message_bus.send_photo(user_id, path, "")
-                        sent_files.add(path)
-                        logger.info("Imagem enviada: %s", path)
-                    except Exception as e:
-                        logger.error("Erro ao enviar imagem %s: %s", path, e)
-                    cleaned = cleaned.replace(path, "")
-
-        # 3. Detecta markdown links para .md: [titulo](path.md)
-        md_link_pattern = re.compile(r'\[([^\]]+)\]\(([^)]+\.md)\)')
-        for match in md_link_pattern.finditer(cleaned):
-            title = match.group(1)
-            path = match.group(2)
-            if os.path.isfile(path) and path not in sent_files:
-                try:
-                    content = Path(path).read_text(encoding="utf-8")
-                    # Trunca se muito grande (Telegram max 4096)
-                    header = f"📄 {title} ({Path(path).name})\n\n"
-                    max_content = 4096 - len(header) - 50
-                    if len(content) > max_content:
-                        content = content[:max_content] + "\n\n... (truncado)"
-                    await self._message_bus.send_message(user_id, f"{header}{content}")
-                    sent_files.add(path)
-                    logger.info("Arquivo .md enviado: %s", path)
-                except Exception as e:
-                    logger.error("Erro ao enviar .md %s: %s", path, e)
-                cleaned = cleaned.replace(match.group(0), title)
-
-        # 4. Detecta caminhos soltos de .md
-        md_path_pattern = re.compile(r'(/[\w/.-]+\.md)\b')
-        for match in md_path_pattern.finditer(cleaned):
-            path = match.group(1)
-            if os.path.isfile(path) and path not in sent_files:
-                try:
-                    content = Path(path).read_text(encoding="utf-8")
-                    name = Path(path).name
-                    header = f"📄 {name}\n\n"
-                    max_content = 4096 - len(header) - 50
-                    if len(content) > max_content:
-                        content = content[:max_content] + "\n\n... (truncado)"
-                    await self._message_bus.send_message(user_id, f"{header}{content}")
-                    sent_files.add(path)
-                    logger.info("Arquivo .md enviado: %s", path)
-                except Exception as e:
-                    logger.error("Erro ao enviar .md %s: %s", path, e)
-
-        # Limpa linhas vazias duplicadas
-        cleaned = re.sub(r'\n{3,}', '\n\n', cleaned).strip()
-        return cleaned
+        """Delega detecção de imagens/arquivos ao módulo media."""
+        return await extract_and_send_media(user_id, text, self._message_bus)
 
     # --- Agentes em background ---
 
@@ -698,182 +581,27 @@ class OrchestrationEngine:
         )
 
     def _classify_agent_role(self, agent_name: str) -> str:
-        """Classifica o papel de um agente baseado no AGENTS.md e config.
-
-        Retorna: 'spec' (gera artefatos openspec), 'dev' (implementa codigo),
-                 'review' (revisa resultado como texto), 'generic' (sem verificacao especifica).
-        """
+        """Delega classificação ao módulo verification."""
         persona = self._personas.get(agent_name)
-
-        # Verifica palavras-chave no AGENTS.md
-        agents_md = self._read_agents_md(agent_name).lower()
-
-        if "openspec" in agents_md and ("proposal" in agents_md or "specs" in agents_md):
-            return "spec"
-        if "tasks.md" in agents_md and ("implemente" in agents_md or "codigo" in agents_md or "commit" in agents_md):
-            return "dev"
-        if "aprovado" in agents_md and ("rejeitado" in agents_md or "review" in agents_md or "validar" in agents_md):
-            return "review"
-
-        return "generic"
+        role_override = persona.role if persona and persona.role else ""
+        return classify_agent_role(agent_name, self._agents_dir, role_override)
 
     def _verify_completion(
         self, agent_name: str, resultado: str,
     ) -> VerificationResult:
-        """Verifica conclusão via artefatos reais (artifact-based, sem markers).
-
-        Classificacao dinamica: detecta o papel do agente pelo AGENTS.md
-        em vez de hardcodar nomes.
-        """
-        role = self._classify_agent_role(agent_name)
-        issues = []
-
-        if role == "spec":
-            issues = self._verify_spec_completion()
-        elif role == "dev":
-            issues = self._verify_dev_completion()
-        elif role == "review":
-            issues = self._verify_review_completion(resultado)
-
-        # Agentes 'generic' passam sem verificacao especifica
-
-        if issues:
-            return VerificationResult(
-                passed=False,
-                details="; ".join(issues),
-            )
-
-        return VerificationResult(
-            passed=True,
-            details="Todas as verificacoes passaram",
+        """Delega verificação ao módulo verification."""
+        persona = self._personas.get(agent_name)
+        role_override = persona.role if persona and persona.role else ""
+        return verify_completion(
+            agent_name, resultado, self._workspace,
+            self._agents_dir, self._running_agents,
+            role_override=role_override,
         )
-
-    # Tamanho minimo em bytes para considerar um artefato valido
-    MIN_ARTIFACT_SIZE = 50
 
     def _verify_spec_completion(self) -> list[str]:
-        """Verifica artefatos openspec — dinamico, sem hardcode de agente."""
-        issues = []
-        ws = Path(self._workspace)
-        changes_dir = ws / "openspec" / "changes"
-
-        if not changes_dir.exists():
-            return ["Diretorio openspec/changes nao encontrado"]
-
-        active_changes = [
-            d for d in changes_dir.iterdir()
-            if d.is_dir() and d.name != "archive"
-        ]
-        if not active_changes:
-            return ["Nenhuma change ativa encontrada"]
-
-        change_dir = active_changes[-1]
-
-        # Verifica artefatos obrigatorios com conteudo minimo
-        required = ["proposal.md", "design.md", "tasks.md"]
-        for filename in required:
-            filepath = change_dir / filename
-            if not filepath.exists():
-                issues.append(f"{filename} nao encontrado")
-            else:
-                try:
-                    size = filepath.stat().st_size
-                    if size < self.MIN_ARTIFACT_SIZE:
-                        issues.append(f"{filename} parece vazio ({size} bytes)")
-                except OSError:
-                    issues.append(f"{filename} nao pode ser lido")
-
-        # Verifica specs com conteudo
-        specs_dir = change_dir / "specs"
-        if not specs_dir.exists() or not list(specs_dir.rglob("*.md")):
-            issues.append("Nenhuma spec encontrada em specs/")
-        else:
-            for spec_file in specs_dir.rglob("*.md"):
-                try:
-                    content = spec_file.read_text(encoding="utf-8")
-                    if len(content) < self.MIN_ARTIFACT_SIZE:
-                        issues.append(
-                            f"specs/{spec_file.relative_to(specs_dir)} parece vazio"
-                        )
-                except (OSError, UnicodeDecodeError):
-                    pass
-
-        # Verifica tasks.md tem itens suficientes
-        tasks_file = change_dir / "tasks.md"
-        if tasks_file.exists():
-            try:
-                content = tasks_file.read_text(encoding="utf-8")
-                items = len(re.findall(r"- \[[ x]\]", content))
-                if items < 3:
-                    issues.append(f"tasks.md tem apenas {items} itens (minimo 3)")
-            except (OSError, UnicodeDecodeError):
-                pass
-
-        return issues
-
-    def _verify_dev_completion(self) -> list[str]:
-        """Verifica se Dev concluiu.
-
-        Quando ha multiplos devs (backend + frontend), cada um marca apenas
-        suas tasks. A verificacao completa de tasks.md acontece no Code Review.
-        Aqui verifica apenas se o agente produziu resultado (nao retornou vazio).
-        """
-        # Se ha outro dev rodando em paralelo, nao verifica tasks.md
-        # (a verificacao completa sera no code-review)
-        dev_agents_running = [
-            name for name, ra in self._running_agents.items()
-            if ra.status == "running" and self._classify_agent_role(name) == "dev"
-        ]
-        if dev_agents_running:
-            # Outro dev ainda rodando — aceita conclusao parcial
-            return []
-
-        # Dev unico: verifica tasks.md
-        issues = []
-        tasks_check = self._check_tasks_md_completion()
-        if tasks_check:
-            issues.append(tasks_check)
-        return issues
-
-    def _verify_review_completion(self, resultado: str) -> list[str]:
-        """Verifica se agente de revisao concluiu: report com APROVADO ou REJEITADO."""
-        issues = []
-        resultado_lower = resultado.lower()
-        has_verdict = any(
-            word in resultado_lower
-            for word in ("aprovado", "approved", "rejeitado", "rejected")
-        )
-        if not has_verdict:
-            issues.append("Resultado nao contem veredicto ('APROVADO' ou 'REJEITADO')")
-        return issues
-
-    def _check_tasks_md_completion(self) -> str | None:
-        """Verifica se tasks.md tem items pendentes. Retorna descricao do problema ou None."""
-        ws = Path(self._workspace)
-        # Procura tasks.md em openspec/changes/*/tasks.md
-        changes_dir = ws / "openspec" / "changes"
-        if not changes_dir.exists():
-            return None
-
-        for change_dir in changes_dir.iterdir():
-            if not change_dir.is_dir() or change_dir.name == "archive":
-                continue
-            tasks_file = change_dir / "tasks.md"
-            if not tasks_file.exists():
-                continue
-            try:
-                content = tasks_file.read_text(encoding="utf-8")
-            except (OSError, UnicodeDecodeError):
-                continue
-
-            pending = len(re.findall(r"- \[ \]", content))
-            done = len(re.findall(r"- \[x\]", content))
-            total = pending + done
-
-            if pending > 0:
-                return f"tasks.md ({change_dir.name}): {pending}/{total} tasks pendentes"
-
-        return None
+        """Delega ao módulo verification (retrocompat para testes)."""
+        from src.orchestrator.verification import _verify_spec_completion
+        return _verify_spec_completion(self._workspace)
 
     async def _trigger_squad_lead_for_agent(
         self, running: RunningAgent, event_context: str,
@@ -892,194 +620,23 @@ class OrchestrationEngine:
 
     def _get_running_agents_status(self) -> str:
         """Retorna status formatado de todos os agentes."""
-        if not self._running_agents:
-            return "Nenhum agente ativo no momento."
-
-        lines = []
-        for name, ra in self._running_agents.items():
-            label = self._get_agent_label(name)
-            elapsed = ra.elapsed_str()
-
-            if ra.status == "running":
-                lines.append(f"- {label}: rodando ({elapsed})")
-            elif ra.status == "done":
-                preview = (ra.result or "")[:100]
-                if preview:
-                    preview = f" — {preview}..."
-                lines.append(f"- {label}: concluido ({elapsed}){preview}")
-            elif ra.status == "error":
-                lines.append(f"- {label}: erro ({elapsed}) — {ra.error}")
-
-        return "\n".join(lines)
+        return get_running_agents_status(self._running_agents, self._personas)
 
     def _check_artifacts_enriched(self, change_name: str) -> str:
-        """Verifica artefatos openspec com validação de qualidade (Criteria Gate)."""
-        ws = Path(self._workspace)
-        change_dir = ws / "openspec" / "changes" / change_name
+        """Delega ao módulo verification."""
+        return check_artifacts_enriched(change_name, self._workspace)
 
-        if not change_dir.exists():
-            return f"Change '{change_name}' nao encontrada."
-
-        checks = []
-
-        # Verifica proposal
-        proposal = change_dir / "proposal.md"
-        checks.append({
-            "name": "proposal_exists",
-            "passed": proposal.exists(),
-            "detail": "proposal.md encontrado" if proposal.exists() else "proposal.md ausente",
-        })
-
-        # Verifica specs com critérios de aceite
-        specs_dir = change_dir / "specs"
-        spec_files = list(specs_dir.rglob("*.md")) if specs_dir.exists() else []
-        checks.append({
-            "name": "specs_exist",
-            "passed": len(spec_files) > 0,
-            "detail": f"{len(spec_files)} spec(s) encontrada(s)" if spec_files else "Nenhuma spec encontrada",
-        })
-
-        for spec_file in spec_files:
-            try:
-                content = spec_file.read_text(encoding="utf-8")
-                has_criteria = "- [ ]" in content or "- [x]" in content
-                rel_path = spec_file.relative_to(specs_dir)
-                checks.append({
-                    "name": f"spec_criteria_{rel_path}",
-                    "passed": has_criteria,
-                    "detail": (
-                        f"specs/{rel_path} tem criterios de aceite" if has_criteria
-                        else f"specs/{rel_path} NAO tem criterios de aceite (adicione checklist '- [ ]')"
-                    ),
-                })
-            except (OSError, UnicodeDecodeError):
-                pass
-
-        # Verifica design
-        design = change_dir / "design.md"
-        checks.append({
-            "name": "design_exists",
-            "passed": design.exists(),
-            "detail": "design.md encontrado" if design.exists() else "design.md ausente",
-        })
-
-        # Verifica tasks com mínimo de itens
-        tasks_file = change_dir / "tasks.md"
-        if tasks_file.exists():
-            try:
-                content = tasks_file.read_text(encoding="utf-8")
-                pending = len(re.findall(r"- \[ \]", content))
-                done = len(re.findall(r"- \[x\]", content))
-                total = pending + done
-                checks.append({
-                    "name": "tasks_minimum",
-                    "passed": total >= 3,
-                    "detail": f"tasks.md tem {total} itens ({done} concluidos, {pending} pendentes)"
-                             if total >= 3 else f"tasks.md tem apenas {total} itens (minimo 3)",
-                })
-            except (OSError, UnicodeDecodeError):
-                checks.append({
-                    "name": "tasks_minimum",
-                    "passed": False,
-                    "detail": "Erro ao ler tasks.md",
-                })
-        else:
-            checks.append({
-                "name": "tasks_exists",
-                "passed": False,
-                "detail": "tasks.md ausente",
-            })
-
-        # Formata resultado
-        passed = all(c["passed"] for c in checks)
-        total_checks = len(checks)
-        passed_checks = sum(1 for c in checks if c["passed"])
-
-        lines = [f"Verificacao de artefatos: {change_name}"]
-        lines.append(f"Resultado: {'APROVADO' if passed else 'REPROVADO'} ({passed_checks}/{total_checks})")
-        lines.append("")
-        for c in checks:
-            status = "OK" if c["passed"] else "FALHA"
-            lines.append(f"  [{status}] {c['detail']}")
-
-        if not passed:
-            failed = [c for c in checks if not c["passed"]]
-            lines.append("")
-            lines.append("Acao necessaria:")
-            for c in failed:
-                lines.append(f"  - Corrigir: {c['detail']}")
-
-        return "\n".join(lines)
+    def _check_tasks_md_completion(self) -> str | None:
+        """Delega ao módulo verification (retrocompat para testes)."""
+        from src.orchestrator.verification import _check_tasks_md_completion
+        return _check_tasks_md_completion(self._workspace)
 
     def _get_demand_state_summary(self) -> str:
         """Retorna resumo do estado de todas as demandas ativas."""
-        # Mapeamento estado → descrição
-        state_descriptions = {
-            "idle": "Aguardando inicio",
-            "po_working": "PO especificando demanda",
-            "awaiting_plan_approval": "Esperando aprovacao do plano pelo usuario",
-            "dev_working": "Dev implementando",
-            "awaiting_pr_approval": "Esperando aprovacao do PR pelo usuario",
-            "ci_running": "CI rodando testes",
-            "qa_validating": "QA validando implementacao",
-            "done": "Concluida",
-        }
-
-        # Mapeamento estado → próxima ação
-        next_actions = {
-            "po_working": "Aguardar PO concluir especificacao",
-            "awaiting_plan_approval": "Usuario aprovar ou rejeitar o plano",
-            "dev_working": "Aguardar Dev concluir implementacao",
-            "awaiting_pr_approval": "Usuario aprovar ou rejeitar o PR",
-            "ci_running": "Aguardar CI passar",
-            "qa_validating": "Aguardar QA concluir validacao",
-        }
-
-        # Coleta journals ativos
-        active_journals = self._journal.get_active_journals()
-
-        if not active_journals:
-            # Fallback: verifica state manager
-            try:
-                pending = self._state_manager.get_pending_demands()
-                if not pending:
-                    return "Nenhuma demanda ativa."
-                lines = ["Demandas ativas (sem journal):"]
-                for d in pending:
-                    state = d.get("state", "?")
-                    lines.append(f"  - {d['demand_id']}: {state}")
-                return "\n".join(lines)
-            except Exception:
-                return "Nenhuma demanda ativa."
-
-        lines = [f"{len(active_journals)} demanda(s) ativa(s):\n"]
-        for j in active_journals:
-            demand_id = j.get("demand_id", "?")
-            demand_text = j.get("demand_text", "?")
-            phase = j.get("current_phase", "?")
-            description = state_descriptions.get(phase, phase)
-            next_action = next_actions.get(phase, "Avaliar proximo passo")
-            next_expected = j.get("next_expected")
-
-            lines.append(f"### {demand_id}")
-            lines.append(f"  Demanda: {demand_text}")
-            lines.append(f"  Fase: {phase} ({description})")
-            lines.append(f"  Proxima acao: {next_action}")
-            if next_expected:
-                lines.append(f"  Detalhe: {next_expected.get('description', '')}")
-
-            # Verifica se tem agente rodando
-            running = [
-                ra for ra in self._running_agents.values()
-                if ra.demand_id == demand_id and ra.status == "running"
-            ]
-            if running:
-                for ra in running:
-                    label = self._get_agent_label(ra.agent_name)
-                    lines.append(f"  Agente ativo: {label} ({ra.elapsed_str()})")
-            lines.append("")
-
-        return "\n".join(lines)
+        return get_demand_state_summary(
+            self._journal, self._state_manager,
+            self._running_agents, self._personas,
+        )
 
     # --- Squad Lead (chamadas curtas) ---
 
@@ -1230,12 +787,6 @@ class OrchestrationEngine:
         except Exception as e:
             logger.error("Erro ao disparar Squad Lead: %s", e)
 
-    async def run_demand_cycle(
-        self, demand_id: str, user_id: str, demand_text: str,
-    ) -> None:
-        """Executa demanda via Squad Lead."""
-        await self.run_squad_lead(demand_id, user_id, demand_text)
-
     # --- Conversa direta com agente ---
 
     async def direct_agent_conversation(
@@ -1294,7 +845,7 @@ class OrchestrationEngine:
     async def _handle_human_needed(self, question: str) -> str:
         """Roteia pedido de decisão humana ao barramento."""
         resposta = await self._message_bus.send_approval_request(
-            user_id="default",
+            user_id=self._default_user_id or "default",
             question=question,
             options=["Aprovar", "Rejeitar"],
         )
@@ -1427,54 +978,3 @@ class OrchestrationEngine:
                 f"--- Resposta do usuário ---\n{feedback}"
             )
 
-    # --- Metodos legados (compatibilidade) ---
-
-    async def _invoke_agent(
-        self, demand_id: str, user_id: str, agent_name: str, prompt: str,
-    ) -> str:
-        """Invoca um agente — compatibilidade."""
-        if agent_name not in self._personas:
-            available = ", ".join(self._personas.keys())
-            return f"Agente '{agent_name}' nao encontrado. Disponiveis: {available}"
-
-        label = self._get_agent_label(agent_name)
-        await self.notify_user(user_id, f"{label} iniciando...")
-
-        agents_md = self._read_agents_md(agent_name)
-        context = {
-            "fase": "execucao",
-            "system_instructions": agents_md,
-        }
-
-        specs_dir = Path(self._workspace) / "specs" / demand_id
-        specs_dir.mkdir(parents=True, exist_ok=True)
-
-        resultado = await self._agent_conversation(
-            demand_id, user_id, agent_name, prompt, context,
-        )
-
-        status = self._demand_statuses.get(demand_id)
-        if status:
-            status.set_result(agent_name, AgentResult(
-                agent_name=agent_name,
-                result=resultado,
-                success=bool(resultado),
-            ))
-
-        return resultado or "(agente cancelado pelo usuario)"
-
-    async def _invoke_parallel(
-        self, demand_id: str, user_id: str,
-        agents: list[str], prompts: list[str],
-    ) -> list[str]:
-        """Invoca multiplos agentes em paralelo — compatibilidade."""
-        tasks = [
-            self._invoke_agent(demand_id, user_id, agent, prompt)
-            for agent, prompt in zip(agents, prompts)
-        ]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        return [
-            str(r) if isinstance(r, Exception) else r
-            for r in results
-        ]

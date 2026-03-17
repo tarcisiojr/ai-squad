@@ -43,6 +43,9 @@ class MockBus:
     async def notify(self, user_id, text):
         self.mensagens.append((user_id, text))
 
+    async def ask_user(self, user_id, question):
+        return "resposta mock"
+
     async def send_approval_request(self, user_id, question, options):
         return "Aprovar"
 
@@ -83,10 +86,10 @@ class TestCheckArtifactsEnriched:
         change = ws / "openspec" / "changes" / "feature-x"
         specs = change / "specs" / "core"
         specs.mkdir(parents=True)
-        (change / "proposal.md").write_text("# P")
-        (change / "design.md").write_text("# D")
-        (specs / "spec.md").write_text("# S\n- [ ] C1\n- [ ] C2")
-        (change / "tasks.md").write_text("- [ ] T1\n- [ ] T2\n- [ ] T3")
+        (change / "proposal.md").write_text("# Proposal com conteudo suficiente para validacao de tamanho minimo")
+        (change / "design.md").write_text("# Design com conteudo suficiente para validacao de tamanho minimo")
+        (specs / "spec.md").write_text("# Spec com criterios de aceite\n- [ ] Criterio 1\n- [ ] Criterio 2")
+        (change / "tasks.md").write_text("- [ ] Task numero 1\n- [ ] Task numero 2\n- [ ] Task numero 3")
 
         result = engine._check_artifacts_enriched("feature-x")
         assert "APROVADO" in result
@@ -171,7 +174,7 @@ class TestGetDemandState:
 
 
 class TestVerifyPOCompletion:
-    """Testes detalhados para _verify_po_completion."""
+    """Testes detalhados para _verify_spec_completion."""
 
     def _make_engine(self, tmp_path):
         adapter = MockAdapter()
@@ -186,7 +189,7 @@ class TestVerifyPOCompletion:
     def test_sem_changes_dir(self, tmp_path):
         """Sem diretório de changes retorna issues."""
         engine = self._make_engine(tmp_path)
-        issues = engine._verify_po_completion()
+        issues = engine._verify_spec_completion()
         assert len(issues) > 0
 
     def test_specs_com_criterios_mixtos(self, tmp_path):
@@ -196,12 +199,12 @@ class TestVerifyPOCompletion:
         change = ws / "openspec" / "changes" / "mix"
         specs = change / "specs" / "auth"
         specs.mkdir(parents=True)
-        (change / "proposal.md").write_text("# P")
-        (change / "design.md").write_text("# D")
-        (specs / "spec.md").write_text("# S\n- [x] Feito\n- [ ] Pendente")
-        (change / "tasks.md").write_text("- [ ] T1\n- [ ] T2\n- [ ] T3")
+        (change / "proposal.md").write_text("# Proposal com conteudo suficiente para passar na validacao de tamanho minimo")
+        (change / "design.md").write_text("# Design com conteudo suficiente para passar na validacao de tamanho minimo")
+        (specs / "spec.md").write_text("# Spec com criterios de aceite\n- [x] Feito\n- [ ] Pendente")
+        (change / "tasks.md").write_text("- [ ] Task numero 1\n- [ ] Task numero 2\n- [ ] Task numero 3")
 
-        issues = engine._verify_po_completion()
+        issues = engine._verify_spec_completion()
         assert len(issues) == 0
 
 

@@ -130,15 +130,19 @@ class Daemon:
         return defs
 
     def _validate_tokens(self) -> None:
-        """Valida que tokens obrigatórios estão configurados."""
-        required = {
-            "CLAUDE_CODE_OAUTH_TOKEN": os.environ.get("CLAUDE_CODE_OAUTH_TOKEN", ""),
-            "GITHUB_TOKEN": os.environ.get("GITHUB_TOKEN", ""),
-            "TELEGRAM_TOKEN": os.environ.get("TELEGRAM_TOKEN", ""),
-            "TELEGRAM_CHAT_ID": os.environ.get("TELEGRAM_CHAT_ID", ""),
-        }
-
-        missing = [k for k, v in required.items() if not v or v.startswith("PREENCHA_AQUI_")]
+        """Valida tokens obrigatórios. Delega para PlatformConfig quando disponível."""
+        if self._config:
+            missing = self._config.validate_required_tokens()
+        else:
+            # Fallback direto (antes de _load_config ou em testes)
+            from src.factory import _PLACEHOLDER_PREFIX
+            required = {
+                "CLAUDE_CODE_OAUTH_TOKEN": os.environ.get("CLAUDE_CODE_OAUTH_TOKEN", ""),
+                "GITHUB_TOKEN": os.environ.get("GITHUB_TOKEN", ""),
+                "TELEGRAM_TOKEN": os.environ.get("TELEGRAM_TOKEN", ""),
+                "TELEGRAM_CHAT_ID": os.environ.get("TELEGRAM_CHAT_ID", ""),
+            }
+            missing = [k for k, v in required.items() if not v or v.startswith(_PLACEHOLDER_PREFIX)]
         if missing:
             logger.error("Tokens obrigatórios não configurados: %s", missing)
             sys.exit(1)

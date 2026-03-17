@@ -2,11 +2,11 @@
 
 import json
 import logging
-import os
-import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
+
+from src.orchestrator.atomic_write import write_json_atomic, write_text_atomic
 
 logger = logging.getLogger("ai-dev-team.conversation")
 
@@ -221,35 +221,9 @@ class ConversationStore:
         return len(self.load(demand_id))
 
     def _write_atomic(self, path: Path, data: list[dict]) -> None:
-        """Escrita atômica: temp + fsync + rename."""
-        content = json.dumps(data, ensure_ascii=False, indent=2)
-
-        fd, tmp_path = tempfile.mkstemp(
-            dir=str(path.parent),
-            suffix=".tmp",
-        )
-        try:
-            with open(fd, "w", encoding="utf-8") as f:
-                f.write(content)
-                f.flush()
-                os.fsync(f.fileno())
-            Path(tmp_path).replace(path)
-        except Exception:
-            Path(tmp_path).unlink(missing_ok=True)
-            raise
+        """Escrita atômica via utilitário compartilhado."""
+        write_json_atomic(path, data)
 
     def _write_atomic_text(self, path: Path, text: str) -> None:
-        """Escrita atômica de texto plano: temp + fsync + rename."""
-        fd, tmp_path = tempfile.mkstemp(
-            dir=str(path.parent),
-            suffix=".tmp",
-        )
-        try:
-            with open(fd, "w", encoding="utf-8") as f:
-                f.write(text)
-                f.flush()
-                os.fsync(f.fileno())
-            Path(tmp_path).replace(path)
-        except Exception:
-            Path(tmp_path).unlink(missing_ok=True)
-            raise
+        """Escrita atômica de texto via utilitário compartilhado."""
+        write_text_atomic(path, text)

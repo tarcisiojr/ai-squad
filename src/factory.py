@@ -31,6 +31,7 @@ class AgentConfig:
     command: str = ""
     done_marker: str = ""
     agents_md: str = ""
+    role: str = ""  # papel do agente: spec, dev, review, generic (vazio = inferir)
     timeout: int = 0  # 0 = usa agent_timeout padrao
     submodules: list[SubmoduleConfig] = field(default_factory=list)  # submodulos que o agente trabalha
 
@@ -142,6 +143,7 @@ class PlatformConfig:
                 avatar=config.get("avatar", ""),
                 command=config.get("command", f"/{nome}"),
                 done_marker=config.get("done_marker", ""),
+                role=config.get("role", ""),
                 timeout=config.get("timeout", 0),
                 submodules=submodules,
             )

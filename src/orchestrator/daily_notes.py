@@ -6,10 +6,10 @@ entre sessões.
 """
 
 import logging
-import os
-import tempfile
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+
+from src.orchestrator.atomic_write import write_text_atomic
 
 logger = logging.getLogger("ai-dev-team.daily-notes")
 
@@ -103,17 +103,5 @@ class DailyNotes:
         return "## Notas recentes (últimos dias)\n\n" + "\n\n".join(partes)
 
     def _write_atomic(self, path: Path, content: str) -> None:
-        """Escrita atômica: temp + fsync + rename."""
-        fd, tmp_path = tempfile.mkstemp(
-            dir=str(path.parent),
-            suffix=".tmp",
-        )
-        try:
-            with open(fd, "w", encoding="utf-8") as f:
-                f.write(content)
-                f.flush()
-                os.fsync(f.fileno())
-            Path(tmp_path).replace(path)
-        except Exception:
-            Path(tmp_path).unlink(missing_ok=True)
-            raise
+        """Escrita atômica via utilitário compartilhado."""
+        write_text_atomic(path, content)

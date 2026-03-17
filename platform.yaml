@@ -28,9 +28,12 @@ personas:
   po:
     name: "PO Agent"
     avatar: "📋"
+    # role: spec    # opcional: spec, dev, review, generic (vazio = inferir do AGENTS.md)
   dev-orchestrator:
     name: "Dev Orchestrator"
     avatar: "🔧"
+    # role: dev     # opcional: spec, dev, review, generic (vazio = inferir do AGENTS.md)
   qa:
     name: "QA Agent"
     avatar: "🧪"
+    # role: review  # opcional: spec, dev, review, generic (vazio = inferir do AGENTS.md)

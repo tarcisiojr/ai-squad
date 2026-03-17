@@ -44,7 +44,7 @@ class MockMessageBus(MessageBus):
         self._receive_voice_mock = AsyncMock()
         self._notify_mock = AsyncMock()
 
-    async def send_message(self, user_id: str, text: str) -> None:
+    async def send_message(self, user_id: str, text: str, **kwargs) -> None:
         await self._send_message_mock(user_id, text)
 
     async def send_approval_request(

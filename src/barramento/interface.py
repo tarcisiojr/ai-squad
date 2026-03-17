@@ -42,3 +42,11 @@ class MessageBus(ABC):
     async def notify(self, user_id: str, text: str) -> None:
         """Envia notificação ao usuário."""
         ...
+
+    async def send_photo(
+        self, user_id: str, photo_path: str, caption: str = "",
+    ) -> None:
+        """Envia imagem ao usuário. Opcional — implementações sem suporte ignoram."""
+
+    async def send_typing(self, user_id: str) -> None:
+        """Envia indicador de digitação. Opcional — implementações sem suporte ignoram."""

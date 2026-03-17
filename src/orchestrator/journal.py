@@ -2,10 +2,10 @@
 
 import json
 import logging
-import os
-import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
+
+from src.orchestrator.atomic_write import write_json_atomic
 
 logger = logging.getLogger("ai-dev-team.journal")
 
@@ -26,24 +26,8 @@ class JournalStore:
         return self._state_dir / demand_id / "squad-lead-journal.json"
 
     def _write_atomic(self, path: Path, data: dict) -> None:
-        """Escrita atômica: grava em temp e renomeia."""
-        path.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp_path = tempfile.mkstemp(
-            dir=str(path.parent), suffix=".tmp",
-        )
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-                f.flush()
-                os.fsync(f.fileno())
-            os.replace(tmp_path, str(path))
-        except Exception:
-            # Remove temp em caso de erro
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
-            raise
+        """Escrita atômica via utilitário compartilhado."""
+        write_json_atomic(path, data)
 
     def _now(self) -> str:
         """Timestamp ISO-8601 UTC."""

@@ -83,7 +83,7 @@ class CycleBus(MessageBus):
 
 
 class TestRunDemandCycle:
-    """Testes para o ciclo completo run_demand_cycle."""
+    """Testes para o ciclo completo run_squad_lead."""
 
     @pytest.mark.asyncio
     async def test_ciclo_completo_aprovado(self, tmp_path):
@@ -95,7 +95,7 @@ class TestRunDemandCycle:
         (tmp_path / "workspace").mkdir()
         engine = OrchestrationEngine(adapter, bus, state_mgr, workspace=workspace, personas=TEST_PERSONAS)
 
-        await engine.run_demand_cycle("cycle-1", "user1", "Criar feature X")
+        await engine.run_squad_lead("cycle-1", "user1", "Criar feature X")
 
         # Squad Lead coordena — verifica que alguma mensagem foi enviada
         assert len(bus.mensagens) > 0 or len(bus.notificacoes) > 0
