@@ -11,7 +11,7 @@ from pathlib import Path
 
 from src.orchestrator.atomic_write import write_text_atomic
 
-logger = logging.getLogger("ai-dev-team.daily-notes")
+logger = logging.getLogger("ai-squad.daily-notes")
 
 
 class DailyNotes:

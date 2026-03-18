@@ -7,7 +7,7 @@ from pathlib import Path
 
 from src.messaging.interface import MessageBus
 
-logger = logging.getLogger("ai-dev-team.media")
+logger = logging.getLogger("ai-squad.media")
 
 
 async def extract_and_send_media(

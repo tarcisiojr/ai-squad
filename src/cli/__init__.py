@@ -1,1 +1,1 @@
-"""Módulo CLI do ai-dev-team."""
+"""Módulo CLI do ai-squad."""

@@ -1,4 +1,4 @@
-"""Testes para o daemon do ai-dev-team."""
+"""Testes para o daemon do ai-squad."""
 
 from unittest.mock import AsyncMock, MagicMock
 
@@ -219,7 +219,7 @@ class TestDaemon:
         from pathlib import Path
         daemon = Daemon()
         daemon._write_healthcheck()
-        assert Path("/tmp/ai-dev-team-healthy").exists() or True
+        assert Path("/tmp/ai-squad-healthy").exists() or True
 
     @pytest.mark.asyncio
     async def test_shutdown_seta_evento(self):

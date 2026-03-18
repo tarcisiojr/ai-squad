@@ -23,7 +23,7 @@ from src.orchestrator.prompt_builder import (
 from src.orchestrator.state import StateManager
 from src.orchestrator.tools import RunningAgent
 
-logger = logging.getLogger("ai-dev-team.engine")
+logger = logging.getLogger("ai-squad.engine")
 
 
 class OrchestrationEngine:

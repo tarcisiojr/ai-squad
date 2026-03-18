@@ -112,7 +112,7 @@ DemandState.DONE                → pipeline status "completed"
 ### D5. Estrutura de diretórios por time
 
 ```
-~/.ai-dev-team/teams/{nome}/
+~/.ai-squad/teams/{nome}/
 ├── config.yaml                 # providers, timeouts, model tiers
 ├── .env                        # tokens (gitignored)
 ├── pipeline/
@@ -226,7 +226,7 @@ src/presets/
     └── agents/...
 ```
 
-`ai-dev-team create --preset dev-openspec` copia o template para `~/.ai-dev-team/teams/{nome}/`.
+`ai-squad create --preset dev-openspec` copia o template para `~/.ai-squad/teams/{nome}/`.
 
 ## Interfaces Principais
 

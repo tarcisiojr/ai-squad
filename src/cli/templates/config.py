@@ -1,7 +1,7 @@
 """Templates de configuração para novos times."""
 
 CONFIG_YAML_TEMPLATE = """\
-# Configuração do time ai-dev-team
+# Configuração do time ai-squad
 ai_provider: claude-agent-sdk
 messaging_provider: telegram
 
@@ -76,8 +76,8 @@ TELEGRAM_CHAT_ID=PREENCHA_AQUI_chat_id_telegram
 
 DOCKER_COMPOSE_TEMPLATE = """\
 services:
-  ai-dev-team-{team_name}:
-    image: ai-dev-team:latest
+  ai-squad-{team_name}:
+    image: ai-squad:latest
     container_name: adt-{team_name}
     restart: unless-stopped
 
@@ -98,7 +98,7 @@ services:
       - ./agents:/app/agents:ro
 
       # Skills globais (compartilhadas por todos os times)
-      - ~/.ai-dev-team/skills:/app/global-skills:ro
+      - ~/.ai-squad/skills:/app/global-skills:ro
 
       # Configurações git do host (agent = uid 1000)
       - ~/.ssh:/home/agent/.ssh:ro

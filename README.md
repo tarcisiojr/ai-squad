@@ -1,4 +1,4 @@
-# ai-dev-team
+# ai-squad
 
 Plataforma de orquestração multi-agente por IA. Define times de agentes especializados com pipeline declarativo — framework-agnostic, funciona para desenvolvimento de software, infra, conteúdo ou qualquer domínio.
 
@@ -11,19 +11,19 @@ Você interage via **Telegram** (texto ou voz). Os agentes trabalham de forma au
 pip install -e ".[dev]"
 
 # Criar um time apontando para seu repositório
-ai-dev-team create meu-time --repo ~/projetos/minha-api
+ai-squad create meu-time --repo ~/projetos/minha-api
 
 # Preencher os tokens no .env gerado
-# ~/.ai-dev-team/teams/meu-time/.env
+# ~/.ai-squad/teams/meu-time/.env
 
 # Iniciar o time (sobe container Docker)
-ai-dev-team start meu-time
+ai-squad start meu-time
 ```
 
 ## Como Funciona
 
 ```
-Você (Telegram)                    ai-dev-team (Docker)
+Você (Telegram)                    ai-squad (Docker)
      │                                    │
      │  "Criar API de autenticação"       │
      │───────────────────────────────────▶│
@@ -121,20 +121,20 @@ Times podem ser criados a partir de presets pré-configurados:
 ## Gerenciamento de Times
 
 ```bash
-ai-dev-team create backend  --repo ~/projetos/api
-ai-dev-team create frontend --repo ~/projetos/web
+ai-squad create backend  --repo ~/projetos/api
+ai-squad create frontend --repo ~/projetos/web
 
-ai-dev-team list              # ver todos os times
-ai-dev-team start --all       # iniciar todos
-ai-dev-team stop frontend     # parar um time
-ai-dev-team logs backend      # ver logs
-ai-dev-team status backend    # ver demandas ativas
-ai-dev-team build             # reconstruir imagem Docker
+ai-squad list              # ver todos os times
+ai-squad start --all       # iniciar todos
+ai-squad stop frontend     # parar um time
+ai-squad logs backend      # ver logs
+ai-squad status backend    # ver demandas ativas
+ai-squad build             # reconstruir imagem Docker
 ```
 
 ## Configuração
 
-Ao criar um time, arquivos são gerados em `~/.ai-dev-team/teams/<nome>/`:
+Ao criar um time, arquivos são gerados em `~/.ai-squad/teams/<nome>/`:
 
 ### `.env` — Tokens
 

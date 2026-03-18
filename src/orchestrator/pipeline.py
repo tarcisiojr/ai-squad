@@ -11,7 +11,7 @@ from pathlib import Path
 
 import yaml
 
-logger = logging.getLogger("ai-dev-team.pipeline")
+logger = logging.getLogger("ai-squad.pipeline")
 
 
 @dataclass

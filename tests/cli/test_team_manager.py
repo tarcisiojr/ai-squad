@@ -19,7 +19,7 @@ class TestTeamManager:
         repo = tmp_path / "meu-repo"
         repo.mkdir()
 
-        manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+        manager = TeamManager(base_dir=tmp_path / ".ai-squad")
         team_dir = manager.create("backend", str(repo))
 
         assert team_dir.exists()
@@ -33,7 +33,7 @@ class TestTeamManager:
         repo = tmp_path / "meu-repo"
         repo.mkdir()
 
-        manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+        manager = TeamManager(base_dir=tmp_path / ".ai-squad")
         team_dir = manager.create("api", str(repo))
 
         with open(team_dir / "config.yaml", encoding="utf-8") as f:
@@ -54,7 +54,7 @@ class TestTeamManager:
         repo = tmp_path / "repo"
         repo.mkdir()
 
-        manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+        manager = TeamManager(base_dir=tmp_path / ".ai-squad")
         team_dir = manager.create("test", str(repo))
 
         env_content = (team_dir / ".env").read_text(encoding="utf-8")
@@ -67,7 +67,7 @@ class TestTeamManager:
         repo = tmp_path / "repo"
         repo.mkdir()
 
-        manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+        manager = TeamManager(base_dir=tmp_path / ".ai-squad")
         team_dir = manager.create("web", str(repo))
 
         compose_content = (team_dir / "docker-compose.yml").read_text(encoding="utf-8")
@@ -81,7 +81,7 @@ class TestTeamManager:
         repo = tmp_path / "repo"
         repo.mkdir()
 
-        manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+        manager = TeamManager(base_dir=tmp_path / ".ai-squad")
         manager.create("existente", str(repo))
 
         with pytest.raises(TeamExistsError, match="já existe"):
@@ -89,7 +89,7 @@ class TestTeamManager:
 
     def test_create_repo_nao_existe(self, tmp_path):
         """Verifica erro quando diretório do repo não existe."""
-        manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+        manager = TeamManager(base_dir=tmp_path / ".ai-squad")
 
         with pytest.raises(FileNotFoundError, match="não encontrado"):
             manager.create("test", "/caminho/inexistente")
@@ -99,19 +99,19 @@ class TestTeamManager:
         repo = tmp_path / "repo"
         repo.mkdir()
 
-        manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+        manager = TeamManager(base_dir=tmp_path / ".ai-squad")
         manager.create("meu-time", str(repo))
 
         assert manager.exists("meu-time") is True
 
     def test_exists_retorna_false_para_time_inexistente(self, tmp_path):
         """Verifica que exists retorna False para time inexistente."""
-        manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+        manager = TeamManager(base_dir=tmp_path / ".ai-squad")
         assert manager.exists("inexistente") is False
 
     def test_list_teams_vazio(self, tmp_path):
         """Verifica lista vazia quando não há times."""
-        manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+        manager = TeamManager(base_dir=tmp_path / ".ai-squad")
         assert manager.list_teams() == []
 
     def test_list_teams_com_times(self, tmp_path):
@@ -121,7 +121,7 @@ class TestTeamManager:
         repo1.mkdir()
         repo2.mkdir()
 
-        manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+        manager = TeamManager(base_dir=tmp_path / ".ai-squad")
         manager.create("alpha", str(repo1))
         manager.create("beta", str(repo2))
 
@@ -136,7 +136,7 @@ class TestTeamManager:
         repo = tmp_path / "repo"
         repo.mkdir()
 
-        manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+        manager = TeamManager(base_dir=tmp_path / ".ai-squad")
         manager.create("test", str(repo))
 
         missing = manager.validate_env("test")
@@ -147,7 +147,7 @@ class TestTeamManager:
         repo = tmp_path / "repo"
         repo.mkdir()
 
-        manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+        manager = TeamManager(base_dir=tmp_path / ".ai-squad")
         team_dir = manager.create("test", str(repo))
 
         # Sobrescreve .env com valores reais
@@ -161,7 +161,7 @@ class TestTeamManager:
 
     def test_validate_env_time_inexistente(self, tmp_path):
         """Verifica erro ao validar .env de time inexistente."""
-        manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+        manager = TeamManager(base_dir=tmp_path / ".ai-squad")
 
         with pytest.raises(TeamNotFoundError):
             manager.validate_env("inexistente")
@@ -171,7 +171,7 @@ class TestTeamManager:
         repo = tmp_path / "repo"
         repo.mkdir()
 
-        manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+        manager = TeamManager(base_dir=tmp_path / ".ai-squad")
         manager.create("removivel", str(repo))
         assert manager.exists("removivel")
 
@@ -180,13 +180,13 @@ class TestTeamManager:
 
     def test_remove_time_inexistente(self, tmp_path):
         """Verifica erro ao remover time inexistente."""
-        manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+        manager = TeamManager(base_dir=tmp_path / ".ai-squad")
 
         with pytest.raises(TeamNotFoundError):
             manager.remove("inexistente")
 
     def test_get_path(self, tmp_path):
         """Verifica que get_path retorna caminho correto."""
-        manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+        manager = TeamManager(base_dir=tmp_path / ".ai-squad")
         path = manager.get_path("meu-time")
-        assert path == tmp_path / ".ai-dev-team" / "teams" / "meu-time"
+        assert path == tmp_path / ".ai-squad" / "teams" / "meu-time"

@@ -73,7 +73,7 @@
 ### 3.7 Presets
 - [ ] Criar `src/presets/dev-openspec/` com pipeline, steps e agents completos
 - [ ] Criar `src/presets/infra-monitor/` com pipeline Triager → SRE → Validator
-- [ ] Atualizar CLI `ai-dev-team create --preset <nome>` para copiar template
+- [ ] Atualizar CLI `ai-squad create --preset <nome>` para copiar template
 - [ ] Testar: time criado com preset dev-openspec funciona identicamente ao atual
 - [ ] Testar: time criado com preset infra-monitor funciona sem referência a openspec
 

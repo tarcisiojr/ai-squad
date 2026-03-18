@@ -8,7 +8,7 @@ Inspirado no RuleClassifier do PicoClaw.
 import logging
 import re
 
-logger = logging.getLogger("ai-dev-team.model-router")
+logger = logging.getLogger("ai-squad.model-router")
 
 # Palavras-chave que indicam necessidade de modelo pesado
 _HEAVY_KEYWORDS = {

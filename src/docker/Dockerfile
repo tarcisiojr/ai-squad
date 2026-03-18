@@ -1,4 +1,4 @@
-# Dockerfile para ai-dev-team (dev mode — usa código-fonte local)
+# Dockerfile para ai-squad (dev mode — usa código-fonte local)
 # IMPORTANTE: Claude Code não roda como root
 
 FROM python:3.11-slim
@@ -89,6 +89,6 @@ RUN npx playwright install chromium
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD test -f /tmp/ai-dev-team-healthy || exit 1
+    CMD test -f /tmp/ai-squad-healthy || exit 1
 
 ENTRYPOINT ["python", "-m", "src.daemon"]

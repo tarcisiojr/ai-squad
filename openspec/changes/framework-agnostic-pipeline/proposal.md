@@ -2,7 +2,7 @@
 
 ## Problema
 
-O ai-dev-team está **acoplado ao OpenSpec** e a um fluxo de desenvolvimento de software (PO → Dev → Review → QA). Isso impede dois cenários legítimos:
+O ai-squad está **acoplado ao OpenSpec** e a um fluxo de desenvolvimento de software (PO → Dev → Review → QA). Isso impede dois cenários legítimos:
 
 1. **Times não-dev**: um time de infra/monitoramento (Triager → SRE → Validator) não funciona porque o engine assume estados como `PO_WORKING`, `DEV_WORKING`, `QA_VALIDATING` e valida artefatos como `proposal.md`, `tasks.md`.
 
@@ -218,9 +218,9 @@ def get_agent_allocation(self, agent_name) -> list[StepExecution]
 #### 3.6 Presets pré-configurados
 
 ```bash
-ai-dev-team create --preset dev-openspec backend-api --repo ~/api
-ai-dev-team create --preset infra-monitor monitoring --repo ~/infra
-ai-dev-team create --preset content-squad marketing
+ai-squad create --preset dev-openspec backend-api --repo ~/api
+ai-squad create --preset infra-monitor monitoring --repo ~/infra
+ai-squad create --preset content-squad marketing
 ```
 
 Cada preset gera a estrutura completa: `pipeline/`, `agents/`, `steps/`.

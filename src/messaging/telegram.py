@@ -123,7 +123,7 @@ class TelegramMessageBus(MessageBus):
                     else:
                         import logging
 
-                        logging.getLogger("ai-dev-team.telegram").error(
+                        logging.getLogger("ai-squad.telegram").error(
                             "Whisper retornou %d: %s",
                             resp.status,
                             await resp.text(),
@@ -133,7 +133,7 @@ class TelegramMessageBus(MessageBus):
         except Exception as e:
             import logging
 
-            logging.getLogger("ai-dev-team.telegram").error("Erro na transcricao: %s", e)
+            logging.getLogger("ai-squad.telegram").error("Erro na transcricao: %s", e)
             return None
 
     async def send_typing(self, chat_id: str) -> None:
@@ -278,7 +278,7 @@ class TelegramMessageBus(MessageBus):
         except Exception as e:
             import logging
 
-            logging.getLogger("ai-dev-team.telegram").error("Erro ao enviar foto: %s", e)
+            logging.getLogger("ai-squad.telegram").error("Erro ao enviar foto: %s", e)
             # Fallback: informa que nao conseguiu enviar
             await self.send_message(user_id, f"Nao consegui enviar a imagem: {e}")
 

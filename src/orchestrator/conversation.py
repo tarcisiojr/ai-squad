@@ -9,7 +9,7 @@ from typing import Any
 
 from src.orchestrator.atomic_write import write_json_atomic, write_text_atomic
 
-logger = logging.getLogger("ai-dev-team.conversation")
+logger = logging.getLogger("ai-squad.conversation")
 
 
 class ConversationStore:

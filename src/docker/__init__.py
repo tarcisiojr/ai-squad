@@ -1,4 +1,4 @@
-"""Arquivos Docker para build da imagem ai-dev-team."""
+"""Arquivos Docker para build da imagem ai-squad."""
 
 from pathlib import Path
 

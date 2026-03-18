@@ -1,4 +1,4 @@
-"""Gerenciador de times ai-dev-team."""
+"""Gerenciador de times ai-squad."""
 
 import shutil
 from pathlib import Path
@@ -33,7 +33,7 @@ class InvalidEnvError(Exception):
 class TeamManager:
     """Gerencia estrutura de diretórios e configuração de times.
 
-    Cada time é armazenado em ~/.ai-dev-team/teams/<nome>/ com:
+    Cada time é armazenado em ~/.ai-squad/teams/<nome>/ com:
     - config.yaml
     - .env
     - docker-compose.yml
@@ -42,7 +42,7 @@ class TeamManager:
 
     def __init__(self, base_dir: Path | None = None) -> None:
         if base_dir is None:
-            base_dir = Path.home() / ".ai-dev-team"
+            base_dir = Path.home() / ".ai-squad"
         self._base_dir = base_dir
         self._teams_dir = base_dir / "teams"
 

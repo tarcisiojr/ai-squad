@@ -62,11 +62,11 @@
 - [ ] Campo `model_tier` permite routing por agente (não só Squad Lead)
 
 ### C9. Presets
-- [ ] `ai-dev-team create --preset dev-openspec` gera pipeline + agents + steps completos
+- [ ] `ai-squad create --preset dev-openspec` gera pipeline + agents + steps completos
 - [ ] Preset `dev-openspec` reproduz o fluxo atual (PO → Dev → Review → QA)
 - [ ] Preset `infra-monitor` gera fluxo Triager → SRE → Validator
 - [ ] Presets armazenados em `src/presets/` como templates copiáveis
-- [ ] CLI copia template para `~/.ai-dev-team/teams/{nome}/`
+- [ ] CLI copia template para `~/.ai-squad/teams/{nome}/`
 
 ### C10. Limpeza e Correções
 - [ ] Código morto removido: DockerAgentRunner, _invoke_agent, _invoke_parallel, run_demand_cycle

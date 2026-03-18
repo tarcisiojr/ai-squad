@@ -1,4 +1,4 @@
-"""Testes para comandos CLI do ai-dev-team."""
+"""Testes para comandos CLI do ai-squad."""
 
 from unittest.mock import MagicMock, patch
 
@@ -19,7 +19,7 @@ def mock_manager(tmp_path):
     """Cria TeamManager com diretório temporário."""
     from src.cli.team_manager import TeamManager
 
-    manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+    manager = TeamManager(base_dir=tmp_path / ".ai-squad")
     return manager
 
 
@@ -34,7 +34,7 @@ class TestCLICreate:
         with patch("src.cli.main._get_manager") as mock:
             from src.cli.team_manager import TeamManager
 
-            manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+            manager = TeamManager(base_dir=tmp_path / ".ai-squad")
             mock.return_value = manager
 
             result = runner.invoke(cli, ["create", "test-team", "--repo", str(repo)])
@@ -48,7 +48,7 @@ class TestCLICreate:
         with patch("src.cli.main._get_manager") as mock:
             from src.cli.team_manager import TeamManager
 
-            manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+            manager = TeamManager(base_dir=tmp_path / ".ai-squad")
             mock.return_value = manager
 
             result = runner.invoke(cli, ["create", "test", "--repo", "/inexistente"])
@@ -64,7 +64,7 @@ class TestCLICreate:
         with patch("src.cli.main._get_manager") as mock:
             from src.cli.team_manager import TeamManager
 
-            manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+            manager = TeamManager(base_dir=tmp_path / ".ai-squad")
             mock.return_value = manager
 
             runner.invoke(cli, ["create", "dup", "--repo", str(repo)])
@@ -82,7 +82,7 @@ class TestCLIList:
         with patch("src.cli.main._get_manager") as mock:
             from src.cli.team_manager import TeamManager
 
-            manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+            manager = TeamManager(base_dir=tmp_path / ".ai-squad")
             mock.return_value = manager
 
             result = runner.invoke(cli, ["list"])
@@ -99,7 +99,7 @@ class TestCLIList:
              patch("src.cli.main._get_container_status", return_value="stopped"):
             from src.cli.team_manager import TeamManager
 
-            manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+            manager = TeamManager(base_dir=tmp_path / ".ai-squad")
             manager.create("time-a", str(repo))
             mock.return_value = manager
 
@@ -125,7 +125,7 @@ class TestCLIStart:
         with patch("src.cli.main._get_manager") as mock:
             from src.cli.team_manager import TeamManager
 
-            manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+            manager = TeamManager(base_dir=tmp_path / ".ai-squad")
             manager.create("test", str(repo))
             mock.return_value = manager
 
@@ -139,7 +139,7 @@ class TestCLIStart:
         with patch("src.cli.main._get_manager") as mock:
             from src.cli.team_manager import TeamManager
 
-            manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+            manager = TeamManager(base_dir=tmp_path / ".ai-squad")
             mock.return_value = manager
 
             result = runner.invoke(cli, ["start", "inexistente"])
@@ -160,7 +160,7 @@ class TestCLIStop:
         with patch("src.cli.main._get_manager") as mock:
             from src.cli.team_manager import TeamManager
 
-            manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+            manager = TeamManager(base_dir=tmp_path / ".ai-squad")
             mock.return_value = manager
 
             result = runner.invoke(cli, ["stop", "inexistente"])
@@ -176,7 +176,7 @@ class TestCLIStatus:
         with patch("src.cli.main._get_manager") as mock:
             from src.cli.team_manager import TeamManager
 
-            manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+            manager = TeamManager(base_dir=tmp_path / ".ai-squad")
             mock.return_value = manager
 
             result = runner.invoke(cli, ["status", "inexistente"])
@@ -192,7 +192,7 @@ class TestCLIStatus:
              patch("src.cli.main._get_container_status", return_value="stopped"):
             from src.cli.team_manager import TeamManager
 
-            manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+            manager = TeamManager(base_dir=tmp_path / ".ai-squad")
             manager.create("test", str(repo))
             mock.return_value = manager
 
@@ -227,7 +227,7 @@ class TestCLIAgentManagement:
         from src.cli.team_manager import TeamManager
         repo = tmp_path / "repo"
         repo.mkdir()
-        manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+        manager = TeamManager(base_dir=tmp_path / ".ai-squad")
         manager.create("meu-time", str(repo))
         return manager
 
@@ -272,7 +272,7 @@ class TestCLIAgentManagement:
     def test_add_agent_time_inexistente(self, runner, tmp_path):
         """Verifica erro com time inexistente."""
         from src.cli.team_manager import TeamManager
-        manager = TeamManager(base_dir=tmp_path / ".ai-dev-team")
+        manager = TeamManager(base_dir=tmp_path / ".ai-squad")
 
         with patch("src.cli.main._get_manager", return_value=manager):
             result = runner.invoke(cli, ["add-agent", "fake", "sec"])
@@ -323,4 +323,4 @@ class TestCLIVersion:
         """Verifica exibição da versão."""
         result = runner.invoke(cli, ["--version"])
         assert result.exit_code == 0
-        assert "0.1.0" in result.output
+        assert "0.2.0" in result.output

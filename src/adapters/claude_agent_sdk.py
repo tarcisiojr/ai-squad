@@ -19,7 +19,7 @@ from claude_agent_sdk import (
 from src.adapters.interface import AIAgentAdapter
 from src.models import AgentStatus
 
-logger = logging.getLogger("ai-dev-team.adapter")
+logger = logging.getLogger("ai-squad.adapter")
 
 # Tools MCP que precisam ser incluidas nos allowed_tools
 _TOOL_NAMES = [
@@ -332,7 +332,7 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
                 return {"content": [{"type": "text", "text": f"Erro: {e}"}]}
 
         return create_sdk_mcp_server(
-            "ai-dev-team-tools",
+            "ai-squad-tools",
             tools=[
                 report_progress_tool,
                 start_agent_tool,
@@ -562,7 +562,7 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
             kwargs["add_dirs"] = add_dirs
 
         # MCP server com todas as tools
-        kwargs["mcp_servers"] = {"ai-dev-team-tools": self._mcp_server}
+        kwargs["mcp_servers"] = {"ai-squad-tools": self._mcp_server}
 
         # Allowed tools inclui todas as tools MCP
         tools = list(self._allowed_tools)

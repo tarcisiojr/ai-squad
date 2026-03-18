@@ -160,7 +160,7 @@ agents:
 1. Criar `src/presets/<nome>/` com `pipeline/` e `agents/`
 2. Definir `pipeline.yaml` com steps
 3. Criar step files `.md` com quality gates
-4. `ai-dev-team create --preset <nome> meu-time --repo ~/repo`
+4. `ai-squad create --preset <nome> meu-time --repo ~/repo`
 
 ## Comandos de Desenvolvimento
 

@@ -222,7 +222,7 @@ class TestClaudeAgentSDKAdapter:
         with patch("src.adapters.claude_agent_sdk.ClaudeAgentOptions") as mock_opts:
             adapter._build_options()
             kwargs = mock_opts.call_args[1]
-            assert "ai-dev-team-tools" in kwargs["mcp_servers"]
+            assert "ai-squad-tools" in kwargs["mcp_servers"]
 
     def test_build_options_nao_duplica_report_progress(self):
         """Verifica que report_progress nao e duplicado se ja estiver na lista."""

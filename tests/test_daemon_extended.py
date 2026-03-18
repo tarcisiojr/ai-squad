@@ -156,7 +156,7 @@ class TestDaemonHealthcheck:
         daemon = Daemon()
         daemon._write_healthcheck()
 
-        health = Path("/tmp/ai-dev-team-healthy")
+        health = Path("/tmp/ai-squad-healthy")
         assert health.exists()
 
         daemon._remove_healthcheck()

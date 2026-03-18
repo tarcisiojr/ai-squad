@@ -13,7 +13,7 @@ from pathlib import Path
 from src.orchestrator.atomic_write import write_json_atomic
 from src.orchestrator.pipeline import PipelineConfig, StepConfig
 
-logger = logging.getLogger("ai-dev-team.pipeline-state")
+logger = logging.getLogger("ai-squad.pipeline-state")
 
 
 @dataclass

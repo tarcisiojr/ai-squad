@@ -8,7 +8,7 @@ from pathlib import Path
 
 from src.orchestrator.atomic_write import write_json_atomic
 
-logger = logging.getLogger("ai-dev-team.journal")
+logger = logging.getLogger("ai-squad.journal")
 
 
 class JournalStore:

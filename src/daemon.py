@@ -1,4 +1,4 @@
-"""Daemon do ai-dev-team — loop infinito escutando Telegram."""
+"""Daemon do ai-squad — loop infinito escutando Telegram."""
 
 import asyncio
 import logging
@@ -25,7 +25,7 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
-logger = logging.getLogger("ai-dev-team.daemon")
+logger = logging.getLogger("ai-squad.daemon")
 
 
 class Daemon:
@@ -183,7 +183,7 @@ class Daemon:
 
         self._bus = TelegramMessageBus(
             token=telegram_token,
-            persona_name=f"ai-dev-team ({self._team_name})",
+            persona_name=f"ai-squad ({self._team_name})",
             persona_avatar="🤖",
             whisper_api_key=whisper_key,
         )
@@ -424,7 +424,7 @@ class Daemon:
                 lines.append("Globais: nenhuma")
         else:
             # Fallback para ambiente local
-            local_global = Path.home() / ".ai-dev-team" / "skills"
+            local_global = Path.home() / ".ai-squad" / "skills"
             if local_global.exists():
                 skills = [
                     d.name
@@ -539,11 +539,11 @@ class Daemon:
 
     def _write_healthcheck(self) -> None:
         """Escreve arquivo de heartbeat para health check do Docker."""
-        Path("/tmp/ai-dev-team-healthy").touch()
+        Path("/tmp/ai-squad-healthy").touch()
 
     def _remove_healthcheck(self) -> None:
         """Remove arquivo de heartbeat."""
-        health_file = Path("/tmp/ai-dev-team-healthy")
+        health_file = Path("/tmp/ai-squad-healthy")
         if health_file.exists():
             health_file.unlink()
 
@@ -616,7 +616,7 @@ class Daemon:
 
     async def run(self) -> None:
         """Inicia o daemon: conecta ao Telegram e processa demandas."""
-        logger.info("Iniciando daemon ai-dev-team (time: %s)", self._team_name)
+        logger.info("Iniciando daemon ai-squad (time: %s)", self._team_name)
 
         self._setup_components()
 

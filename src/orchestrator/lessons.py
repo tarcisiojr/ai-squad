@@ -6,7 +6,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-logger = logging.getLogger("ai-dev-team.lessons")
+logger = logging.getLogger("ai-squad.lessons")
 
 
 class LessonsStore:

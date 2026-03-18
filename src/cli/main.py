@@ -1,4 +1,4 @@
-"""CLI principal do ai-dev-team."""
+"""CLI principal do ai-squad."""
 
 import shutil
 import subprocess
@@ -31,9 +31,9 @@ def _docker_compose_cmd(team_dir: Path, *args: str) -> list[str]:
 
 
 def _image_exists() -> bool:
-    """Verifica se a imagem ai-dev-team:latest existe."""
+    """Verifica se a imagem ai-squad:latest existe."""
     resultado = subprocess.run(
-        ["docker", "image", "inspect", "ai-dev-team:latest"],
+        ["docker", "image", "inspect", "ai-squad:latest"],
         capture_output=True,
         text=True,
     )
@@ -41,7 +41,7 @@ def _image_exists() -> bool:
 
 
 def _build_image() -> None:
-    """Constrói a imagem Docker ai-dev-team:latest.
+    """Constrói a imagem Docker ai-squad:latest.
 
     Monta um contexto de build temporário com:
     1. Dockerfile embutido no pacote (src/docker/Dockerfile)
@@ -67,9 +67,9 @@ def _build_image() -> None:
         if not _generate_wheel(source_dir, tmp_path):
             sys.exit(1)
 
-        click.echo("Construindo imagem ai-dev-team:latest...")
+        click.echo("Construindo imagem ai-squad:latest...")
         resultado = subprocess.run(
-            ["docker", "build", "-t", "ai-dev-team:latest", str(tmp_path)],
+            ["docker", "build", "-t", "ai-squad:latest", str(tmp_path)],
             capture_output=False,
         )
 
@@ -127,8 +127,8 @@ def _generate_wheel(source_dir: Path, output_dir: Path) -> bool:
 
 
 def _find_source_dir() -> Path:
-    """Localiza diretório com código-fonte do ai-dev-team (com pyproject.toml)."""
-    source_ref = Path.home() / ".ai-dev-team" / "source_path"
+    """Localiza diretório com código-fonte do ai-squad (com pyproject.toml)."""
+    source_ref = Path.home() / ".ai-squad" / "source_path"
 
     # Tenta diretório atual
     if (Path.cwd() / "pyproject.toml").exists():
@@ -148,9 +148,9 @@ def _find_source_dir() -> Path:
             return saved
 
     click.echo(
-        "Erro: código-fonte do ai-dev-team não encontrado.\n"
-        "Execute 'ai-dev-team build' uma vez de dentro do diretório do projeto,\n"
-        "ou crie o arquivo ~/.ai-dev-team/source_path com o caminho do projeto.",
+        "Erro: código-fonte do ai-squad não encontrado.\n"
+        "Execute 'ai-squad build' uma vez de dentro do diretório do projeto,\n"
+        "ou crie o arquivo ~/.ai-squad/source_path com o caminho do projeto.",
         err=True,
     )
     sys.exit(1)
@@ -175,9 +175,9 @@ def _get_container_status(team_name: str) -> str:
 
 
 @click.group()
-@click.version_option(version="0.2.0", prog_name="ai-dev-team")
+@click.version_option(version="0.2.0", prog_name="ai-squad")
 def cli() -> None:
-    """ai-dev-team — Time completo de desenvolvimento autônomo por IA."""
+    """ai-squad — Time completo de desenvolvimento autônomo por IA."""
     pass
 
 
@@ -193,7 +193,7 @@ def create(name: str, repo: str) -> None:
         click.echo("")
         click.echo("Próximos passos:")
         click.echo(f"  1. Edite o .env: {team_dir / '.env'}")
-        click.echo(f"  2. Inicie o time: ai-dev-team start {name}")
+        click.echo(f"  2. Inicie o time: ai-squad start {name}")
     except FileNotFoundError as e:
         click.echo(f"Erro: {e}", err=True)
         sys.exit(1)
@@ -212,7 +212,7 @@ def start(name: str | None, start_all: bool) -> None:
     if start_all:
         teams = manager.list_teams()
         if not teams:
-            click.echo("Nenhum time encontrado. Crie um com: ai-dev-team create")
+            click.echo("Nenhum time encontrado. Crie um com: ai-squad create")
             return
         for team in teams:
             _start_team(manager, team["name"])
@@ -242,7 +242,7 @@ def _start_team(manager: TeamManager, team_name: str) -> None:
 
     # Verifica se a imagem existe, constrói se necessário
     if not _image_exists():
-        click.echo("Imagem ai-dev-team:latest não encontrada.")
+        click.echo("Imagem ai-squad:latest não encontrada.")
         _build_image()
 
     team_dir = manager.get_path(team_name)
@@ -339,7 +339,7 @@ def list_teams() -> None:
 
     if not teams:
         click.echo("Nenhum time criado.")
-        click.echo("Crie um com: ai-dev-team create <nome> --repo <caminho>")
+        click.echo("Crie um com: ai-squad create <nome> --repo <caminho>")
         return
 
     # Cabeçalho da tabela
@@ -412,7 +412,7 @@ def status(name: str) -> None:
 
 @cli.command()
 def build() -> None:
-    """Reconstrói a imagem Docker ai-dev-team:latest."""
+    """Reconstrói a imagem Docker ai-squad:latest."""
     _build_image()
 
 
@@ -498,7 +498,7 @@ def add_agent(
     click.echo(f"  Edite: {agent_dir / 'AGENTS.md'}")
     click.echo(f"  Skills: {agent_dir / 'skills/'}")
     click.echo(
-        f"\nReinicie o time para aplicar: ai-dev-team stop {team_name} && ai-dev-team start {team_name}"
+        f"\nReinicie o time para aplicar: ai-squad stop {team_name} && ai-squad start {team_name}"
     )
 
 
