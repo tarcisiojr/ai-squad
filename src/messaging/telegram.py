@@ -26,6 +26,7 @@ class TelegramMessageBus(MessageBus):
         self._whisper_api_key = whisper_api_key
         self._message_callback: Callable | None = None
         self._voice_callback: Callable | None = None
+        self._photo_callback: Callable | None = None
         self._app = None
         self._pending_approvals: dict[str, asyncio.Future] = {}
         self._pending_text_reply: dict[str, asyncio.Future] = {}
@@ -87,9 +88,30 @@ class TelegramMessageBus(MessageBus):
             if key in self._pending_approvals:
                 self._pending_approvals[key].set_result(query.data)
 
+        # Registra handler de fotos
+        async def _handle_photo(update, context):
+            if not update.message or not update.message.photo:
+                return
+            if not self._photo_callback:
+                return
+
+            import tempfile
+            import time as _time
+
+            # Baixa a maior resolução disponível
+            photo = update.message.photo[-1]
+            file = await photo.get_file()
+            suffix = f"telegram_photo_{int(_time.time())}.jpg"
+            tmp_path = f"/tmp/{suffix}"
+            await file.download_to_drive(tmp_path)
+
+            caption = update.message.caption or "Analise esta imagem"
+            await self._photo_callback(caption, tmp_path)
+
         self._app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _handle_text))
         self._app.add_handler(MessageHandler(filters.COMMAND, _handle_text))
         self._app.add_handler(MessageHandler(filters.VOICE, _handle_voice))
+        self._app.add_handler(MessageHandler(filters.PHOTO, _handle_photo))
         self._app.add_handler(CallbackQueryHandler(_handle_callback))
 
     # URL do serviço Whisper separado (container dedicado)
@@ -263,6 +285,10 @@ class TelegramMessageBus(MessageBus):
     async def receive_voice(self, callback: Callable) -> None:
         """Registra callback para mensagens de voz."""
         self._voice_callback = callback
+
+    async def receive_photo(self, callback: Callable) -> None:
+        """Registra callback para fotos (callback recebe texto e image_path)."""
+        self._photo_callback = callback
 
     async def send_photo(self, user_id: str, photo_path: str, caption: str = "") -> None:
         """Envia foto via Telegram."""

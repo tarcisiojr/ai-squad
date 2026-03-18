@@ -370,7 +370,18 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
             self._model = model_override
 
         try:
+            # Extrai imagem antes de montar prompt
+            image_path = context.pop("image_path", None)
             prompt_completo = self._build_prompt(prompt, context)
+
+            # Se tem imagem, instrui a ler o arquivo
+            if image_path:
+                prompt_completo = (
+                    f"O usuario enviou uma imagem: {image_path}\n"
+                    f"Leia o arquivo da imagem para analisar o conteudo visual.\n\n"
+                    f"{prompt_completo}"
+                )
+
             conversation_id = context.get("demand_id", "")
             max_turns = context.get("max_turns", 30)
             timeout = context.get("timeout", self._timeout)

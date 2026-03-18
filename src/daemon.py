@@ -325,7 +325,7 @@ class Daemon:
                 commands[cmd] = agent_id
         return commands
 
-    async def _handle_new_demand(self, text: str) -> None:
+    async def _handle_new_demand(self, text: str, image_path: str | None = None) -> None:
         """Handler chamado quando uma nova mensagem chega via Telegram.
 
         Processa imediatamente — Squad Lead responde rapido via chamada SDK curta.
@@ -383,6 +383,7 @@ class Daemon:
                     demand_id,
                     chat_id,
                     demand_text,
+                    image_path=image_path,
                 )
         except Exception as e:
             logger.error("Erro ao processar mensagem: %s", e, exc_info=True)
@@ -390,6 +391,13 @@ class Daemon:
                 await self.bus.notify(chat_id, f"Erro ao processar: {e}")
             except Exception:
                 logger.error("Falha ao notificar erro via Telegram")
+        finally:
+            # Limpa imagem temporária
+            if image_path:
+                try:
+                    Path(image_path).unlink(missing_ok=True)
+                except Exception:
+                    pass
 
     async def _send_help(self, chat_id: str) -> None:
         """Envia mensagem de ajuda com comandos disponíveis."""
@@ -617,6 +625,13 @@ class Daemon:
             await self._handle_new_demand(text)
 
         await self.bus.receive_voice(_voice_handler)
+
+        # Registra handler de fotos
+        async def _photo_handler(text: str, image_path: str) -> None:
+            await self._handle_new_demand(text, image_path=image_path)
+
+        if hasattr(self.bus, "receive_photo"):
+            await self.bus.receive_photo(_photo_handler)
 
         # Registra signal handlers para graceful shutdown
         loop = asyncio.get_event_loop()

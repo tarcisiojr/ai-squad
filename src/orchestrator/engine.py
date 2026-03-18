@@ -406,6 +406,7 @@ class OrchestrationEngine:
         demand_id: str,
         user_id: str,
         demand_text: str,
+        image_path: str | None = None,
     ) -> str:
         """Executa Squad Lead com chamada SDK curta.
 
@@ -496,6 +497,8 @@ class OrchestrationEngine:
             }
             if selected_model:
                 context["model_override"] = selected_model
+            if image_path:
+                context["image_path"] = image_path
 
             resposta = await self._adapter.run(full_prompt, context)
         finally:

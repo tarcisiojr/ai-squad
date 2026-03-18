@@ -111,7 +111,7 @@ class TestDaemon:
         await daemon._handle_new_demand("Criar API de auth")
 
         daemon._engine.run_squad_lead.assert_called_once_with(
-            "squad-lead-session", "12345", "Criar API de auth",
+            "squad-lead-session", "12345", "Criar API de auth", image_path=None,
         )
 
     @pytest.mark.asyncio
