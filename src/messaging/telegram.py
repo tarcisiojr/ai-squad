@@ -1,9 +1,12 @@
 """Implementação Telegram do barramento de mensageria."""
 
 import asyncio
+import logging
 from typing import Callable
 
 from src.messaging.interface import MessageBus
+
+logger = logging.getLogger("ai-squad.telegram")
 
 
 class TelegramMessageBus(MessageBus):
@@ -11,6 +14,7 @@ class TelegramMessageBus(MessageBus):
 
     Suporta envio/recebimento de texto e voz (via Whisper API).
     Cada persona (PO, Dev, QA) pode ter seu próprio bot token.
+    Apenas o chat_id autorizado (allowed_chat_id) pode interagir.
     """
 
     def __init__(
@@ -19,17 +23,25 @@ class TelegramMessageBus(MessageBus):
         persona_name: str = "Agent",
         persona_avatar: str = "",
         whisper_api_key: str | None = None,
+        allowed_chat_id: str = "",
     ) -> None:
         self._token = token
         self._persona_name = persona_name
         self._persona_avatar = persona_avatar
         self._whisper_api_key = whisper_api_key
+        self._allowed_chat_id = allowed_chat_id
         self._message_callback: Callable | None = None
         self._voice_callback: Callable | None = None
         self._photo_callback: Callable | None = None
         self._app = None
         self._pending_approvals: dict[str, asyncio.Future] = {}
         self._pending_text_reply: dict[str, asyncio.Future] = {}
+
+    def _is_authorized(self, chat_id: str) -> bool:
+        """Verifica se o chat_id está autorizado a interagir com o bot."""
+        if not self._allowed_chat_id:
+            return True
+        return chat_id == self._allowed_chat_id
 
     async def _ensure_app(self):
         """Inicializa o bot do Telegram sob demanda."""
@@ -55,6 +67,11 @@ class TelegramMessageBus(MessageBus):
             if not update.message:
                 return
             user_id = str(update.message.chat_id)
+
+            if not self._is_authorized(user_id):
+                logger.warning("Mensagem ignorada de chat_id nao autorizado: %s", user_id)
+                return
+
             text = update.message.text
 
             # Mostra "digitando..." imediatamente
@@ -74,7 +91,13 @@ class TelegramMessageBus(MessageBus):
 
         # Registra handler de mensagens de voz
         async def _handle_voice(update, context):
-            if self._voice_callback and update.message and update.message.voice:
+            if not update.message or not update.message.voice:
+                return
+            user_id = str(update.message.chat_id)
+            if not self._is_authorized(user_id):
+                logger.warning("Voz ignorada de chat_id nao autorizado: %s", user_id)
+                return
+            if self._voice_callback:
                 texto = await self._transcribe_voice(update, context)
                 if texto:
                     await self._voice_callback(texto)
@@ -84,6 +107,9 @@ class TelegramMessageBus(MessageBus):
             query = update.callback_query
             await query.answer()
             user_id = str(query.from_user.id)
+            if not self._is_authorized(user_id):
+                logger.warning("Callback ignorado de chat_id nao autorizado: %s", user_id)
+                return
             key = f"{user_id}:{query.message.message_id}"
             if key in self._pending_approvals:
                 self._pending_approvals[key].set_result(query.data)
@@ -91,6 +117,10 @@ class TelegramMessageBus(MessageBus):
         # Registra handler de fotos
         async def _handle_photo(update, context):
             if not update.message or not update.message.photo:
+                return
+            user_id = str(update.message.chat_id)
+            if not self._is_authorized(user_id):
+                logger.warning("Foto ignorada de chat_id nao autorizado: %s", user_id)
                 return
             if not self._photo_callback:
                 return

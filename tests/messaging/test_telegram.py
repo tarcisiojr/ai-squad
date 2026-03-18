@@ -1,6 +1,6 @@
 """Testes para TelegramMessageBus com mocks de API."""
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -87,3 +87,73 @@ class TestTelegramMessageBus:
         """Verifica que transcrição retorna None sem API key."""
         resultado = await bus._transcribe_voice(MagicMock(), MagicMock())
         assert resultado is None
+
+
+class TestTelegramAccessControl:
+    """Testes de controle de acesso por chat_id."""
+
+    def test_is_authorized_sem_restricao(self):
+        """Sem allowed_chat_id, qualquer chat é autorizado."""
+        bus = TelegramMessageBus(token="fake-token")
+        assert bus._is_authorized("12345") is True
+        assert bus._is_authorized("99999") is True
+
+    def test_is_authorized_com_restricao(self):
+        """Com allowed_chat_id, apenas o chat configurado é autorizado."""
+        bus = TelegramMessageBus(token="fake-token", allowed_chat_id="12345")
+        assert bus._is_authorized("12345") is True
+        assert bus._is_authorized("99999") is False
+
+    def test_allowed_chat_id_armazenado(self):
+        """Verifica que allowed_chat_id é armazenado corretamente."""
+        bus = TelegramMessageBus(token="fake-token", allowed_chat_id="12345")
+        assert bus._allowed_chat_id == "12345"
+
+    @pytest.mark.asyncio
+    async def test_handle_text_ignora_chat_nao_autorizado(self):
+        """Mensagem de texto de chat não autorizado é ignorada silenciosamente."""
+        bus = TelegramMessageBus(token="fake-token", allowed_chat_id="12345")
+        callback = AsyncMock()
+        await bus.receive_message(callback)
+
+        # Mocka ApplicationBuilder para capturar handlers sem criar app real
+        mock_app = MagicMock()
+        mock_app.bot = AsyncMock()
+        with patch("telegram.ext.ApplicationBuilder") as mock_builder:
+            mock_builder.return_value.token.return_value.build.return_value = mock_app
+            await bus._ensure_app()
+
+        # Captura o handler de texto (primeiro registrado)
+        text_handler_obj = mock_app.add_handler.call_args_list[0][0][0]
+
+        update = MagicMock()
+        update.message.chat_id = 99999
+        update.message.text = "mensagem invasora"
+
+        await text_handler_obj.callback(update, MagicMock())
+
+        # Callback NÃO deve ser chamado
+        callback.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_handle_text_aceita_chat_autorizado(self):
+        """Mensagem de texto de chat autorizado é processada normalmente."""
+        bus = TelegramMessageBus(token="fake-token", allowed_chat_id="12345")
+        callback = AsyncMock()
+        await bus.receive_message(callback)
+
+        mock_app = MagicMock()
+        mock_app.bot = AsyncMock()
+        with patch("telegram.ext.ApplicationBuilder") as mock_builder:
+            mock_builder.return_value.token.return_value.build.return_value = mock_app
+            await bus._ensure_app()
+
+        text_handler_obj = mock_app.add_handler.call_args_list[0][0][0]
+
+        update = MagicMock()
+        update.message.chat_id = 12345
+        update.message.text = "mensagem autorizada"
+
+        await text_handler_obj.callback(update, MagicMock())
+
+        callback.assert_called_once_with("mensagem autorizada")

@@ -184,11 +184,14 @@ class Daemon:
         telegram_token = os.environ["TELEGRAM_TOKEN"]
         whisper_key = os.environ.get("OPENAI_API_KEY")
 
+        allowed_chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
+
         self._bus = TelegramMessageBus(
             token=telegram_token,
             persona_name=f"ai-squad ({self._team_name})",
             persona_avatar="🤖",
             whisper_api_key=whisper_key,
+            allowed_chat_id=allowed_chat_id,
         )
 
         # Configura state manager
