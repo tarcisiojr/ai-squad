@@ -80,6 +80,14 @@ class TeamManager:
             config["repo_path"] = repo_path
             config["state_dir"] = "state/"
 
+        # Helpdesk preset: habilita knowledge base
+        if preset == "helpdesk":
+            config["knowledge"] = {
+                "enabled": True,
+                "use_qmd": False,
+                "knowledge_dir": "knowledge/",
+            }
+
         if agents_dir:
             for agent_dir in sorted(agents_dir.iterdir()):
                 if not agent_dir.is_dir() or agent_dir.name == "squad-lead":
@@ -104,7 +112,9 @@ class TeamManager:
                 return source
         return None
 
-    def create_local(self, team_name: str, project_dir: Path | None = None, preset: str = "dev-openspec") -> Path:
+    def create_local(
+        self, team_name: str, project_dir: Path | None = None, preset: str = "dev-openspec"
+    ) -> Path:
         """Cria estrutura .ai-squad/ no diretório do projeto (modo local)."""
         project = (project_dir or Path.cwd()).resolve()
         squad_dir = project / ".ai-squad"
@@ -127,6 +137,9 @@ class TeamManager:
         # Copia agents/ e pipeline/ do preset
         self._copy_default_agents(squad_dir, preset=preset)
         self._copy_default_pipeline(squad_dir, preset=preset)
+
+        # Copia knowledge/ do preset (helpdesk)
+        self._copy_preset_subdir(squad_dir, preset, "knowledge")
 
         return squad_dir
 
@@ -170,6 +183,9 @@ class TeamManager:
         # Copia pipeline/ do preset para o time
         self._copy_default_pipeline(team_dir, preset=preset)
 
+        # Copia knowledge/ do preset (helpdesk)
+        self._copy_preset_subdir(team_dir, preset, "knowledge")
+
         return team_dir
 
     def _copy_whisper_service(self, team_dir: Path) -> None:
@@ -197,6 +213,13 @@ class TeamManager:
                 dest = team_dir / "pipeline"
                 shutil.copytree(source, dest, dirs_exist_ok=True)
                 return
+
+    def _copy_preset_subdir(self, team_dir: Path, preset: str, subdir: str) -> None:
+        """Copia subdiretório genérico do preset (ex: knowledge/) se existir."""
+        source = self._find_preset_dir(preset, subdir)
+        if source:
+            dest = team_dir / subdir
+            shutil.copytree(source, dest, dirs_exist_ok=True)
 
     def _copy_default_agents(self, team_dir: Path, preset: str = "dev-openspec") -> None:
         """Copia agents/ do preset para o diretório do time."""

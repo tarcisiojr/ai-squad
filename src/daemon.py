@@ -226,6 +226,23 @@ class Daemon:
         self._engine._thread_map = self._thread_map
         self._engine._create_topic_callback = self._create_demand_topic
 
+        # Configura knowledge base se habilitada (preset helpdesk)
+        if self.config.knowledge.enabled:
+            kb_path = Path(self.config.knowledge.knowledge_dir)
+            if kb_path.is_absolute():
+                # Caminho absoluto: usa direto (ex: /dados/knowledge, ~/docs/kb)
+                kb_dir = kb_path.expanduser()
+            else:
+                # Caminho relativo: resolve a partir do .ai-squad/ (local) ou /app/ (docker)
+                kb_dir = self._paths.config_path.parent / kb_path
+            self._engine.configure_knowledge(
+                str(kb_dir),
+                use_qmd=self.config.knowledge.use_qmd,
+            )
+            # Reindexa ao iniciar
+            if self._engine.knowledge:
+                self._engine.knowledge.reindex_all()
+
         logger.info("Componentes inicializados para time '%s'", self._team_name)
 
     async def _resume_pending_work(self) -> None:
@@ -754,6 +771,32 @@ class Daemon:
 
         if hasattr(self.bus, "receive_photo"):
             await self.bus.receive_photo(_photo_handler)
+
+        # Registra handler de documentos (helpdesk — ingestão de PDF/DOCX/etc)
+        async def _document_handler(
+            caption: str,
+            file_path: str,
+            *,
+            thread_id: int | None = None,
+            user_id: str = "",
+            original_filename: str = "",
+        ) -> None:
+            text = f"Documento recebido: {original_filename}. {caption}"
+            await self._handle_new_demand(text, thread_id=thread_id, user_id=user_id)
+
+        if hasattr(self.bus, "receive_document"):
+            await self.bus.receive_document(_document_handler)
+
+        # Registra handler de reações (helpdesk — reforço 👍/👎)
+        async def _reaction_handler(
+            chat_id: str, message_id: int, emoji: str, user_id: str
+        ) -> None:
+            tracker = self._engine.reaction_tracker if self._engine else None
+            if tracker:
+                tracker.on_reaction(message_id, emoji)
+
+        if hasattr(self.bus, "on_reaction"):
+            await self.bus.on_reaction(_reaction_handler)
 
         # Registra signal handlers para graceful shutdown
         loop = asyncio.get_event_loop()

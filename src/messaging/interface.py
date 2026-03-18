@@ -67,3 +67,17 @@ class MessageBus(ABC):
     async def create_thread(self, chat_id: str, title: str) -> int | None:
         """Cria tópico/thread no canal. Retorna thread_id ou None se não suportado."""
         return None
+
+    async def receive_document(self, callback: Callable) -> None:
+        """Registra callback para recebimento de documentos (PDF, DOCX, etc).
+
+        Opcional — implementações sem suporte ignoram.
+        Callback recebe: (caption, file_path, thread_id, user_id).
+        """
+
+    async def on_reaction(self, callback: Callable) -> None:
+        """Registra callback para reações em mensagens.
+
+        Opcional — implementações sem suporte ignoram.
+        Callback recebe: (chat_id, message_id, emoji, user_id).
+        """

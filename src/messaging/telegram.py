@@ -34,6 +34,8 @@ class TelegramMessageBus(MessageBus):
         self._message_callback: Callable | None = None
         self._voice_callback: Callable | None = None
         self._photo_callback: Callable | None = None
+        self._document_callback: Callable | None = None
+        self._reaction_callback: Callable | None = None
         self._app = None
         self._pending_approvals: dict[str, asyncio.Future] = {}
         self._pending_text_reply: dict[str, asyncio.Future] = {}
@@ -170,11 +172,73 @@ class TelegramMessageBus(MessageBus):
                 user_id=user_id,
             )
 
+        # Registra handler de documentos (PDF, DOCX, etc)
+        async def _handle_document(update, context):
+            if not update.message or not update.message.document:
+                return
+            chat_id = str(update.message.chat_id)
+            user_id = str(update.message.from_user.id) if update.message.from_user else chat_id
+            thread_id = update.message.message_thread_id
+
+            if not self._is_authorized(chat_id):
+                logger.warning("Documento ignorado de chat_id nao autorizado: %s", chat_id)
+                return
+            if not self._document_callback:
+                return
+
+            import time as _time
+
+            doc = update.message.document
+            file = await doc.get_file()
+            original_name = doc.file_name or f"doc_{int(_time.time())}"
+            suffix = original_name.split(".")[-1] if "." in original_name else "bin"
+            tmp_path = f"/tmp/telegram_doc_{int(_time.time())}.{suffix}"
+            await file.download_to_drive(tmp_path)
+
+            caption = update.message.caption or f"Documento recebido: {original_name}"
+            await self._document_callback(
+                caption,
+                tmp_path,
+                thread_id=thread_id,
+                user_id=user_id,
+                original_filename=original_name,
+            )
+
+        # Registra handler de reações em mensagens
+        async def _handle_reaction(update, context):
+            reaction_update = update.message_reaction
+            if not reaction_update:
+                return
+            chat_id = str(reaction_update.chat.id)
+            if not self._is_authorized(chat_id):
+                return
+            if not self._reaction_callback:
+                return
+
+            msg_id = reaction_update.message_id
+            user_id = str(reaction_update.user.id) if reaction_update.user else ""
+
+            # Extrai emoji da nova reação
+            new_reactions = reaction_update.new_reaction or []
+            for reaction in new_reactions:
+                emoji = getattr(reaction, "emoji", None)
+                if emoji:
+                    await self._reaction_callback(chat_id, msg_id, emoji, user_id)
+
         self._app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _handle_text))
         self._app.add_handler(MessageHandler(filters.COMMAND, _handle_text))
         self._app.add_handler(MessageHandler(filters.VOICE, _handle_voice))
         self._app.add_handler(MessageHandler(filters.PHOTO, _handle_photo))
+        self._app.add_handler(MessageHandler(filters.Document.ALL, _handle_document))
         self._app.add_handler(CallbackQueryHandler(_handle_callback))
+
+        # Handler de reações (MessageReactionHandler disponível em python-telegram-bot 21+)
+        try:
+            from telegram.ext import MessageReactionHandler
+
+            self._app.add_handler(MessageReactionHandler(_handle_reaction))
+        except ImportError:
+            logger.warning("MessageReactionHandler não disponível — reações desabilitadas")
 
     # URL do serviço Whisper separado (container dedicado)
     WHISPER_SERVICE_URL = "http://whisper:8000/transcribe"
@@ -417,6 +481,14 @@ class TelegramMessageBus(MessageBus):
         except Exception as e:
             logger.error("Erro ao criar Forum Topic '%s': %s", title, e)
             return None
+
+    async def receive_document(self, callback: Callable) -> None:
+        """Registra callback para documentos (PDF, DOCX, etc)."""
+        self._document_callback = callback
+
+    async def on_reaction(self, callback: Callable) -> None:
+        """Registra callback para reações em mensagens."""
+        self._reaction_callback = callback
 
     async def notify(self, user_id: str, text: str, *, thread_id: int | None = None) -> None:
         """Envia notificação via Telegram."""

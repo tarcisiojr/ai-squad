@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from src.orchestrator.journal import JournalStore
+from src.orchestrator.knowledge import KnowledgeStore
 from src.orchestrator.state import StateManager
 
 
@@ -100,6 +101,19 @@ def get_running_agents_status(running_agents: dict, personas: dict) -> str:
                 lines.append(f"  - {label}: erro ({elapsed}) — {ra.error}")
 
     return "\n".join(lines)
+
+
+def get_knowledge_context(
+    knowledge_store: KnowledgeStore | None,
+    query: str,
+) -> str:
+    """Busca contexto relevante na knowledge base para injetar no prompt.
+
+    Usado pelo preset helpdesk para fornecer contexto ao Atendente.
+    """
+    if not knowledge_store or not query:
+        return ""
+    return knowledge_store.format_for_prompt(query)
 
 
 def get_demand_state_summary(

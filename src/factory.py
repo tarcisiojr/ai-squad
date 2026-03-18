@@ -57,6 +57,15 @@ class SquadLeadConfig:
 
 
 @dataclass
+class KnowledgeConfig:
+    """Configuração da knowledge base (preset helpdesk)."""
+
+    enabled: bool = False
+    use_qmd: bool = False
+    knowledge_dir: str = "knowledge/"  # relativo ao diretório do time
+
+
+@dataclass
 class PlatformConfig:
     """Configuracao centralizada da plataforma.
 
@@ -73,6 +82,7 @@ class PlatformConfig:
     heavy_model: str | None = None  # modelo pesado para mensagens complexas
     squad_lead: SquadLeadConfig = field(default_factory=SquadLeadConfig)
     heartbeat: HeartbeatConfig = field(default_factory=HeartbeatConfig)
+    knowledge: KnowledgeConfig = field(default_factory=KnowledgeConfig)
     agents: dict[str, AgentConfig] = field(default_factory=dict)
 
     @classmethod
@@ -102,6 +112,14 @@ class PlatformConfig:
             stall_timeout=hb_data.get("stall_timeout", 1800),
             reminder_timeout=hb_data.get("reminder_timeout", 3600),
             max_auto_retries=hb_data.get("max_auto_retries", 3),
+        )
+
+        # Processar knowledge base (helpdesk)
+        kb_data = data.get("knowledge", {})
+        knowledge = KnowledgeConfig(
+            enabled=kb_data.get("enabled", False),
+            use_qmd=kb_data.get("use_qmd", False),
+            knowledge_dir=kb_data.get("knowledge_dir", "knowledge/"),
         )
 
         # Processar squad_lead
@@ -149,6 +167,7 @@ class PlatformConfig:
             heavy_model=data.get("heavy_model"),
             squad_lead=squad_lead,
             heartbeat=heartbeat,
+            knowledge=knowledge,
             agents=agents,
         )
 

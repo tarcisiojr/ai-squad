@@ -11,6 +11,7 @@ from src.orchestrator.context import WorkspaceContextCollector
 from src.orchestrator.conversation import ConversationStore
 from src.orchestrator.daily_notes import DailyNotes
 from src.orchestrator.journal import JournalStore
+from src.orchestrator.knowledge import KnowledgeStore
 from src.orchestrator.lessons import LessonsStore
 from src.orchestrator.media import extract_and_send_media
 from src.orchestrator.model_router import select_model
@@ -18,8 +19,10 @@ from src.orchestrator.pipeline import PipelineLoader
 from src.orchestrator.pipeline_state import PipelineExecutor
 from src.orchestrator.prompt_builder import (
     get_agents_summary,
+    get_knowledge_context,
     read_agents_md,
 )
+from src.orchestrator.reaction_tracker import ReactionTracker
 from src.orchestrator.state import StateManager
 from src.orchestrator.tools import RunningAgent
 
@@ -73,6 +76,10 @@ class OrchestrationEngine:
         self._journal = JournalStore(state_dir=state_manager._state_dir)
         self._lessons = LessonsStore(state_dir=state_manager._state_dir)
         self._daily_notes = DailyNotes(state_dir=state_manager._state_dir)
+
+        # Knowledge base e reaction tracker (usados pelo preset helpdesk)
+        self._knowledge: KnowledgeStore | None = None
+        self._reaction_tracker: ReactionTracker | None = None
         # Pipeline declarativo (opcional — modo legado se não configurado)
         self._pipeline_executor: PipelineExecutor | None = None
         if pipeline_dir:
@@ -145,6 +152,24 @@ class OrchestrationEngine:
 
         # Registra callback de sumarização no conversation store
         self._conversation.set_summarize_callback(self._summarize_via_llm)
+
+    # --- Knowledge Base (helpdesk) ---
+
+    def configure_knowledge(self, knowledge_dir: str, use_qmd: bool = False) -> None:
+        """Configura knowledge base para o preset helpdesk."""
+        self._knowledge = KnowledgeStore(knowledge_dir, use_qmd=use_qmd)
+        self._reaction_tracker = ReactionTracker(knowledge_store=self._knowledge)
+        logger.info("Knowledge base configurada: %s", knowledge_dir)
+
+    @property
+    def knowledge(self) -> KnowledgeStore | None:
+        """Retorna knowledge store (se configurado)."""
+        return self._knowledge
+
+    @property
+    def reaction_tracker(self) -> ReactionTracker | None:
+        """Retorna reaction tracker (se configurado)."""
+        return self._reaction_tracker
 
     # --- Sumarização de contexto ---
 
@@ -523,6 +548,11 @@ class OrchestrationEngine:
         lessons = self._lessons.format_for_prompt(demand_text)
         if lessons:
             prompt_parts.append(lessons)
+
+        # Injeta contexto da knowledge base (preset helpdesk)
+        kb_context = get_knowledge_context(self._knowledge, demand_text)
+        if kb_context:
+            prompt_parts.append(kb_context)
 
         # Injeta notas diárias (continuidade entre sessões)
         daily_notes = self._daily_notes.load_recent()
