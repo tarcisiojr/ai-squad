@@ -1,29 +1,42 @@
 # ai-squad
 
-Plataforma de orquestração multi-agente por IA. Define times de agentes especializados com pipeline declarativo — framework-agnostic, funciona para desenvolvimento de software, infra, conteúdo ou qualquer domínio.
+Plataforma de orquestração multi-agente por IA. Define times de agentes especializados com pipeline declarativo — framework-agnostic, funciona para desenvolvimento de software, infra, análise de investimentos ou qualquer domínio.
 
 Você interage via **Telegram** (texto ou voz). Os agentes trabalham de forma autônoma, solicitando intervenção humana apenas em checkpoints do pipeline.
 
-## Quick Start
+## Instalação
 
 ```bash
-# Instalar
-pip install -e ".[dev]"
+# Instala globalmente via uv (recomendado)
+uv tool install --editable .
 
-# Criar um time apontando para seu repositório
+# Mudanças no código refletem automaticamente (editable mode).
+# Só precisa reinstalar se alterar dependências no pyproject.toml.
+```
+
+## Quick Start
+
+### Modo Local (recomendado para começar)
+
+```bash
+cd ~/projetos/minha-api
+ai-squad create meu-time              # cria .ai-squad/ no diretório corrente
+nano .ai-squad/.env                    # preencher tokens
+ai-squad start meu-time                # foreground, Ctrl+C para parar
+```
+
+### Modo Docker (produção/isolamento)
+
+```bash
 ai-squad create meu-time --repo ~/projetos/minha-api
-
-# Preencher os tokens no .env gerado
-# ~/.ai-squad/teams/meu-time/.env
-
-# Iniciar o time (sobe container Docker)
-ai-squad start meu-time
+nano ~/.ai-squad/teams/meu-time/.env
+ai-squad start meu-time                # sobe container em background
 ```
 
 ## Como Funciona
 
 ```
-Você (Telegram)                    ai-squad (Docker)
+Você (Telegram)                    ai-squad
      │                                    │
      │  "Criar API de autenticação"       │
      │───────────────────────────────────▶│
@@ -55,86 +68,75 @@ Você (Telegram)                    ai-squad (Docker)
 
 ## Pipeline Declarativo
 
-O fluxo de trabalho é definido em YAML, não em código. Cada time tem seu `pipeline/pipeline.yaml`:
+O fluxo de trabalho é definido em YAML (fonte única de configuração). Step files contêm apenas conteúdo (quality gates, veto conditions):
 
 ```yaml
-# Time de dev com OpenSpec
 pipeline:
   steps:
     - id: especificacao
       agent: po
-      type: checkpoint
+      type: checkpoint           # pausa para aprovação humana
+      execution: subagent
+      model_tier: powerful
       file: steps/step-01-spec.md
 
     - id: implementacao
       agents: [dev-backend, dev-frontend]
-      execution: background
+      type: agent                # avança automaticamente
+      execution: background      # agentes em paralelo
+      model_tier: powerful
       file: steps/step-02-dev.md
 
     - id: revisao
       agent: code-review
       type: checkpoint
-      on_reject: implementacao
+      on_reject: implementacao   # loop de revisão
       max_review_cycles: 3
       file: steps/step-03-review.md
 
     - id: qualidade
       agent: qa
+      type: agent
+      model_tier: powerful
       file: steps/step-04-qa.md
-```
-
-```yaml
-# Time de infra (sem OpenSpec, sem PO)
-pipeline:
-  steps:
-    - id: triagem
-      agent: triager
-      file: steps/step-01-triage.md
-
-    - id: remediacao
-      agent: sre
-      execution: background
-      file: steps/step-02-remediate.md
-
-    - id: validacao
-      agent: validator
-      type: checkpoint
-      file: steps/step-03-validate.md
-```
-
-Cada step file define instruções, inputs, outputs e **quality gates**:
-
-```markdown
-## Quality Gate
-- [ ] proposal.md existe e tem mais de 50 bytes
-- [ ] tasks.md tem pelo menos 3 itens
-- [ ] Cada spec tem critérios de aceite
 ```
 
 ## Presets
 
 Times podem ser criados a partir de presets pré-configurados:
 
-- **dev-openspec** — PO → Dev → Code Review → QA (desenvolvimento orientado a spec)
-- **infra-monitor** — Triager → SRE → Validator (monitoramento e incidentes)
+- **dev-openspec** — PO → Dev (backend+frontend) → Code Review → QA
+- **infra-monitor** — Triager → SRE → Validator
 
-## Gerenciamento de Times
+## Comandos
 
 ```bash
-ai-squad create backend  --repo ~/projetos/api
-ai-squad create frontend --repo ~/projetos/web
+# Criação
+ai-squad create MeuTime              # modo local (.ai-squad/ no cwd)
+ai-squad create MeuTime --repo ~/app # modo Docker (~/.ai-squad/teams/)
 
-ai-squad list              # ver todos os times
-ai-squad start --all       # iniciar todos
-ai-squad stop frontend     # parar um time
-ai-squad logs backend      # ver logs
-ai-squad status backend    # ver demandas ativas
-ai-squad build             # reconstruir imagem Docker
+# Execução
+ai-squad start MeuTime               # auto-detecta modo (local ou docker)
+ai-squad start MeuTime --local       # força modo local
+ai-squad start MeuTime --docker      # força modo Docker
+ai-squad stop MeuTime                # para container Docker
+
+# Gestão
+ai-squad list                        # lista todos os times
+ai-squad status MeuTime              # demandas ativas
+ai-squad remove MeuTime              # remove time
+ai-squad logs MeuTime                # logs do container
+
+# Agentes
+ai-squad add-agent MeuTime sec       # adiciona agente
+ai-squad remove-agent MeuTime sec    # remove agente
+ai-squad list-agents MeuTime         # lista agentes
+
+# Docker
+ai-squad build                       # reconstrói imagem
 ```
 
 ## Configuração
-
-Ao criar um time, arquivos são gerados em `~/.ai-squad/teams/<nome>/`:
 
 ### `.env` — Tokens
 
@@ -150,10 +152,10 @@ TELEGRAM_CHAT_ID=seu-chat-id
 ```yaml
 ai_provider: claude-agent-sdk
 messaging_provider: telegram
-agent_timeout: 300
 ai_model: claude-sonnet-4-20250514
+agent_timeout: 300
 
-# Model routing (opcional)
+# Model routing por tier (opcional)
 # light_model: claude-haiku-4-5-20251001
 # heavy_model: claude-sonnet-4-20250514
 
@@ -161,77 +163,21 @@ agents:
   po:
     name: "PO Agent"
     avatar: "📋"
-    role: spec
+    command: "/po"
   dev-backend:
     name: "Dev Backend"
     avatar: "⚙️"
-    role: dev
+    command: "/dev-back"
     timeout: 600
 ```
-
-## Arquitetura
-
-```
-src/
-├── models.py                  # AgentStatus enum
-├── factory.py                 # PlatformConfig + AgentConfig (DI)
-├── daemon.py                  # Loop principal: Telegram + heartbeat
-├── messaging/
-│   ├── interface.py           # ABC MessageBus
-│   ├── cli.py                 # CLIMessageBus
-│   └── telegram.py            # TelegramMessageBus (voz, fotos)
-├── adapters/
-│   ├── interface.py           # ABC AIAgentAdapter
-│   └── claude_agent_sdk.py    # Claude Agent SDK + MCP tools
-├── orchestrator/
-│   ├── engine.py              # Squad Lead + delegação async
-│   ├── pipeline.py            # Parser de pipeline.yaml e step files
-│   ├── pipeline_state.py      # Estado e executor de pipeline
-│   ├── verification.py        # Validação de artefatos
-│   ├── prompt_builder.py      # Montagem de contexto para prompts
-│   ├── media.py               # Detecção e envio de imagens
-│   ├── model_router.py        # Roteamento light/heavy por complexidade
-│   ├── atomic_write.py        # Escrita atômica (temp + fsync + rename)
-│   ├── state.py               # Persistência JSON
-│   ├── journal.py             # Decisões do Squad Lead
-│   ├── conversation.py        # Histórico + sumarização automática
-│   ├── lessons.py             # Aprendizado FTS5 entre demandas
-│   ├── daily_notes.py         # Resumo diário para continuidade
-│   ├── context.py             # Contexto do produto (CLAUDE.md + tree)
-│   └── tools.py               # Modelos: RunningAgent, VerificationResult
-├── presets/
-│   ├── dev-openspec/          # Pipeline + agents para dev com OpenSpec
-│   └── infra-monitor/         # Pipeline + agents para infra
-└── whisper/                   # Transcrição de áudio
-```
-
-## MCP Tools
-
-O Squad Lead e agentes têm acesso a estas tools:
-
-| Tool | Descrição |
-|------|-----------|
-| `start_agent(name, task)` | Delega trabalho a um agente |
-| `get_running_agents()` | Status dos agentes em background |
-| `get_pipeline_state()` | Estado completo do pipeline |
-| `advance_step()` | Avançar manualmente no pipeline |
-| `skip_step(step_id)` | Pular um step |
-| `rerun_step(step_id)` | Re-executar um step |
-| `check_artifacts(name)` | Validar artefatos de uma change |
-| `get_demand_state()` | Estado das demandas ativas |
-| `read_journal()` | Histórico de decisões |
-| `report_progress(msg)` | Feedback ao usuário |
-| `send_image(path, caption)` | Enviar imagem via Telegram |
-| `learn_lesson(cat, prob, sol)` | Registrar lição aprendida |
 
 ## Inteligência
 
 - **Sumarização automática** — conversas longas (>20 msgs) são sumarizadas via LLM
-- **Model routing** — mensagens simples usam modelo leve, complexas usam modelo capaz
+- **Model routing** — pipeline define `model_tier` por step, config mapeia para modelos concretos
 - **Notas diárias** — últimos 3 dias injetados no prompt para continuidade
 - **Lessons learned** — erros passados indexados via FTS5 e injetados nos prompts
 - **Retry com backoff** — erros transientes retentados com backoff 2/4/8s
-- **Monitor** — respostas vazias consecutivas resetam sessão do Squad Lead
 
 ## Desenvolvimento
 
@@ -239,12 +185,11 @@ O Squad Lead e agentes têm acesso a estas tools:
 source .venv/bin/activate
 pip install -e ".[dev]"
 
-# Testes (430+ testes)
+# Testes (400+)
 python -m pytest tests/ -v
 
 # Lint
-ruff check src/
-ruff format src/
+ruff check src/ && ruff format src/
 
 # Type checking
 pyright src/
@@ -254,24 +199,23 @@ pyright src/
 
 ### Novo provider de IA
 1. Criar classe herdando `AIAgentAdapter` em `src/adapters/`
-2. Registrar: `factory.register_ai_adapter("nome", Classe)`
+2. Implementar métodos abstratos + sobrescrever callbacks desejados
 3. `config.yaml`: `ai_provider: nome`
 
 ### Novo canal de mensageria
 1. Criar classe herdando `MessageBus` em `src/messaging/`
-2. Registrar: `factory.register_message_bus("nome", Classe)`
-3. `config.yaml`: `messaging_provider: nome`
+2. `config.yaml`: `messaging_provider: nome`
 
 ### Novo pipeline/preset
 1. Criar `src/presets/<nome>/` com `pipeline/` e `agents/`
-2. Definir `pipeline.yaml` com steps
-3. Criar step files com quality gates
-4. Criar `AGENTS.md` para cada agente
+2. Definir `pipeline.yaml` com steps (fonte única de configuração)
+3. Criar step files com quality gates (sem frontmatter)
+4. `ai-squad create MeuTime --preset <nome>`
 
 ## Requisitos
 
 - Python 3.11+
-- Docker
+- Docker (opcional, para modo isolado)
 - Conta Claude Code com OAuth token
 - Bot Telegram (via [@BotFather](https://t.me/BotFather))
 - GitHub token (para criação de PRs)

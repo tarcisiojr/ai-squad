@@ -32,3 +32,16 @@ class AIAgentAdapter(ABC):
     def on_human_needed(self, callback: Callable) -> None:
         """Registra callback para quando intervenção humana é necessária."""
         ...
+
+    # Callbacks opcionais — no-op por padrão, adapter concreto sobrescreve
+    def set_progress_callback(self, callback: Callable) -> None: pass
+    def set_start_agent_callback(self, callback: Callable) -> None: pass
+    def set_get_agents_callback(self, callback: Callable) -> None: pass
+    def set_get_demand_state_callback(self, callback: Callable) -> None: pass
+    def set_read_journal_callback(self, callback: Callable) -> None: pass
+    def set_send_image_callback(self, callback: Callable) -> None: pass
+    def set_learn_lesson_callback(self, callback: Callable) -> None: pass
+    def set_get_pipeline_state_callback(self, callback: Callable) -> None: pass
+    def set_advance_step_callback(self, callback: Callable) -> None: pass
+    def set_skip_step_callback(self, callback: Callable) -> None: pass
+    def set_rerun_step_callback(self, callback: Callable) -> None: pass

@@ -183,17 +183,28 @@ def cli() -> None:
 
 @cli.command()
 @click.argument("name")
-@click.option("--repo", required=True, help="Caminho do repositório alvo.")
-def create(name: str, repo: str) -> None:
-    """Cria um novo time de desenvolvimento."""
+@click.option("--repo", default=None, help="Caminho do repositório alvo (modo Docker).")
+@click.option("--preset", default="dev-openspec", help="Preset de pipeline/agentes (dev-openspec, infra-monitor, investment-analysis).")
+def create(name: str, repo: str | None, preset: str) -> None:
+    """Cria um novo time. Sem --repo cria local, com --repo cria para Docker."""
     manager = _get_manager()
     try:
-        team_dir = manager.create(name, repo)
-        click.echo(f"Time '{name}' criado em {team_dir}")
-        click.echo("")
-        click.echo("Próximos passos:")
-        click.echo(f"  1. Edite o .env: {team_dir / '.env'}")
-        click.echo(f"  2. Inicie o time: ai-squad start {name}")
+        if repo:
+            # Modo Docker: cria em ~/.ai-squad/teams/<nome>/
+            team_dir = manager.create(name, repo, preset=preset)
+            click.echo(f"Time '{name}' criado em {team_dir} (Docker, preset: {preset})")
+            click.echo("")
+            click.echo("Próximos passos:")
+            click.echo(f"  1. Edite o .env: {team_dir / '.env'}")
+            click.echo(f"  2. Inicie o time: ai-squad start {name}")
+        else:
+            # Modo local: cria .ai-squad/ no diretório corrente
+            squad_dir = manager.create_local(name, preset=preset)
+            click.echo(f"Squad '{name}' criada em {squad_dir} (local, preset: {preset})")
+            click.echo("")
+            click.echo("Próximos passos:")
+            click.echo(f"  1. Edite o .env: {squad_dir / '.env'}")
+            click.echo(f"  2. Inicie: ai-squad start {name}")
     except FileNotFoundError as e:
         click.echo(f"Erro: {e}", err=True)
         sys.exit(1)
@@ -202,11 +213,81 @@ def create(name: str, repo: str) -> None:
         sys.exit(1)
 
 
+def _detect_mode(name: str) -> str:
+    """Detecta modo de execução: local (.ai-squad/ no cwd) ou docker (~/.ai-squad/teams/)."""
+    local_dir = Path.cwd() / ".ai-squad"
+    if local_dir.exists():
+        return "local"
+
+    global_dir = Path.home() / ".ai-squad" / "teams" / name
+    if global_dir.exists():
+        return "docker"
+
+    click.echo(
+        f"Erro: Time '{name}' não encontrado.\n"
+        f"  Local: .ai-squad/ não existe no diretório corrente\n"
+        f"  Docker: ~/.ai-squad/teams/{name}/ não existe\n\n"
+        f"Crie com: ai-squad create {name}",
+        err=True,
+    )
+    sys.exit(1)
+
+
+def _start_local(name: str) -> None:
+    """Inicia time em modo local (foreground)."""
+    import asyncio
+
+    from dotenv import load_dotenv
+
+    from src.daemon import Daemon
+    from src.path_resolver import PathResolver
+
+    paths = PathResolver("local", Path.cwd())
+
+    # Carrega .env
+    if paths.env_path.exists():
+        load_dotenv(paths.env_path)
+    else:
+        click.echo(f"Erro: .env não encontrado em {paths.env_path}", err=True)
+        sys.exit(1)
+
+    # Valida tokens
+    from src.cli.templates.config import PLACEHOLDER_PREFIX, REQUIRED_ENV_VARS
+    import os
+
+    missing = [
+        v for v in REQUIRED_ENV_VARS
+        if not os.environ.get(v) or os.environ.get(v, "").startswith(PLACEHOLDER_PREFIX)
+    ]
+    if missing:
+        click.echo("Erro: Variáveis não preenchidas no .env:")
+        for var in missing:
+            click.echo(f"  - {var}")
+        click.echo(f"\nEdite: {paths.env_path}")
+        sys.exit(1)
+
+    os.environ.setdefault("TEAM_NAME", name)
+
+    click.echo(f"Iniciando squad '{name}' (local, Ctrl+C para parar)...")
+    daemon = Daemon(path_resolver=paths)
+
+    try:
+        asyncio.run(daemon.run())
+    except KeyboardInterrupt:
+        click.echo("\nSquad encerrada.")
+
+
 @cli.command()
 @click.argument("name", required=False)
 @click.option("--all", "start_all", is_flag=True, help="Inicia todos os times.")
-def start(name: str | None, start_all: bool) -> None:
-    """Inicia um time (sobe o container Docker)."""
+@click.option("--local", "force_local", is_flag=True, help="Força modo local.")
+@click.option("--docker", "force_docker", is_flag=True, help="Força modo Docker.")
+def start(name: str | None, start_all: bool, force_local: bool, force_docker: bool) -> None:
+    """Inicia um time. Detecta automaticamente modo local ou Docker."""
+    if force_local and force_docker:
+        click.echo("Erro: Flags --local e --docker são mutuamente exclusivas.", err=True)
+        sys.exit(1)
+
     manager = _get_manager()
 
     if start_all:
@@ -222,7 +303,18 @@ def start(name: str | None, start_all: bool) -> None:
         click.echo("Informe o nome do time ou use --all.", err=True)
         sys.exit(1)
 
-    _start_team(manager, name)
+    # Determina modo
+    if force_local:
+        mode = "local"
+    elif force_docker:
+        mode = "docker"
+    else:
+        mode = _detect_mode(name)
+
+    if mode == "local":
+        _start_local(name)
+    else:
+        _start_team(manager, name)
 
 
 def _start_team(manager: TeamManager, team_name: str) -> None:
@@ -265,7 +357,13 @@ def _start_team(manager: TeamManager, team_name: str) -> None:
 @click.argument("name", required=False)
 @click.option("--all", "stop_all", is_flag=True, help="Para todos os times.")
 def stop(name: str | None, stop_all: bool) -> None:
-    """Para um time (derruba o container Docker)."""
+    """Para um time Docker. No modo local, use Ctrl+C."""
+    # Verifica se é local
+    local_dir = Path.cwd() / ".ai-squad"
+    if local_dir.exists() and not stop_all:
+        click.echo("Squad local roda em foreground — use Ctrl+C para parar.")
+        return
+
     manager = _get_manager()
 
     if stop_all:
@@ -310,6 +408,13 @@ def remove(name: str) -> None:
     """Remove um time e todos os seus arquivos."""
     from src.cli.team_manager import TeamNotFoundError
 
+    # Verifica se é local
+    local_dir = Path.cwd() / ".ai-squad"
+    if local_dir.exists():
+        shutil.rmtree(local_dir)
+        click.echo(f"Squad local removida (.ai-squad/).")
+        return
+
     manager = _get_manager()
 
     # Para o container se estiver rodando
@@ -333,22 +438,29 @@ def remove(name: str) -> None:
 
 @cli.command("list")
 def list_teams() -> None:
-    """Lista todos os times e seus status."""
+    """Lista times locais e Docker."""
+    # Local
+    local_dir = Path.cwd() / ".ai-squad"
+    has_local = local_dir.exists()
+
+    # Docker (global)
     manager = _get_manager()
     teams = manager.list_teams()
 
-    if not teams:
+    if not has_local and not teams:
         click.echo("Nenhum time criado.")
-        click.echo("Crie um com: ai-squad create <nome> --repo <caminho>")
+        click.echo("Crie com: ai-squad create <nome>")
         return
 
-    # Cabeçalho da tabela
-    click.echo(f"{'Time':<20} {'Repo':<40} {'Status':<10}")
-    click.echo("-" * 70)
+    click.echo(f"{'Time':<20} {'Tipo':<10} {'Repo/Dir':<35} {'Status':<10}")
+    click.echo("-" * 75)
+
+    if has_local:
+        click.echo(f"{'(local)':<20} {'local':<10} {str(Path.cwd()):<35} {'—':<10}")
 
     for team in teams:
         status = _get_container_status(team["name"])
-        click.echo(f"{team['name']:<20} {team['repo_path']:<40} {status:<10}")
+        click.echo(f"{team['name']:<20} {'docker':<10} {team['repo_path']:<35} {status:<10}")
 
 
 @cli.command()

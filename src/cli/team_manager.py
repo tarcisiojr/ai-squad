@@ -3,8 +3,9 @@
 import shutil
 from pathlib import Path
 
+import yaml
+
 from src.cli.templates.config import (
-    CONFIG_YAML_TEMPLATE,
     DOCKER_COMPOSE_TEMPLATE,
     ENV_TEMPLATE,
     PLACEHOLDER_PREFIX,
@@ -62,7 +63,74 @@ class TeamManager:
         """Retorna caminho do diretório de um time."""
         return self._teams_dir / team_name
 
-    def create(self, team_name: str, repo_path: str) -> Path:
+    def _build_config_from_preset(self, preset: str, repo_path: str = "") -> str:
+        """Gera config.yaml dinamicamente a partir dos agentes do preset."""
+        agents_dir = self._find_preset_dir(preset, "agents")
+
+        config: dict = {
+            "ai_provider": "claude-agent-sdk",
+            "messaging_provider": "telegram",
+            "ai_model": "claude-sonnet-4-20250514",
+            "agent_timeout": 300,
+            "squad_lead": {"name": "Squad Lead", "avatar": "👨‍💼"},
+            "agents": {},
+        }
+
+        if repo_path:
+            config["repo_path"] = repo_path
+            config["state_dir"] = "state/"
+
+        if agents_dir:
+            for agent_dir in sorted(agents_dir.iterdir()):
+                if not agent_dir.is_dir() or agent_dir.name == "squad-lead":
+                    continue
+                name = agent_dir.name.replace("-", " ").title()
+                config["agents"][agent_dir.name] = {
+                    "name": name,
+                    "avatar": "🤖",
+                    "command": f"/{agent_dir.name}",
+                }
+
+        return yaml.dump(config, default_flow_style=False, allow_unicode=True, sort_keys=False)
+
+    def _find_preset_dir(self, preset: str, subdir: str) -> Path | None:
+        """Localiza diretório de um preset (agents/ ou pipeline/)."""
+        sources = [
+            Path(__file__).resolve().parent.parent / "presets" / preset / subdir,
+            Path.cwd() / "src" / "presets" / preset / subdir,
+        ]
+        for source in sources:
+            if source.exists() and source.is_dir():
+                return source
+        return None
+
+    def create_local(self, team_name: str, project_dir: Path | None = None, preset: str = "dev-openspec") -> Path:
+        """Cria estrutura .ai-squad/ no diretório do projeto (modo local)."""
+        project = (project_dir or Path.cwd()).resolve()
+        squad_dir = project / ".ai-squad"
+
+        if squad_dir.exists():
+            raise TeamExistsError("Já existe uma squad neste diretório (.ai-squad/).")
+
+        squad_dir.mkdir(parents=True)
+
+        # Cria diretório de estado
+        (squad_dir / "state").mkdir()
+
+        # Gera config.yaml a partir dos agentes do preset
+        config_content = self._build_config_from_preset(preset)
+        (squad_dir / "config.yaml").write_text(config_content, encoding="utf-8")
+
+        # Gera .env com placeholders
+        (squad_dir / ".env").write_text(ENV_TEMPLATE, encoding="utf-8")
+
+        # Copia agents/ e pipeline/ do preset
+        self._copy_default_agents(squad_dir, preset=preset)
+        self._copy_default_pipeline(squad_dir, preset=preset)
+
+        return squad_dir
+
+    def create(self, team_name: str, repo_path: str, preset: str = "dev-openspec") -> Path:
         """Cria estrutura completa para um novo time."""
         repo = Path(repo_path).resolve()
         if not repo.exists():
@@ -77,8 +145,8 @@ class TeamManager:
         # Cria diretório de estado
         (team_dir / "state").mkdir(exist_ok=True)
 
-        # Gera config.yaml
-        config_content = CONFIG_YAML_TEMPLATE.format(repo_path=str(repo))
+        # Gera config.yaml a partir dos agentes do preset
+        config_content = self._build_config_from_preset(preset, repo_path=str(repo))
         (team_dir / "config.yaml").write_text(config_content, encoding="utf-8")
 
         # Gera .env com placeholders
@@ -97,10 +165,10 @@ class TeamManager:
         (team_dir / "docker-compose.yml").write_text(compose_content, encoding="utf-8")
 
         # Copia pasta agents/ para customização pelo usuário
-        self._copy_default_agents(team_dir)
+        self._copy_default_agents(team_dir, preset=preset)
 
         # Copia pipeline/ do preset para o time
-        self._copy_default_pipeline(team_dir)
+        self._copy_default_pipeline(team_dir, preset=preset)
 
         return team_dir
 

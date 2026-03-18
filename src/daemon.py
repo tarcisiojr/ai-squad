@@ -31,15 +31,18 @@ logger = logging.getLogger("ai-squad.daemon")
 class Daemon:
     """Processo daemon que escuta Telegram e orquestra demandas.
 
-    Roda em loop infinito dentro do container Docker.
+    Roda em loop infinito (Docker ou local foreground).
     Processa uma demanda por vez, enfileirando as demais.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, path_resolver: "PathResolver | None" = None) -> None:
+        from src.path_resolver import PathResolver
+
         self._shutdown_event = asyncio.Event()
         self._engine: OrchestrationEngine | None = None
         self._bus: TelegramMessageBus | None = None
         self._config: PlatformConfig | None = None
+        self._paths = path_resolver or PathResolver("docker")
         # Conversa continua com o Squad Lead (sem criar demanda)
         self._squad_lead_conversation_id = "squad-lead-session"
         self._team_name = os.environ.get("TEAM_NAME", "default")
@@ -69,12 +72,12 @@ class Daemon:
     def _load_config(self) -> PlatformConfig:
         """Carrega configuração de config.yaml + variáveis de ambiente."""
         # Carrega .env se existir
-        env_path = Path(".env")
+        env_path = self._paths.env_path
         if env_path.exists():
             load_dotenv(env_path)
 
         # Carrega config.yaml base
-        config_path = Path("config.yaml")
+        config_path = self._paths.config_path
         if config_path.exists():
             config = PlatformConfig.from_yaml(config_path)
         else:
@@ -101,10 +104,10 @@ class Daemon:
         """Cria adapter de IA via Claude Agent SDK."""
         kwargs = {
             "timeout": self.config.agent_timeout,
-            "working_dir": "/workspace",
+            "working_dir": str(self._paths.workspace),
             "allowed_tools": ["WebSearchTool"],
-            "agents_dir": "/app/agents",
-            "global_skills_dir": "/app/global-skills",
+            "agents_dir": str(self._paths.agents_dir),
+            "global_skills_dir": str(self._paths.global_skills_dir),
         }
 
         if self.config.ai_model:
@@ -125,7 +128,7 @@ class Daemon:
         """Constroi AgentDefinition para cada agente a partir dos AGENTS.md."""
         from claude_agent_sdk import AgentDefinition
 
-        agents_dir = Path("/app/agents")
+        agents_dir = self._paths.agents_dir
         defs = {}
 
         if not self._config or not self.config.agents:
@@ -189,16 +192,21 @@ class Daemon:
         )
 
         # Configura state manager
-        state_mgr = StateManager(state_dir=self.config.state_dir)
+        state_mgr = StateManager(state_dir=str(self._paths.state_dir))
+
+        # Monta dict de personas incluindo squad-lead
+        personas = dict(self.config.agents) if self.config.agents else {}
+        if self.config.squad_lead:
+            personas["squad-lead"] = self.config.squad_lead
 
         # Monta o engine de orquestracao
         self._engine = OrchestrationEngine(
             adapter,
             self._bus,
             state_mgr,
-            workspace="/workspace",
-            personas=self.config.agents,
-            agents_dir="/app/agents",
+            workspace=str(self._paths.workspace),
+            personas=personas,
+            agents_dir=str(self._paths.agents_dir),
             agent_timeout=self.config.agent_timeout,
         )
 
@@ -236,7 +244,7 @@ class Daemon:
                 ["openspec", "list", "--json"],
                 capture_output=True,
                 text=True,
-                cwd="/workspace",
+                cwd=str(self._paths.workspace),
                 timeout=15,
             )
             if result.returncode == 0 and result.stdout.strip():
@@ -411,7 +419,7 @@ class Daemon:
         lines = ["Skills disponiveis:\n"]
 
         # 1. Globais
-        global_dir = Path("/app/global-skills")
+        global_dir = self._paths.global_skills_dir
         if global_dir.exists():
             skills = [
                 d.name for d in global_dir.iterdir() if d.is_dir() and (d / "SKILL.md").exists()
@@ -423,27 +431,10 @@ class Daemon:
             else:
                 lines.append("Globais: nenhuma")
         else:
-            # Fallback para ambiente local
-            local_global = Path.home() / ".ai-squad" / "skills"
-            if local_global.exists():
-                skills = [
-                    d.name
-                    for d in local_global.iterdir()
-                    if d.is_dir() and (d / "SKILL.md").exists()
-                ]
-                if skills:
-                    lines.append("Globais:")
-                    for s in sorted(skills):
-                        lines.append(f"  - {s}")
-                else:
-                    lines.append("Globais: nenhuma")
-            else:
-                lines.append("Globais: nenhuma")
+            lines.append("Globais: nenhuma")
 
         # 2. Por agente
-        agents_dir = Path("/app/agents")
-        if not agents_dir.exists():
-            agents_dir = Path(__file__).resolve().parent.parent / "agents"
+        agents_dir = self._paths.agents_dir
 
         if agents_dir.exists():
             lines.append("\nPor agente:")
@@ -460,9 +451,7 @@ class Daemon:
                     lines.append(f"  {agent_dir.name}: {', '.join(sorted(skills))}")
 
         # 3. Projeto
-        ws_skills = Path("/workspace/.claude/skills")
-        if not ws_skills.exists() and self._config and self.config.repo_path:
-            ws_skills = Path(self.config.repo_path) / ".claude" / "skills"
+        ws_skills = self._paths.workspace / ".claude" / "skills"
 
         if ws_skills.exists():
             skills = [

@@ -1,0 +1,33 @@
+name: "Investment Analysis"
+description: >
+  Pipeline de análise de investimentos para ativos da B3.
+  Três analistas (fundamental, quantitativo, macro) trabalham em paralelo.
+  Strategist consolida em tese de investimento. Risk Reviewer valida.
+
+pipeline:
+  steps:
+    - id: research
+      name: "Pesquisa"
+      agents: [analyst, quant, macro]
+      type: agent
+      execution: background
+      model_tier: powerful
+      file: steps/step-01-research.md
+
+    - id: thesis
+      name: "Tese de Investimento"
+      agent: strategist
+      type: agent
+      execution: subagent
+      model_tier: powerful
+      file: steps/step-02-thesis.md
+
+    - id: risk-review
+      name: "Revisão de Risco"
+      agent: risk-reviewer
+      type: checkpoint
+      execution: subagent
+      model_tier: powerful
+      on_reject: thesis
+      max_review_cycles: 2
+      file: steps/step-03-risk-review.md

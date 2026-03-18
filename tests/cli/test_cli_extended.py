@@ -109,7 +109,7 @@ class TestCLIStartExtended:
             mock_mgr.return_value = manager
             mock_run.return_value = MagicMock(returncode=0)
 
-            result = runner.invoke(cli, ["start", "ok"])
+            result = runner.invoke(cli, ["start", "ok", "--docker"])
 
         assert "iniciado" in result.output.lower() or "Iniciando" in result.output
 
@@ -132,7 +132,7 @@ class TestCLIStartExtended:
             mock_mgr.return_value = manager
             mock_run.return_value = MagicMock(returncode=1, stderr="connection refused")
 
-            result = runner.invoke(cli, ["start", "fail"])
+            result = runner.invoke(cli, ["start", "fail", "--docker"])
 
         assert "Erro" in result.output or "erro" in result.output
 

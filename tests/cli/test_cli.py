@@ -129,7 +129,7 @@ class TestCLIStart:
             manager.create("test", str(repo))
             mock.return_value = manager
 
-            result = runner.invoke(cli, ["start", "test"])
+            result = runner.invoke(cli, ["start", "test", "--docker"])
 
         assert result.exit_code == 0  # Não faz sys.exit, apenas mostra erro
         assert "não preenchidas" in result.output
@@ -142,7 +142,7 @@ class TestCLIStart:
             manager = TeamManager(base_dir=tmp_path / ".ai-squad")
             mock.return_value = manager
 
-            result = runner.invoke(cli, ["start", "inexistente"])
+            result = runner.invoke(cli, ["start", "inexistente", "--docker"])
 
         assert "não encontrado" in result.output
 
@@ -311,9 +311,9 @@ class TestCLIAgentManagement:
 
         assert result.exit_code == 0
         assert "Squad Lead" in result.output
-        assert "PO" in result.output
-        assert "Dev" in result.output
-        assert "QA" in result.output
+        assert "po" in result.output.lower()
+        assert "dev" in result.output.lower()
+        assert "qa" in result.output.lower()
 
 
 class TestCLIVersion:

@@ -7,6 +7,21 @@ import pytest
 import yaml
 
 from src.daemon import Daemon
+from src.path_resolver import PathResolver
+
+
+def _local_daemon(base_dir: Path) -> Daemon:
+    """Cria Daemon com PathResolver local apontando para base_dir."""
+    paths = PathResolver("local", base_dir)
+    (base_dir / ".ai-squad").mkdir(exist_ok=True)
+    return Daemon(path_resolver=paths)
+
+
+def _write_config(base_dir: Path, data: dict) -> None:
+    """Escreve config.yaml no diretório .ai-squad/."""
+    config_dir = base_dir / ".ai-squad"
+    config_dir.mkdir(exist_ok=True)
+    (config_dir / "config.yaml").write_text(yaml.dump(data))
 
 
 class TestDaemonConfig:
@@ -14,21 +29,17 @@ class TestDaemonConfig:
 
     def test_load_config_com_yaml(self, tmp_path, monkeypatch):
         """Verifica carregamento de config com arquivo YAML."""
-        monkeypatch.chdir(tmp_path)
         for var in ["AI_PROVIDER", "MESSAGING_PROVIDER", "AGENT_TIMEOUT", "STATE_DIR", "REPO_PATH"]:
             monkeypatch.delenv(var, raising=False)
 
-        config_file = tmp_path / "config.yaml"
-        config_file.write_text(
-            yaml.dump({
-                "ai_provider": "claude-code",
-                "messaging_provider": "telegram",
-                "agent_timeout": 600,
-                "repo_path": str(tmp_path),
-            })
-        )
+        _write_config(tmp_path, {
+            "ai_provider": "claude-code",
+            "messaging_provider": "telegram",
+            "agent_timeout": 600,
+            "repo_path": str(tmp_path),
+        })
 
-        daemon = Daemon()
+        daemon = _local_daemon(tmp_path)
         config = daemon._load_config()
 
         assert config.ai_provider == "claude-code"
@@ -36,20 +47,16 @@ class TestDaemonConfig:
 
     def test_load_config_env_override_yaml(self, tmp_path, monkeypatch):
         """Verifica que env vars sobrescrevem YAML."""
-        monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("AI_PROVIDER", "custom-provider")
         monkeypatch.setenv("AGENT_TIMEOUT", "999")
 
-        config_file = tmp_path / "config.yaml"
-        config_file.write_text(
-            yaml.dump({
-                "ai_provider": "claude-code",
-                "messaging_provider": "telegram",
-                "agent_timeout": 300,
-            })
-        )
+        _write_config(tmp_path, {
+            "ai_provider": "claude-code",
+            "messaging_provider": "telegram",
+            "agent_timeout": 300,
+        })
 
-        daemon = Daemon()
+        daemon = _local_daemon(tmp_path)
         config = daemon._load_config()
 
         assert config.ai_provider == "custom-provider"
@@ -57,25 +64,22 @@ class TestDaemonConfig:
 
     def test_load_config_com_dotenv(self, tmp_path, monkeypatch):
         """Verifica que load_dotenv é chamado quando .env existe."""
-        monkeypatch.chdir(tmp_path)
         for var in ["AI_PROVIDER", "MESSAGING_PROVIDER", "AGENT_TIMEOUT", "STATE_DIR", "REPO_PATH"]:
             monkeypatch.delenv(var, raising=False)
 
-        env_file = tmp_path / ".env"
+        env_file = tmp_path / ".ai-squad" / ".env"
+        (tmp_path / ".ai-squad").mkdir(exist_ok=True)
         env_file.write_text("AGENT_TIMEOUT=777\n")
 
-        config_file = tmp_path / "config.yaml"
-        config_file.write_text(
-            yaml.dump({
-                "ai_provider": "claude-code",
-                "messaging_provider": "cli",
-                "agent_timeout": 300,
-            })
-        )
+        _write_config(tmp_path, {
+            "ai_provider": "claude-code",
+            "messaging_provider": "cli",
+            "agent_timeout": 300,
+        })
 
         monkeypatch.setenv("AGENT_TIMEOUT", "777")
 
-        daemon = Daemon()
+        daemon = _local_daemon(tmp_path)
         with patch("src.daemon.load_dotenv"):
             config = daemon._load_config()
 
@@ -87,23 +91,19 @@ class TestDaemonSetup:
 
     def test_setup_components(self, tmp_path, monkeypatch):
         """Verifica inicialização de componentes."""
-        monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "oauth-test")
         monkeypatch.setenv("GITHUB_TOKEN", "ghp_test")
         monkeypatch.setenv("TELEGRAM_TOKEN", "bot-test")
         monkeypatch.setenv("TELEGRAM_CHAT_ID", "12345")
 
-        config_file = tmp_path / "config.yaml"
-        config_file.write_text(
-            yaml.dump({
-                "ai_provider": "claude-code",
-                "messaging_provider": "telegram",
-            })
-        )
+        _write_config(tmp_path, {
+            "ai_provider": "claude-code",
+            "messaging_provider": "telegram",
+        })
 
-        (tmp_path / "state").mkdir()
+        (tmp_path / ".ai-squad" / "state").mkdir(parents=True, exist_ok=True)
 
-        daemon = Daemon()
+        daemon = _local_daemon(tmp_path)
         daemon._setup_components()
 
         assert daemon._engine is not None

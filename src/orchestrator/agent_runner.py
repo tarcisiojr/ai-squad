@@ -77,6 +77,11 @@ class AgentRunner:
         # Agentes em background: agent_name → RunningAgent
         self._running_agents: dict[str, RunningAgent] = {}
 
+    @property
+    def running_agents(self) -> dict[str, RunningAgent]:
+        """Retorna agentes em execução (leitura)."""
+        return self._running_agents
+
     def configure_models(
         self,
         light_model: str | None = None,
