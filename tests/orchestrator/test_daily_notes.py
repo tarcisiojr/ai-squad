@@ -2,8 +2,6 @@
 
 from datetime import date, timedelta
 
-import pytest
-
 from src.orchestrator.daily_notes import DailyNotes
 
 

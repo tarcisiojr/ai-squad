@@ -1,10 +1,3 @@
----
-step: "03"
-name: "Validação"
-type: checkpoint
-agent: validator
----
-
 # Step 03: Validação
 
 ## Inputs

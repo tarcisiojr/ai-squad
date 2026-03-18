@@ -23,9 +23,6 @@ Validacao de qualidade, testes e criterios de aceitacao contra specs do openspec
 - Cada cenario dos specs validado (WHEN/THEN)
 - Criterios de aceitacao do PO atendidos
 
-## Marcador de Conclusao
----QA_DONE---
-
 ## Restricoes
 - NAO faz correcoes de codigo diretamente
 - DEVE validar contra specs gerados pelo openspec
@@ -104,5 +101,4 @@ Exemplos:
 
 ### Passo 6: Concluir
 
-- Inclua ---QA_DONE--- APENAS quando a validacao estiver completa
 - Respostas em portugues brasileiro

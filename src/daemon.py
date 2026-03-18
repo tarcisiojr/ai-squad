@@ -13,8 +13,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from src.adapters.claude_agent_sdk import ClaudeAgentSDKAdapter
-from src.messaging.telegram import TelegramMessageBus
 from src.factory import PlatformConfig
+from src.messaging.telegram import TelegramMessageBus
 from src.orchestrator.engine import OrchestrationEngine
 from src.orchestrator.journal import JournalStore
 from src.orchestrator.state import StateManager
@@ -47,13 +47,17 @@ class Daemon:
     @property
     def engine(self) -> OrchestrationEngine:
         """Acesso seguro ao engine — falha se não inicializado."""
-        assert self._engine is not None, "Engine não inicializado — chame _setup_components primeiro"
+        assert self._engine is not None, (
+            "Engine não inicializado — chame _setup_components primeiro"
+        )
         return self._engine
 
     @property
     def bus(self) -> TelegramMessageBus:
         """Acesso seguro ao message bus — falha se não inicializado."""
-        assert self._bus is not None, "MessageBus não inicializado — chame _setup_components primeiro"
+        assert self._bus is not None, (
+            "MessageBus não inicializado — chame _setup_components primeiro"
+        )
         return self._bus
 
     @property
@@ -96,7 +100,7 @@ class Daemon:
     def _create_adapter(self):
         """Cria adapter de IA via Claude Agent SDK."""
         kwargs = {
-            "timeout": self.config.dev_timeout,  # timeout maximo (dev), agentes menores usam agent_timeout
+            "timeout": self.config.agent_timeout,
             "working_dir": "/workspace",
             "allowed_tools": ["WebSearchTool"],
             "agents_dir": "/app/agents",
@@ -196,7 +200,6 @@ class Daemon:
             personas=self.config.agents,
             agents_dir="/app/agents",
             agent_timeout=self.config.agent_timeout,
-            dev_timeout=self.config.dev_timeout,
         )
 
         self._state_manager = state_mgr
@@ -271,7 +274,7 @@ class Daemon:
             f"{context}\n\n"
             f"INSTRUCOES DE RETOMADA:\n"
             f"1. Analise as decisoes anteriores e o estado atual\n"
-            f"2. Use check_artifacts() para verificar o estado dos artefatos\n"
+            f"2. Use get_pipeline_state() para verificar o estado do pipeline\n"
             f"3. Retome da fase onde parou — chame start_agent() para o agente correto\n"
             f"4. NAO pergunte ao usuario — avalie e aja imediatamente\n"
             f"5. Informe o usuario sobre o que esta fazendo"

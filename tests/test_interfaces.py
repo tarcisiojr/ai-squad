@@ -2,9 +2,9 @@
 
 import pytest
 
-from src.models import AgentStatus
-from src.messaging.interface import MessageBus
 from src.adapters.interface import AIAgentAdapter
+from src.messaging.interface import MessageBus
+from src.models import AgentStatus
 
 
 class TestAgentStatus:

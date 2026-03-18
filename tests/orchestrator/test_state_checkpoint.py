@@ -1,8 +1,6 @@
 """Testes para checkpoint e retomada de demandas no StateManager."""
 
-import json
 
-import pytest
 
 from src.orchestrator.state import StateManager
 

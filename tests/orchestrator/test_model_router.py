@@ -1,6 +1,5 @@
 """Testes para roteamento de modelo por complexidade."""
 
-import pytest
 
 from src.orchestrator.model_router import classify_complexity, select_model
 

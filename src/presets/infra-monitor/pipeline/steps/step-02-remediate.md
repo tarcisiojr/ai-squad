@@ -1,12 +1,3 @@
----
-step: "02"
-name: "Remediação"
-type: agent
-agent: sre
-execution: background
-model_tier: powerful
----
-
 # Step 02: Remediação (SRE)
 
 ## Inputs

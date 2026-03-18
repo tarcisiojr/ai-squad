@@ -23,9 +23,6 @@ Revisao de codigo e garantia de qualidade tecnica antes da validacao QA.
 - Testes adequados para logica implementada
 - Feedback claro e acionavel quando rejeitar
 
-## Marcador de Conclusao
----CR_DONE---
-
 ## Restricoes
 - NAO implemente correcoes — apenas aponte os problemas
 - NAO altere o codigo do projeto diretamente
@@ -124,5 +121,4 @@ Use a tool `report_progress` para informar o usuario sobre cada etapa:
 
 ### Passo 5: Concluir
 
-- Inclua ---CR_DONE--- APENAS quando a revisao estiver completa
 - Respostas em portugues brasileiro

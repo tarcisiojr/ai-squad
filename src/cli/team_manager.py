@@ -99,6 +99,9 @@ class TeamManager:
         # Copia pasta agents/ para customização pelo usuário
         self._copy_default_agents(team_dir)
 
+        # Copia pipeline/ do preset para o time
+        self._copy_default_pipeline(team_dir)
+
         return team_dir
 
     def _copy_whisper_service(self, team_dir: Path) -> None:
@@ -111,6 +114,19 @@ class TeamManager:
         for source in sources:
             if source.exists() and source.is_dir():
                 dest = team_dir / "whisper"
+                shutil.copytree(source, dest, dirs_exist_ok=True)
+                return
+
+    def _copy_default_pipeline(self, team_dir: Path, preset: str = "dev-openspec") -> None:
+        """Copia pipeline/ do preset para o diretório do time."""
+        sources = [
+            Path(__file__).resolve().parent.parent / "presets" / preset / "pipeline",
+            Path.cwd() / "src" / "presets" / preset / "pipeline",
+        ]
+
+        for source in sources:
+            if source.exists() and source.is_dir():
+                dest = team_dir / "pipeline"
                 shutil.copytree(source, dest, dirs_exist_ok=True)
                 return
 

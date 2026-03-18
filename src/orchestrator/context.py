@@ -1,10 +1,10 @@
-"""Coletor de contexto do produto para injeção nos prompts dos agentes."""
+"""Coletor de contexto do workspace para injeção nos prompts dos agentes."""
 
 import time
 from pathlib import Path
 
 
-class ProductContextCollector:
+class WorkspaceContextCollector:
     """Coleta contexto do repositório alvo para enriquecer prompts.
 
     Lê README.md, estrutura de diretórios e specs existentes

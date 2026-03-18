@@ -15,11 +15,11 @@ class TestClaudeAgentSDKAdapterExtras:
         """Cria instância de ClaudeAgentSDKAdapter."""
         return ClaudeAgentSDKAdapter(timeout=30)
 
-    def test_build_prompt_com_product_context(self, adapter):
-        """Verifica montagem do prompt com contexto do produto."""
+    def test_build_prompt_com_workspace_context(self, adapter):
+        """Verifica montagem do prompt com contexto do workspace."""
         prompt = adapter._build_prompt(
             "Crie um teste",
-            {"product_context": "README conteudo aqui"},
+            {"workspace_context": "README conteudo aqui"},
         )
         assert "## Contexto do Projeto" in prompt
         assert "README conteudo aqui" in prompt
@@ -37,17 +37,14 @@ class TestClaudeAgentSDKAdapterExtras:
         cb1 = AsyncMock()
         cb2 = AsyncMock()
         cb3 = AsyncMock()
-        cb4 = AsyncMock()
 
         adapter.set_progress_callback(cb1)
         adapter.set_start_agent_callback(cb2)
         adapter.set_get_agents_callback(cb3)
-        adapter.set_check_artifacts_callback(cb4)
 
         assert adapter._progress_callback is cb1
         assert adapter._start_agent_callback is cb2
         assert adapter._get_agents_callback is cb3
-        assert adapter._check_artifacts_callback is cb4
 
     def test_session_management(self, adapter):
         """Verifica gerenciamento de sessões."""

@@ -28,16 +28,13 @@ Desenvolvimento frontend — interfaces, componentes, estilizacao, interatividad
 - Segue padroes e convencoes do projeto existente
 - Commits feitos no git com mensagens claras
 
-## Marcador de Conclusao
----DONE---
-
 ## Restricoes
 - DEVE seguir padroes do projeto existente
 - DEVE fazer commits incrementais
 - DEVE criar testes de componente
 - DEVE implementar task por task, na ordem do tasks.md
 - NAO implemente backend — delegue ao dev-backend
-- NAO inclua ---DONE--- se apenas descreveu o que faria sem executar
+- NAO apenas descreva o que faria — execute de fato
 - NAO pule tasks — implemente cada uma na ordem
 
 ## Instrucoes
@@ -102,7 +99,6 @@ Use a tool `report_progress` para informar o usuario:
 
 ### Passo 5: Concluir
 
-- Inclua ---DONE--- APENAS quando todas as tasks de frontend estiverem implementadas
 - Se tiver duvidas sobre design/UX, pergunte ao usuario
 - Se a task envolve backend, informe que deve ser delegada ao dev-backend
 - Respostas em portugues brasileiro

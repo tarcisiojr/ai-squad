@@ -54,13 +54,9 @@ RUN useradd --create-home --shell /bin/bash --uid 1000 agent \
 
 WORKDIR /app
 
-# Copia e instala dependências Python
-COPY pyproject.toml .
-COPY src/ src/
-COPY agents/ agents/
-COPY registry.yaml .
-
-RUN pip install --no-cache-dir .
+# Instala pacote Python via .whl (gerado pelo build)
+COPY *.whl /tmp/
+RUN pip install --no-cache-dir /tmp/*.whl && rm -f /tmp/*.whl
 
 # Configura diretórios com permissão para o usuário agent
 RUN mkdir -p /app/state /workspace /home/agent/.claude \

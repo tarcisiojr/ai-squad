@@ -6,10 +6,8 @@ import yaml
 from src.orchestrator.pipeline import (
     PipelineConfig,
     PipelineLoader,
-    QualityCheck,
     StepConfig,
 )
-
 
 # ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -218,7 +216,7 @@ class TestPipelineLoader:
         assert loader.load() is None
 
     def test_parseia_step_file_com_frontmatter_e_quality_gate(self, tmp_path):
-        """Parseia step file .md com frontmatter YAML e quality gate."""
+        """Parseia step file .md com quality gate — config vem do pipeline.yaml."""
         step_content = """\
 ---
 model_tier: fast
@@ -255,7 +253,15 @@ Instruções detalhadas do step.
             "name": "Test",
             "pipeline": {
                 "steps": [
-                    {"id": "plan", "name": "Plan", "agent": "po", "file": "plan.md"},
+                    {
+                        "id": "plan",
+                        "name": "Plan",
+                        "agent": "po",
+                        "file": "plan.md",
+                        "model_tier": "fast",
+                        "on_reject": "plan",
+                        "max_review_cycles": 5,
+                    },
                 ],
             },
         })
@@ -264,7 +270,7 @@ Instruções detalhadas do step.
         pipeline = loader.load()
         step = pipeline.steps[0]
 
-        # Frontmatter sobrescreveu valores
+        # Configuração vem do pipeline.yaml (frontmatter é ignorado)
         assert step.model_tier == "fast"
         assert step.on_reject == "plan"
         assert step.max_review_cycles == 5
@@ -360,8 +366,8 @@ Instruções sem frontmatter.
         items = PipelineLoader._parse_list_section(body, "Inputs")
         assert items == []
 
-    def test_frontmatter_nao_sobrescreve_on_reject_existente(self, tmp_path):
-        """Frontmatter não sobrescreve on_reject já definido no pipeline.yaml."""
+    def test_frontmatter_ignorado_config_vem_do_pipeline_yaml(self, tmp_path):
+        """Frontmatter é ignorado — configuração vem exclusivamente do pipeline.yaml."""
         step_content = """\
 ---
 on_reject: do-frontmatter
@@ -381,6 +387,7 @@ Instruções.
                         "agent": "code-review",
                         "file": "review.md",
                         "on_reject": "dev",
+                        "model_tier": "powerful",
                     },
                 ],
             },
@@ -390,10 +397,9 @@ Instruções.
         pipeline = loader.load()
         step = pipeline.steps[0]
 
-        # on_reject do pipeline.yaml prevalece (frontmatter só preenche se vazio)
+        # Toda configuração vem do pipeline.yaml, frontmatter ignorado
         assert step.on_reject == "dev"
-        # model_tier é sempre sobrescrito pelo frontmatter
-        assert step.model_tier == "fast"
+        assert step.model_tier == "powerful"
 
     def test_step_file_nao_encontrado(self, tmp_path):
         """Step file inexistente é tratado graciosamente."""

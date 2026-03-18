@@ -2,17 +2,16 @@
 
 import importlib
 import inspect
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.adapters.interface import AIAgentAdapter
+from src.factory import PlatformConfig, PlatformFactory
+from src.messaging.cli import CLIMessageBus
+from src.messaging.interface import MessageBus
 from src.models import AgentStatus
 from src.orchestrator.engine import OrchestrationEngine
 from src.orchestrator.state import StateManager
-from src.messaging.cli import CLIMessageBus
-from src.factory import PlatformConfig, PlatformFactory
-from src.adapters.interface import AIAgentAdapter
-from src.messaging.interface import MessageBus
 
 
 # Mock adapter para testes de integração

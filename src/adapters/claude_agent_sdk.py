@@ -26,7 +26,6 @@ _TOOL_NAMES = [
     "report_progress",
     "start_agent",
     "get_running_agents",
-    "check_artifacts",
     "get_demand_state",
     "get_pipeline_state",
     "advance_step",
@@ -75,7 +74,6 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
         self._progress_callback: Callable | None = None
         self._start_agent_callback: Callable | None = None
         self._get_agents_callback: Callable | None = None
-        self._check_artifacts_callback: Callable | None = None
         self._get_demand_state_callback: Callable | None = None
         self._read_journal_callback: Callable | None = None
         self._send_image_callback: Callable | None = None
@@ -101,10 +99,6 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
     def set_get_agents_callback(self, callback: Callable) -> None:
         """callback() → awaitable[str]"""
         self._get_agents_callback = callback
-
-    def set_check_artifacts_callback(self, callback: Callable) -> None:
-        """callback(change_name: str) → awaitable[str]"""
-        self._check_artifacts_callback = callback
 
     def set_get_demand_state_callback(self, callback: Callable) -> None:
         """callback() → awaitable[str]"""
@@ -195,23 +189,6 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
                 return {"content": [{"type": "text", "text": "Nenhum agente registrado."}]}
             try:
                 result = await adapter_ref._get_agents_callback()
-                return {"content": [{"type": "text", "text": result}]}
-            except Exception as e:
-                return {"content": [{"type": "text", "text": f"Erro: {e}"}]}
-
-        @tool(
-            "check_artifacts",
-            "Verifica o estado dos artefatos openspec de uma change. "
-            "Retorna quais artefatos existem (proposal, specs, design, tasks) e se estao completos. "
-            "Exemplo: check_artifacts('criar-site-pessoal')",
-            {"change_name": str},
-        )
-        async def check_artifacts_tool(args: dict) -> dict[str, Any]:
-            change_name = args.get("change_name", "")
-            if not adapter_ref._check_artifacts_callback:
-                return {"content": [{"type": "text", "text": "Erro: callback nao configurado"}]}
-            try:
-                result = await adapter_ref._check_artifacts_callback(change_name)
                 return {"content": [{"type": "text", "text": result}]}
             except Exception as e:
                 return {"content": [{"type": "text", "text": f"Erro: {e}"}]}
@@ -360,7 +337,6 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
                 report_progress_tool,
                 start_agent_tool,
                 get_running_agents_tool,
-                check_artifacts_tool,
                 get_demand_state_tool,
                 get_pipeline_state_tool,
                 advance_step_tool,
@@ -610,8 +586,8 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
         """Monta prompt completo incluindo contexto."""
         partes = []
 
-        # Contexto do produto (README, estrutura, specs anteriores)
-        product_ctx = context.pop("product_context", None)
+        # Contexto do workspace (CLAUDE.md, estrutura, specs)
+        product_ctx = context.pop("workspace_context", None)
         if product_ctx:
             partes.append("## Contexto do Projeto")
             partes.append(product_ctx)

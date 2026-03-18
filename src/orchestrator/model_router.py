@@ -112,6 +112,29 @@ def classify_complexity(message: str) -> str:
     return "light"
 
 
+def resolve_model_for_tier(
+    model_tier: str,
+    light_model: str | None = None,
+    heavy_model: str | None = None,
+    default_model: str | None = None,
+) -> str | None:
+    """Resolve modelo baseado no model_tier do step do pipeline.
+
+    Mapeamento:
+    - 'fast' → light_model
+    - 'powerful' → heavy_model
+    - fallback → default_model (ai_model do config)
+    """
+    if model_tier == "fast" and light_model:
+        logger.debug("model_tier=%s → %s", model_tier, light_model)
+        return light_model
+    if model_tier == "powerful" and heavy_model:
+        logger.debug("model_tier=%s → %s", model_tier, heavy_model)
+        return heavy_model
+
+    return default_model
+
+
 def select_model(
     message: str,
     light_model: str | None = None,

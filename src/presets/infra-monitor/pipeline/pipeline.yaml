@@ -9,11 +9,15 @@ pipeline:
     - id: triagem
       name: "Triagem"
       agent: triager
+      type: agent
+      execution: subagent
+      model_tier: fast
       file: steps/step-01-triage.md
 
     - id: remediacao
       name: "Remediação"
       agent: sre
+      type: agent
       execution: background
       model_tier: powerful
       file: steps/step-02-remediate.md
@@ -22,4 +26,6 @@ pipeline:
       name: "Validação"
       agent: validator
       type: checkpoint
+      execution: subagent
+      model_tier: powerful
       file: steps/step-03-validate.md

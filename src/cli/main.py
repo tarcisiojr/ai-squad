@@ -175,7 +175,7 @@ def _get_container_status(team_name: str) -> str:
 
 
 @click.group()
-@click.version_option(version="0.1.0", prog_name="ai-dev-team")
+@click.version_option(version="0.2.0", prog_name="ai-dev-team")
 def cli() -> None:
     """ai-dev-team — Time completo de desenvolvimento autônomo por IA."""
     pass
@@ -303,6 +303,34 @@ def _stop_team(manager: TeamManager, team_name: str) -> None:
     click.echo(f"Time '{team_name}' parado.")
 
 
+@cli.command()
+@click.argument("name")
+@click.confirmation_option(prompt="Tem certeza que deseja remover este time e todos os seus arquivos?")
+def remove(name: str) -> None:
+    """Remove um time e todos os seus arquivos."""
+    from src.cli.team_manager import TeamNotFoundError
+
+    manager = _get_manager()
+
+    # Para o container se estiver rodando
+    container_status = _get_container_status(name)
+    if container_status == "running":
+        click.echo(f"Parando container do time '{name}'...")
+        team_dir = manager.get_path(name)
+        subprocess.run(
+            _docker_compose_cmd(team_dir, "down"),
+            capture_output=True,
+            text=True,
+        )
+
+    try:
+        manager.remove(name)
+        click.echo(f"Time '{name}' removido com sucesso.")
+    except TeamNotFoundError as e:
+        click.echo(f"Erro: {e}", err=True)
+        sys.exit(1)
+
+
 @cli.command("list")
 def list_teams() -> None:
     """Lista todos os times e seus status."""
@@ -394,14 +422,12 @@ def build() -> None:
 @click.option("--name", "display_name", default=None, help="Nome de exibição do agente.")
 @click.option("--avatar", default="🤖", help="Emoji avatar do agente.")
 @click.option("--command", "cmd", default=None, help="Comando Telegram (ex: /sec).")
-@click.option("--marker", default="---DONE---", help="Marcador de conclusão.")
 def add_agent(
     team_name: str,
     agent_name: str,
     display_name: str | None,
     avatar: str,
     cmd: str | None,
-    marker: str,
 ) -> None:
     """Adiciona um novo agente a um time existente."""
     manager = _get_manager()
@@ -438,9 +464,6 @@ def add_agent(
 ## Criterios de Aceite
 - <!-- Liste os critérios verificáveis -->
 
-## Marcador de Conclusao
-{marker}
-
 ## Restricoes
 - <!-- Liste as restrições -->
 
@@ -464,7 +487,6 @@ def add_agent(
         "name": display_name,
         "avatar": avatar,
         "command": cmd,
-        "done_marker": marker,
     }
 
     with open(config_path, "w", encoding="utf-8") as f:

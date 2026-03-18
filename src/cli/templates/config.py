@@ -5,10 +5,17 @@ CONFIG_YAML_TEMPLATE = """\
 ai_provider: claude-agent-sdk
 messaging_provider: telegram
 
-# Modelo de IA
+# Modelo de IA (usado quando model_tier não é configurado)
 ai_model: claude-sonnet-4-20250514
 
-# Timeout para execução de agentes (segundos)
+# Model routing por tier (usado pelo pipeline nos steps)
+# fast → steps leves (conversação, triagem)
+# powerful → steps pesados (implementação, review, QA)
+# light_model: claude-haiku-4-5-20251001
+# heavy_model: claude-sonnet-4-20250514
+
+# Timeout padrão para agentes (segundos)
+# Agentes individuais podem sobrescrever via campo "timeout" na seção agents
 agent_timeout: 300
 
 # Diretório de persistência de estado
@@ -17,31 +24,33 @@ state_dir: state/
 # Caminho do repositório alvo
 repo_path: "{repo_path}"
 
-# Timeout estendido para Dev (segundos)
-dev_timeout: 600
-
 # Squad Lead (coordenador obrigatorio)
 squad_lead:
   name: "Squad Lead"
   avatar: "👨‍💼"
 
-# Agentes do time
+# Agentes do time (devem corresponder aos agents/ e pipeline)
 agents:
   po:
     name: "PO Agent"
     avatar: "📋"
     command: "/po"
-    done_marker: "---SPEC_READY---"
-  dev:
-    name: "Dev Agent"
-    avatar: "🔧"
-    command: "/dev"
-    done_marker: "---DONE---"
+  dev-backend:
+    name: "Dev Backend"
+    avatar: "⚙️"
+    command: "/dev-back"
+  dev-frontend:
+    name: "Dev Frontend"
+    avatar: "🎨"
+    command: "/dev-front"
+  code-review:
+    name: "Code Review"
+    avatar: "🔍"
+    command: "/review"
   qa:
     name: "QA Agent"
     avatar: "🧪"
     command: "/qa"
-    done_marker: "---QA_DONE---"
 """
 
 ENV_TEMPLATE = """\

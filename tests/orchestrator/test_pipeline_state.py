@@ -4,14 +4,12 @@ Cobre serialização, gerenciamento de estado, avanço de steps,
 loops de rejeição, persistência e formatação visual.
 """
 
-import json
 from pathlib import Path
 
 import pytest
 
 from src.orchestrator.pipeline import PipelineConfig, StepConfig
 from src.orchestrator.pipeline_state import PipelineExecutor, PipelineState, StepState
-
 
 # --- Fixtures ---
 

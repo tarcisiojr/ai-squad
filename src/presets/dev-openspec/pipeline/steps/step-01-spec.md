@@ -1,12 +1,3 @@
----
-step: "01"
-name: "Especificação"
-type: checkpoint
-agent: po
-execution: subagent
-model_tier: powerful
----
-
 # Step 01: Especificação (PO)
 
 ## Inputs

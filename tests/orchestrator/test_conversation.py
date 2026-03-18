@@ -1,8 +1,6 @@
 """Testes para persistência de histórico de conversa."""
 
-import json
 
-import pytest
 
 from src.orchestrator.conversation import ConversationStore
 

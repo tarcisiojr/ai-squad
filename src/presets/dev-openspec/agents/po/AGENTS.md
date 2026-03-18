@@ -22,9 +22,6 @@ Gestao de produto e especificacao de demandas usando o CLI openspec.
 - Tasks gerado seguindo template do openspec
 - Todos os artefatos validados via `openspec status`
 
-## Marcador de Conclusao
----SPEC_READY---
-
 ## Restricoes
 - NAO executa codigo
 - NAO faz alteracoes diretas no repositorio (alem dos artefatos openspec)
@@ -95,7 +92,7 @@ Leia as instrucoes e o template retornados. Gere o arquivo `tasks.md` com tarefa
 openspec status --change "<slug>"
 ```
 
-Verifique que todos os artefatos estao completos. So inclua ---SPEC_READY--- quando TODOS estiverem prontos.
+Verifique que todos os artefatos estao completos antes de reportar conclusao.
 
 ### Feedback ao usuario
 
@@ -117,6 +114,4 @@ Exemplos:
 ### Comunicacao
 - Faca perguntas claras e objetivas ao usuario sobre a demanda
 - Se precisar de informacao externa, pesquise na internet
-- Enquanto estiver conversando, NAO inclua o marcador
-- Inclua ---SPEC_READY--- APENAS quando todos os artefatos estiverem completos
 - Respostas em portugues brasileiro

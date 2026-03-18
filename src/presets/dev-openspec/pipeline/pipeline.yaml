@@ -10,11 +10,14 @@ pipeline:
       name: "Especificação"
       agent: po
       type: checkpoint
+      execution: subagent
+      model_tier: powerful
       file: steps/step-01-spec.md
 
     - id: implementacao
       name: "Implementação"
       agents: [dev-backend, dev-frontend]
+      type: agent
       execution: background
       model_tier: powerful
       file: steps/step-02-dev.md
@@ -23,6 +26,8 @@ pipeline:
       name: "Revisão de Código"
       agent: code-review
       type: checkpoint
+      execution: subagent
+      model_tier: powerful
       on_reject: implementacao
       max_review_cycles: 3
       file: steps/step-03-review.md
@@ -30,4 +35,7 @@ pipeline:
     - id: qualidade
       name: "QA"
       agent: qa
+      type: agent
+      execution: subagent
+      model_tier: powerful
       file: steps/step-04-qa.md

@@ -1,14 +1,12 @@
 """Testes para configuração e factory de providers."""
 
-import os
-import tempfile
 
 import pytest
 import yaml
 
-from src.factory import PlatformConfig, PlatformFactory, PersonaConfig
-from src.messaging.interface import MessageBus
 from src.adapters.interface import AIAgentAdapter
+from src.factory import PlatformConfig, PlatformFactory
+from src.messaging.interface import MessageBus
 from src.models import AgentStatus
 
 
@@ -79,8 +77,8 @@ class TestPlatformConfig:
         assert config.ai_provider == "claude-code"
         assert config.messaging_provider == "telegram"
         assert config.agent_timeout == 600
-        assert "po" in config.personas
-        assert config.personas["po"].name == "PO Agent"
+        assert "po" in config.agents
+        assert config.agents["po"].name == "PO Agent"
 
     def test_valores_padrao(self, tmp_path):
         """Verifica que valores padrão são aplicados."""
@@ -97,7 +95,7 @@ class TestPlatformConfig:
         config = PlatformConfig.from_yaml(config_file)
         assert config.agent_timeout == 300
         assert config.state_dir == "state/"
-        assert config.personas == {}
+        assert config.agents == {}
 
     def test_arquivo_nao_encontrado(self):
         """Verifica erro quando arquivo não existe."""

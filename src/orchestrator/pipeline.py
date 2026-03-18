@@ -188,18 +188,9 @@ class PipelineLoader:
             logger.warning("Erro ao ler step file %s: %s", step_path, e)
             return
 
-        # Parseia frontmatter YAML
-        frontmatter, body = self._parse_frontmatter(content)
-        if frontmatter:
-            # Frontmatter pode sobrescrever configuração do pipeline.yaml
-            if "on_reject" in frontmatter and not step.on_reject:
-                step.on_reject = frontmatter["on_reject"]
-            if "max_review_cycles" in frontmatter:
-                step.max_review_cycles = frontmatter["max_review_cycles"]
-            if "model_tier" in frontmatter:
-                step.model_tier = frontmatter["model_tier"]
-            if "execution" in frontmatter:
-                step.execution = frontmatter["execution"]
+        # Separa frontmatter (se existir) do corpo — configuração
+        # vem do pipeline.yaml, frontmatter é ignorado
+        _frontmatter, body = self._parse_frontmatter(content)
 
         # Parseia seções do body
         step.instructions = body

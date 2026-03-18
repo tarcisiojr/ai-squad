@@ -1,8 +1,6 @@
 """Testes para o daemon do ai-dev-team."""
 
-import asyncio
-import os
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 

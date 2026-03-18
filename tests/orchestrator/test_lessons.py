@@ -1,7 +1,6 @@
 """Testes para LessonsStore — persistência de lições aprendidas com FTS5."""
 
 import json
-from datetime import datetime, timezone
 
 import pytest
 

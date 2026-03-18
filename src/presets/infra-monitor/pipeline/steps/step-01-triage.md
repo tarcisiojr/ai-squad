@@ -1,10 +1,3 @@
----
-step: "01"
-name: "Triagem"
-type: agent
-agent: triager
----
-
 # Step 01: Triagem
 
 ## Inputs

@@ -1,7 +1,7 @@
 """Testes para o sistema de heartbeat — retomada de demandas paradas."""
 
 import json
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -123,6 +123,7 @@ class TestHeartbeatConfig:
     def test_config_from_yaml(self, tmp_path):
         """Verifica carregamento de heartbeat do YAML."""
         import yaml
+
         from src.factory import PlatformConfig
 
         config_file = tmp_path / "platform.yaml"

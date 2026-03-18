@@ -44,7 +44,9 @@ class TestTeamManager:
         assert config["agent_timeout"] == 300
         assert config["repo_path"] == str(repo)
         assert "po" in config["agents"]
-        assert "dev" in config["agents"]
+        assert "dev-backend" in config["agents"]
+        assert "dev-frontend" in config["agents"]
+        assert "code-review" in config["agents"]
         assert "qa" in config["agents"]
 
     def test_create_gera_env_com_placeholders(self, tmp_path):

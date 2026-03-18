@@ -1,12 +1,3 @@
----
-step: "02"
-name: "Implementação"
-type: agent
-agents: [dev-backend, dev-frontend]
-execution: background
-model_tier: powerful
----
-
 # Step 02: Implementação (Dev)
 
 ## Inputs

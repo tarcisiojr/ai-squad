@@ -14,6 +14,7 @@ async def extract_and_send_media(
     user_id: str,
     text: str,
     message_bus: MessageBus,
+    workspace: str = "/workspace",
 ) -> str:
     """Detecta caminhos de imagem e arquivos .md na resposta e envia via barramento.
 
@@ -27,11 +28,18 @@ async def extract_and_send_media(
     cleaned = text
     sent_files: set[str] = set()
 
+    def _resolve(p: str) -> str:
+        """Resolve caminho relativo ao workspace."""
+        if os.path.isabs(p):
+            return p
+        resolved = os.path.join(workspace, p)
+        return resolved
+
     # 1. Detecta markdown images: ![caption](path)
     md_img_pattern = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
     for match in md_img_pattern.finditer(text):
         caption = match.group(1)
-        path = match.group(2)
+        path = _resolve(match.group(2))
         if os.path.isfile(path) and path not in sent_files:
             try:
                 await message_bus.send_photo(user_id, path, caption)

@@ -1,14 +1,14 @@
 """Testes para o motor de orquestração."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
+from src.adapters.interface import AIAgentAdapter
+from src.messaging.interface import MessageBus
 from src.models import AgentStatus
 from src.orchestrator.engine import OrchestrationEngine
 from src.orchestrator.state import StateManager
-from src.adapters.interface import AIAgentAdapter
-from src.messaging.interface import MessageBus
 
 
 # Fixtures para mocks

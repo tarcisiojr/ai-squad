@@ -1,11 +1,3 @@
----
-step: "04"
-name: "QA"
-type: agent
-agent: qa
-model_tier: powerful
----
-
 # Step 04: QA (Quality Assurance)
 
 ## Inputs

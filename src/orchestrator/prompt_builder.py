@@ -84,9 +84,9 @@ def get_running_agents_status(running_agents: dict, personas: dict) -> str:
         if ra.status == "running":
             lines.append(f"- {label}: rodando ({elapsed})")
         elif ra.status == "done":
-            preview = (ra.result or "")[:100]
+            preview = (ra.result or "")[:300]
             if preview:
-                preview = f" — {preview}..."
+                preview = f" — {preview}"
             lines.append(f"- {label}: concluido ({elapsed}){preview}")
         elif ra.status == "error":
             lines.append(f"- {label}: erro ({elapsed}) — {ra.error}")

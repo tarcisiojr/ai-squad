@@ -2,22 +2,21 @@
 
 import asyncio
 import time
-from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
 
+from src.adapters.interface import AIAgentAdapter
+from src.factory import AgentConfig
+from src.messaging.interface import MessageBus
 from src.models import AgentStatus
-from src.factory import PersonaConfig
 from src.orchestrator.engine import OrchestrationEngine
 from src.orchestrator.state import StateManager
-from src.adapters.interface import AIAgentAdapter
-from src.messaging.interface import MessageBus
 
 TEST_PERSONAS = {
-    "po": PersonaConfig(name="PO", avatar="📋", command="/po", done_marker="---SPEC_READY---"),
-    "dev": PersonaConfig(name="Dev", avatar="🔧", command="/dev", done_marker="---DONE---"),
-    "qa": PersonaConfig(name="QA", avatar="🧪", command="/qa", done_marker="---QA_DONE---"),
+    "po": AgentConfig(name="PO", avatar="📋", command="/po", role="spec"),
+    "dev": AgentConfig(name="Dev", avatar="🔧", command="/dev", role="dev"),
+    "qa": AgentConfig(name="QA", avatar="🧪", command="/qa", role="review"),
 }
 
 
@@ -28,18 +27,10 @@ class CycleAdapter(AIAgentAdapter):
         self._status = AgentStatus.IDLE
         self._callback = None
 
-    # Marcadores por agente (mesmo do config)
-    MARKERS = {
-        "po": "---SPEC_READY---",
-        "dev": "---DONE---",
-        "qa": "---QA_DONE---",
-    }
-
     async def run(self, prompt: str, context: dict) -> str:
         self._status = AgentStatus.RUNNING
         agent = context.get("agent_name", "")
-        marker = self.MARKERS.get(agent, "")
-        resultado = f"ok:{agent}\n{marker}"
+        resultado = f"ok:{agent}"
         self._status = AgentStatus.DONE
         return resultado
 
@@ -100,24 +91,6 @@ class TestRunDemandCycle:
         # Squad Lead coordena — verifica que alguma mensagem foi enviada
         assert len(bus.mensagens) > 0 or len(bus.notificacoes) > 0
 
-    @pytest.mark.asyncio
-    async def test_conversa_com_marcador_aprovado(self, tmp_path):
-        """Verifica que marcador no texto aciona modo APPROVAL."""
-        adapter = CycleAdapter()  # Retorna texto com marcador
-        bus = CycleBus()  # send_approval_request retorna primeira opção (Aprovar)
-        state_mgr = StateManager(state_dir=str(tmp_path / "state"))
-        workspace = str(tmp_path / "workspace")
-        (tmp_path / "workspace").mkdir()
-        engine = OrchestrationEngine(adapter, bus, state_mgr, workspace=workspace, personas=TEST_PERSONAS)
-
-        resultado = await engine._agent_conversation(
-            "conv-1", "user1", "po", "Criar site",
-            {"fase": "especificacao"},
-        )
-
-        # Resultado deve ter conteúdo sem o marcador
-        assert "---SPEC_READY---" not in resultado
-        assert "ok:po" in resultado
 
 
 class SlowAdapter(AIAgentAdapter):
@@ -132,9 +105,8 @@ class SlowAdapter(AIAgentAdapter):
         self._status = AgentStatus.RUNNING
         await asyncio.sleep(self._delay)
         agent = context.get("agent_name", "")
-        marker = CycleAdapter.MARKERS.get(agent, "")
         self._status = AgentStatus.DONE
-        return f"resultado:{agent}\n{marker}"
+        return f"resultado:{agent}"
 
     async def ask(self, question: str) -> str:
         return "sim"
@@ -162,9 +134,9 @@ class TestFeedbackPeriodico:
         engine = OrchestrationEngine(
             adapter, bus, state_mgr, workspace=workspace, personas=TEST_PERSONAS,
         )
-        # Reduz intervalos para teste rapido
-        engine.TYPING_INTERVAL = 0.03
-        engine.FEEDBACK_INTERVAL = 0.08
+        # Reduz intervalos para teste rapido (FEEDBACK deve ser multiplo de TYPING)
+        engine.TYPING_INTERVAL = 0.02
+        engine.FEEDBACK_INTERVAL = 0.04
 
         resultado = await engine._agent_conversation(
             "fb-1", "user1", "po", "Testar feedback",
@@ -175,14 +147,12 @@ class TestFeedbackPeriodico:
         # Verifica que typing foi chamado
         assert bus.send_typing.call_count >= 1
 
-        # Verifica que feedback contextual foi enviado
+        # Verifica que feedback de tempo foi enviado (sender via kwarg, nao no texto)
         feedback_msgs = [
             msg for _, msg in bus.mensagens
-            if "[📋 PO]" in msg and "..." in msg
+            if "Trabalhando..." in msg
         ]
         assert len(feedback_msgs) >= 1
-        # Deve conter mensagem descritiva, nao generica
-        assert "requisitos" in feedback_msgs[0].lower() or "repositorio" in feedback_msgs[0].lower()
 
     @pytest.mark.asyncio
     async def test_feedback_cancelado_ao_concluir(self, tmp_path):
@@ -233,8 +203,8 @@ class TestFeedbackPeriodico:
         engine = OrchestrationEngine(
             adapter, bus, state_mgr, workspace=workspace, personas=TEST_PERSONAS,
         )
-        engine.TYPING_INTERVAL = 0.03
-        engine.FEEDBACK_INTERVAL = 0.08
+        engine.TYPING_INTERVAL = 0.02
+        engine.FEEDBACK_INTERVAL = 0.04
 
         resultado = await engine._agent_conversation(
             "fb-no-typing", "user1", "po", "Testar sem typing",
@@ -244,7 +214,7 @@ class TestFeedbackPeriodico:
         assert resultado
         feedback_msgs = [
             msg for _, msg in bus.mensagens
-            if "[📋 PO]" in msg and "..." in msg
+            if "Trabalhando..." in msg
         ]
         assert len(feedback_msgs) >= 1
 
@@ -261,8 +231,8 @@ class TestFeedbackPeriodico:
         engine = OrchestrationEngine(
             adapter, bus, state_mgr, workspace=workspace, personas=TEST_PERSONAS,
         )
-        engine.TYPING_INTERVAL = 0.03
-        engine.FEEDBACK_INTERVAL = 0.08
+        engine.TYPING_INTERVAL = 0.02
+        engine.FEEDBACK_INTERVAL = 0.04
 
         await engine._agent_conversation(
             "fb-3", "user1", "po", "Testar tempo",
@@ -271,85 +241,15 @@ class TestFeedbackPeriodico:
 
         feedback_msgs = [
             msg for _, msg in bus.mensagens
-            if "[📋 PO]" in msg and "..." in msg
+            if "Trabalhando..." in msg
         ]
-        # Deve haver pelo menos 2 feedbacks com mensagens diferentes
+        # Deve haver pelo menos 2 feedbacks com tempos diferentes
         if len(feedback_msgs) >= 2:
             assert feedback_msgs[0] != feedback_msgs[1]
 
 
 class TestInvokeAgent:
     """Testes para invocacao de agentes via engine."""
-
-    @pytest.mark.asyncio
-    async def test_invoke_agent_valido(self, tmp_path):
-        """Verifica invocacao de agente valido."""
-        adapter = CycleAdapter()
-        bus = CycleBus()
-        state_mgr = StateManager(state_dir=str(tmp_path / "state"))
-        workspace = str(tmp_path / "workspace")
-        (tmp_path / "workspace").mkdir()
-        engine = OrchestrationEngine(
-            adapter, bus, state_mgr, workspace=workspace, personas=TEST_PERSONAS,
-        )
-        engine.TYPING_INTERVAL = 0.5
-        engine.FEEDBACK_INTERVAL = 5.0
-
-        from src.orchestrator.tools import DemandStatus
-        engine._demand_statuses["inv-1"] = DemandStatus(demand_id="inv-1")
-
-        resultado = await engine._invoke_agent(
-            "inv-1", "user1", "dev", "Implementar feature",
-        )
-
-        assert resultado
-        assert "ok:dev" in resultado
-        # Notificacao de inicio enviada
-        assert any("Dev" in msg and "iniciando" in msg for _, msg in bus.notificacoes)
-        # Diretorio de specs criado
-        assert (tmp_path / "workspace" / "specs" / "inv-1").is_dir()
-
-    @pytest.mark.asyncio
-    async def test_invoke_agent_inexistente(self, tmp_path):
-        """Verifica erro ao invocar agente inexistente."""
-        adapter = CycleAdapter()
-        bus = CycleBus()
-        state_mgr = StateManager(state_dir=str(tmp_path / "state"))
-        workspace = str(tmp_path / "workspace")
-        (tmp_path / "workspace").mkdir()
-        engine = OrchestrationEngine(
-            adapter, bus, state_mgr, workspace=workspace, personas=TEST_PERSONAS,
-        )
-
-        resultado = await engine._invoke_agent(
-            "inv-2", "user1", "agente-fake", "Testar",
-        )
-
-        assert "nao encontrado" in resultado
-        assert "po" in resultado  # Lista disponiveis
-
-    @pytest.mark.asyncio
-    async def test_invoke_parallel(self, tmp_path):
-        """Verifica invocacao paralela de agentes."""
-        adapter = CycleAdapter()
-        bus = CycleBus()
-        state_mgr = StateManager(state_dir=str(tmp_path / "state"))
-        workspace = str(tmp_path / "workspace")
-        (tmp_path / "workspace").mkdir()
-        engine = OrchestrationEngine(
-            adapter, bus, state_mgr, workspace=workspace, personas=TEST_PERSONAS,
-        )
-        engine.TYPING_INTERVAL = 0.5
-        engine.FEEDBACK_INTERVAL = 5.0
-
-        resultados = await engine._invoke_parallel(
-            "par-1", "user1",
-            ["po", "dev"], ["Especificar", "Implementar"],
-        )
-
-        assert len(resultados) == 2
-        assert any("ok:po" in r for r in resultados)
-        assert any("ok:dev" in r for r in resultados)
 
     @pytest.mark.asyncio
     async def test_direct_agent_conversation(self, tmp_path):
@@ -388,7 +288,7 @@ class TestInvokeAgent:
         await engine._handle_progress("po", "Gerando proposal.md")
 
         assert any(
-            "PO" in msg and "Gerando proposal.md" in msg
+            "Gerando proposal.md" in msg
             for _, msg in bus.mensagens
         )
 
@@ -536,20 +436,10 @@ class TestAsyncAgentDelegation:
         assert "concluido" in result
 
     @pytest.mark.asyncio
-    async def test_on_agent_done_com_verificacao_ok(self, tmp_path):
-        """Verifica que _on_agent_done passa quando artefatos existem (artifact-based)."""
+    async def test_on_agent_done_marca_concluido(self, tmp_path):
+        """Verifica que _on_agent_done marca agente como concluido e notifica."""
         engine, bus = self._make_engine(tmp_path)
         from src.orchestrator.tools import RunningAgent
-
-        # Cria artefatos openspec para PO passar na verificação
-        ws = Path(engine._workspace)
-        change_dir = ws / "openspec" / "changes" / "test-change"
-        specs_dir = change_dir / "specs" / "feature"
-        specs_dir.mkdir(parents=True)
-        (change_dir / "proposal.md").write_text("# Proposal")
-        (change_dir / "design.md").write_text("# Design")
-        (specs_dir / "spec.md").write_text("# Spec\n- [ ] Criterio 1\n- [ ] Criterio 2")
-        (change_dir / "tasks.md").write_text("# Tasks\n- [ ] T1\n- [ ] T2\n- [ ] T3")
 
         engine._running_agents["po"] = RunningAgent(
             agent_name="po", demand_id="d1", user_id="user1", status="running",
@@ -565,59 +455,6 @@ class TestAsyncAgentDelegation:
 
         assert engine._running_agents["po"].status == "done"
         assert any("Concluido" in msg for _, msg in bus.mensagens)
-
-    @pytest.mark.asyncio
-    async def test_on_agent_done_verificacao_falha_re_invoca(self, tmp_path):
-        """Verifica que verificacao falha quando artefatos estao ausentes."""
-        engine, bus = self._make_engine(tmp_path)
-        from src.orchestrator.tools import RunningAgent
-        engine._running_agents["po"] = RunningAgent(
-            agent_name="po", demand_id="d1", user_id="user1", status="running",
-        )
-
-        # Sem artefatos → verificação falha
-        async def fake_work():
-            return "Especificacao pronta mas sem artefatos"
-
-        task = asyncio.create_task(fake_work())
-        await task
-
-        await engine._on_agent_done("po", task)
-
-        # Deve estar re-invocando (status running, retries=1)
-        assert engine._running_agents["po"].retries == 1
-        assert engine._running_agents["po"].status == "running"
-        assert any("Verificacao falhou" in msg for _, msg in bus.mensagens)
-
-        # Limpa task de retry
-        ra = engine._running_agents.get("po")
-        if ra and ra.task:
-            ra.task.cancel()
-            try:
-                await ra.task
-            except (asyncio.CancelledError, Exception):
-                pass
-
-    @pytest.mark.asyncio
-    async def test_on_agent_done_max_retries_marca_incomplete(self, tmp_path):
-        """Verifica que apos MAX_RETRIES marca como incomplete."""
-        engine, bus = self._make_engine(tmp_path)
-        engine.MAX_RETRIES = 0  # Nenhuma re-tentativa
-        from src.orchestrator.tools import RunningAgent
-        engine._running_agents["po"] = RunningAgent(
-            agent_name="po", demand_id="d1", user_id="user1", status="running",
-        )
-
-        async def fake_work():
-            return "Sem marcador"
-
-        task = asyncio.create_task(fake_work())
-        await task
-
-        await engine._on_agent_done("po", task)
-
-        assert engine._running_agents["po"].status == "incomplete"
-        assert any("Incompleto" in msg for _, msg in bus.mensagens)
 
     @pytest.mark.asyncio
     async def test_on_agent_done_com_erro(self, tmp_path):
@@ -655,47 +492,6 @@ class TestAsyncAgentDelegation:
         # Deve ter enviado mensagem ao bus
         assert len(bus.mensagens) > 0
 
-    @pytest.mark.asyncio
-    async def test_check_artifacts_enriched(self, tmp_path):
-        """Verifica check_artifacts enriquecido com validação de qualidade."""
-        engine, bus = self._make_engine(tmp_path)
-        ws = Path(engine._workspace)
-
-        # Sem change → mensagem de erro
-        result = engine._check_artifacts_enriched("nao-existe")
-        assert "nao encontrada" in result
-
-        # Cria change com artefatos válidos
-        change_dir = ws / "openspec" / "changes" / "minha-demanda"
-        specs_dir = change_dir / "specs" / "feature"
-        specs_dir.mkdir(parents=True)
-        (change_dir / "proposal.md").write_text("# Proposal")
-        (change_dir / "design.md").write_text("# Design")
-        (specs_dir / "spec.md").write_text("# Spec\n- [ ] Criterio 1")
-        (change_dir / "tasks.md").write_text("# Tasks\n- [ ] T1\n- [ ] T2\n- [ ] T3")
-
-        result = engine._check_artifacts_enriched("minha-demanda")
-        assert "APROVADO" in result
-
-    @pytest.mark.asyncio
-    async def test_check_artifacts_enriched_falha(self, tmp_path):
-        """Verifica check_artifacts detecta artefatos incompletos."""
-        engine, bus = self._make_engine(tmp_path)
-        ws = Path(engine._workspace)
-
-        # Change com specs sem critérios de aceite
-        change_dir = ws / "openspec" / "changes" / "incompleta"
-        specs_dir = change_dir / "specs" / "feature"
-        specs_dir.mkdir(parents=True)
-        (change_dir / "proposal.md").write_text("# Proposal")
-        (specs_dir / "spec.md").write_text("# Spec sem criterios")
-        # Sem design.md e tasks.md
-
-        result = engine._check_artifacts_enriched("incompleta")
-        assert "REPROVADO" in result
-        assert "design.md" in result
-
-
 class TestRunningAgent:
     """Testes para dataclass RunningAgent."""
 
@@ -725,111 +521,3 @@ class TestRunningAgent:
         assert ra.error is None
 
 
-class TestVerifyCompletion:
-    """Testes para verificação artifact-based de conclusão."""
-
-    def _make_engine(self, tmp_path):
-        adapter = CycleAdapter()
-        bus = CycleBus()
-        state_mgr = StateManager(state_dir=str(tmp_path / "state"))
-        workspace = str(tmp_path / "workspace")
-        (tmp_path / "workspace").mkdir(exist_ok=True)
-        engine = OrchestrationEngine(
-            adapter, bus, state_mgr, workspace=workspace, personas=TEST_PERSONAS,
-        )
-        return engine
-
-    def _create_valid_po_artifacts(self, tmp_path):
-        """Cria artefatos openspec válidos para PO."""
-        ws = tmp_path / "workspace" / "openspec" / "changes" / "test-change"
-        specs_dir = ws / "specs" / "feature"
-        specs_dir.mkdir(parents=True)
-        (ws / "proposal.md").write_text("# Proposal")
-        (ws / "design.md").write_text("# Design")
-        (specs_dir / "spec.md").write_text("# Spec\n- [ ] Criterio 1\n- [ ] Criterio 2")
-        (ws / "tasks.md").write_text("# Tasks\n- [ ] T1\n- [ ] T2\n- [ ] T3")
-
-    def test_po_com_artefatos_validos(self, tmp_path):
-        """PO com todos os artefatos openspec válidos passa."""
-        engine = self._make_engine(tmp_path)
-        self._create_valid_po_artifacts(tmp_path)
-        result = engine._verify_completion("po", "Tudo pronto")
-        assert result.passed
-
-    def test_po_sem_artefatos(self, tmp_path):
-        """PO sem artefatos openspec falha."""
-        engine = self._make_engine(tmp_path)
-        result = engine._verify_completion("po", "Tudo pronto")
-        assert not result.passed
-        assert "openspec" in result.details.lower() or "nao encontrado" in result.details.lower()
-
-    def test_po_sem_criterios_aceite(self, tmp_path):
-        """PO com specs sem critérios de aceite falha."""
-        engine = self._make_engine(tmp_path)
-        ws = tmp_path / "workspace" / "openspec" / "changes" / "test"
-        specs_dir = ws / "specs" / "feature"
-        specs_dir.mkdir(parents=True)
-        (ws / "proposal.md").write_text("# Proposal")
-        (ws / "design.md").write_text("# Design")
-        (specs_dir / "spec.md").write_text("# Spec sem criterios")
-        (ws / "tasks.md").write_text("# Tasks\n- [ ] T1\n- [ ] T2\n- [ ] T3")
-
-        result = engine._verify_completion("po", "Pronto")
-        assert not result.passed
-        assert "criterios" in result.details.lower()
-
-    def test_dev_com_tasks_completas(self, tmp_path):
-        """Dev com tasks.md tudo concluído passa."""
-        engine = self._make_engine(tmp_path)
-        result = engine._verify_completion("dev", "Implementado")
-        # Sem tasks.md pendentes → passa
-        assert result.passed
-
-    def test_dev_com_tasks_pendentes(self, tmp_path):
-        """Dev com tasks pendentes no tasks.md falha."""
-        engine = self._make_engine(tmp_path)
-        ws = tmp_path / "workspace" / "openspec" / "changes" / "minha-demanda"
-        ws.mkdir(parents=True)
-        (ws / "tasks.md").write_text(
-            "## Tasks\n- [x] Task 1\n- [ ] Task 2\n- [ ] Task 3\n"
-        )
-
-        result = engine._verify_completion("dev", "Implementado")
-        assert not result.passed
-        assert "pendentes" in result.details
-
-    def test_qa_com_aprovado(self, tmp_path):
-        """QA com 'APROVADO' no resultado passa."""
-        engine = self._make_engine(tmp_path)
-        result = engine._verify_completion("qa", "Resultado: APROVADO. Cobertura 85%.")
-        assert result.passed
-
-    def test_qa_sem_aprovado(self, tmp_path):
-        """QA sem 'APROVADO' falha."""
-        engine = self._make_engine(tmp_path)
-        result = engine._verify_completion("qa", "Relatorio sem resultado final")
-        assert not result.passed
-
-    def test_agente_desconhecido_passa(self, tmp_path):
-        """Agente sem verificação específica passa."""
-        engine = self._make_engine(tmp_path)
-        from src.factory import PersonaConfig
-        engine._personas["security"] = PersonaConfig(
-            name="Security", avatar="🔒", command="/sec",
-        )
-        result = engine._verify_completion("security", "Analise concluida")
-        assert result.passed
-
-    def test_check_tasks_md_sem_changes(self, tmp_path):
-        """Sem diretório de changes retorna None."""
-        engine = self._make_engine(tmp_path)
-        assert engine._check_tasks_md_completion() is None
-
-    def test_check_tasks_md_todas_completas(self, tmp_path):
-        """Tasks.md com tudo [x] retorna None."""
-        engine = self._make_engine(tmp_path)
-        ws = tmp_path / "workspace" / "openspec" / "changes" / "test"
-        ws.mkdir(parents=True)
-        (ws / "tasks.md").write_text("- [x] Task 1\n- [x] Task 2\n")
-
-        assert engine._check_tasks_md_completion() is None

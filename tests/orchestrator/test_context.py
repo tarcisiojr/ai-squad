@@ -1,17 +1,16 @@
-"""Testes para o coletor de contexto do produto."""
-
-import pytest
-
-from src.orchestrator.context import ProductContextCollector
+"""Testes para o coletor de contexto do workspace."""
 
 
-class TestProductContextCollector:
-    """Testes para ProductContextCollector."""
+from src.orchestrator.context import WorkspaceContextCollector
+
+
+class TestWorkspaceContextCollector:
+    """Testes para WorkspaceContextCollector."""
 
     def test_collect_com_readme(self, tmp_path):
         """Verifica coleta de README.md."""
         (tmp_path / "README.md").write_text("# Meu Projeto\nDescrição aqui.")
-        collector = ProductContextCollector(str(tmp_path))
+        collector = WorkspaceContextCollector(str(tmp_path))
 
         result = collector.collect()
 
@@ -20,7 +19,7 @@ class TestProductContextCollector:
 
     def test_collect_sem_readme(self, tmp_path):
         """Verifica comportamento sem README."""
-        collector = ProductContextCollector(str(tmp_path))
+        collector = WorkspaceContextCollector(str(tmp_path))
 
         result = collector.collect()
 
@@ -29,7 +28,7 @@ class TestProductContextCollector:
     def test_readme_truncamento(self, tmp_path):
         """Verifica truncamento de README grande."""
         (tmp_path / "README.md").write_text("x" * 5000)
-        collector = ProductContextCollector(str(tmp_path))
+        collector = WorkspaceContextCollector(str(tmp_path))
 
         result = collector.collect()
 
@@ -41,7 +40,7 @@ class TestProductContextCollector:
         (tmp_path / "src" / "main.py").touch()
         (tmp_path / "tests").mkdir()
 
-        collector = ProductContextCollector(str(tmp_path))
+        collector = WorkspaceContextCollector(str(tmp_path))
         result = collector.collect()
 
         assert "src/" in result
@@ -53,7 +52,7 @@ class TestProductContextCollector:
         (tmp_path / ".git").mkdir()
         (tmp_path / "src").mkdir()
 
-        collector = ProductContextCollector(str(tmp_path))
+        collector = WorkspaceContextCollector(str(tmp_path))
         result = collector.collect()
 
         assert ".git" not in result
@@ -65,7 +64,7 @@ class TestProductContextCollector:
         deep.mkdir(parents=True)
         (deep / "deep.txt").touch()
 
-        collector = ProductContextCollector(str(tmp_path))
+        collector = WorkspaceContextCollector(str(tmp_path))
         result = collector.collect()
 
         # Profundidade 3+ não deve aparecer
@@ -77,7 +76,7 @@ class TestProductContextCollector:
         specs_dir.mkdir(parents=True)
         (specs_dir / "proposal.md").write_text("# Demanda\nCriar API de auth.")
 
-        collector = ProductContextCollector(str(tmp_path))
+        collector = WorkspaceContextCollector(str(tmp_path))
         result = collector.collect()
 
         assert "Demandas anteriores" in result
@@ -85,14 +84,14 @@ class TestProductContextCollector:
 
     def test_sem_specs(self, tmp_path):
         """Verifica comportamento sem pasta specs."""
-        collector = ProductContextCollector(str(tmp_path))
+        collector = WorkspaceContextCollector(str(tmp_path))
         result = collector.collect()
 
         assert "Demandas anteriores" not in result
 
     def test_workspace_vazio(self, tmp_path):
         """Verifica comportamento com workspace vazio."""
-        collector = ProductContextCollector(str(tmp_path))
+        collector = WorkspaceContextCollector(str(tmp_path))
         result = collector.collect()
 
         # Pode ter tree mas sem README nem specs

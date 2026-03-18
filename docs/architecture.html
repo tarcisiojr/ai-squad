@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Dev Platform — Arquitetura</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f172a; color: #e2e8f0; padding: 32px; min-height: 100vh; }
+  h1 { text-align: center; font-size: 28px; margin-bottom: 8px; color: #f8fafc; }
+  .subtitle { text-align: center; color: #94a3b8; margin-bottom: 32px; font-size: 14px; }
+
+  .diagram { max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
+
+  /* Camadas */
+  .layer { border: 1px solid #334155; border-radius: 12px; padding: 20px; position: relative; background: #1e293b; }
+  .layer-label { position: absolute; top: -12px; left: 20px; background: #0f172a; padding: 0 12px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+
+  .layer-user .layer-label { color: #38bdf8; }
+  .layer-messaging .layer-label { color: #a78bfa; }
+  .layer-orchestration .layer-label { color: #fb923c; }
+  .layer-intelligence .layer-label { color: #34d399; }
+  .layer-agents .layer-label { color: #f472b6; }
+  .layer-persistence .layer-label { color: #fbbf24; }
+  .layer-config .layer-label { color: #94a3b8; }
+
+  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: stretch; }
+  .row + .row { margin-top: 12px; }
+
+  /* Blocos */
+  .block { border-radius: 8px; padding: 12px 16px; flex: 1; min-width: 140px; }
+  .block h3 { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .block p { font-size: 11px; opacity: 0.8; line-height: 1.4; }
+  .block .file { font-size: 10px; font-family: monospace; opacity: 0.5; margin-top: 4px; }
+  .block .tag { display: inline-block; font-size: 9px; padding: 1px 6px; border-radius: 4px; margin-top: 4px; font-weight: 600; }
+
+  /* Cores por camada */
+  .c-blue { background: #1e3a5f; border: 1px solid #38bdf8; }
+  .c-blue h3 { color: #7dd3fc; }
+  .c-purple { background: #2e1065; border: 1px solid #a78bfa; }
+  .c-purple h3 { color: #c4b5fd; }
+  .c-orange { background: #431407; border: 1px solid #fb923c; }
+  .c-orange h3 { color: #fdba74; }
+  .c-green { background: #064e3b; border: 1px solid #34d399; }
+  .c-green h3 { color: #6ee7b7; }
+  .c-pink { background: #500724; border: 1px solid #f472b6; }
+  .c-pink h3 { color: #f9a8d4; }
+  .c-yellow { background: #422006; border: 1px solid #fbbf24; }
+  .c-yellow h3 { color: #fde68a; }
+  .c-gray { background: #1e293b; border: 1px solid #475569; }
+  .c-gray h3 { color: #cbd5e1; }
+
+  .tag-abc { background: #7c3aed; color: white; }
+  .tag-new { background: #10b981; color: white; }
+  .tag-deleted { background: #ef4444; color: white; text-decoration: line-through; }
+  .tag-core { background: #f59e0b; color: #1e293b; }
+
+  /* Setas */
+  .arrow-down { text-align: center; font-size: 24px; color: #475569; line-height: 1; }
+  .arrow-label { font-size: 11px; color: #64748b; text-align: center; }
+
+  /* Fluxo */
+  .flow-section { margin-top: 40px; max-width: 1200px; margin-left: auto; margin-right: auto; }
+  .flow-section h2 { font-size: 20px; margin-bottom: 16px; color: #f8fafc; }
+  .flow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 16px; background: #1e293b; border-radius: 12px; border: 1px solid #334155; }
+  .flow-step { padding: 8px 14px; border-radius: 6px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+  .flow-arrow { color: #475569; font-size: 18px; }
+
+  .fs-user { background: #1e3a5f; color: #7dd3fc; border: 1px solid #38bdf8; }
+  .fs-msg { background: #2e1065; color: #c4b5fd; border: 1px solid #a78bfa; }
+  .fs-engine { background: #431407; color: #fdba74; border: 1px solid #fb923c; }
+  .fs-intel { background: #064e3b; color: #6ee7b7; border: 1px solid #34d399; }
+  .fs-agent { background: #500724; color: #f9a8d4; border: 1px solid #f472b6; }
+  .fs-persist { background: #422006; color: #fde68a; border: 1px solid #fbbf24; }
+
+  /* Legenda */
+  .legend { margin-top: 40px; max-width: 1200px; margin-left: auto; margin-right: auto; }
+  .legend h2 { font-size: 20px; margin-bottom: 16px; color: #f8fafc; }
+  .legend-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 8px 12px; background: #1e293b; border-radius: 6px; border: 1px solid #334155; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+
+  /* Status */
+  .status-section { margin-top: 40px; max-width: 1200px; margin-left: auto; margin-right: auto; }
+  .status-section h2 { font-size: 20px; margin-bottom: 16px; color: #f8fafc; }
+  .status-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 16px; }
+  .status-card { padding: 16px; border-radius: 8px; border: 1px solid #334155; background: #1e293b; }
+  .status-card h3 { font-size: 14px; margin-bottom: 8px; }
+  .status-card ul { list-style: none; font-size: 12px; }
+  .status-card li { padding: 3px 0; }
+  .status-card li::before { margin-right: 6px; }
+  .ok::before { content: "✅"; }
+  .warn::before { content: "⚠️"; }
+  .removed::before { content: "🗑️"; }
+  .new-feat::before { content: "🆕"; }
+</style>
+</head>
+<body>
+
+<h1>AI Dev Platform — Arquitetura Atual</h1>
+<p class="subtitle">Orquestração multi-agente por IA com pipeline declarativo framework-agnostic &bull; Março 2026</p>
+
+<div class="diagram">
+
+  <!-- Camada: Usuário -->
+  <div class="layer layer-user">
+    <div class="layer-label">Camada de Entrada</div>
+    <div class="row">
+      <div class="block c-blue">
+        <h3>👤 Usuário</h3>
+        <p>Envia mensagens de texto, voz ou fotos</p>
+      </div>
+      <div class="block c-blue">
+        <h3>📱 Telegram</h3>
+        <p>Canal principal de produção. Suporta voz (Whisper), fotos e Markdown</p>
+        <div class="file">src/messaging/telegram.py</div>
+      </div>
+      <div class="block c-blue">
+        <h3>💻 CLI</h3>
+        <p>Canal para desenvolvimento local via stdin/stdout</p>
+        <div class="file">src/messaging/cli.py</div>
+      </div>
+      <div class="block c-blue" style="flex: 0.6">
+        <h3>MessageBus</h3>
+        <p>Interface ABC — qualquer canal implementa</p>
+        <span class="tag tag-abc">ABC</span>
+        <div class="file">src/messaging/interface.py</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow-down">▼</div>
+  <div class="arrow-label">receive_message() → callback → create Demand</div>
+
+  <!-- Camada: Daemon -->
+  <div class="layer layer-messaging">
+    <div class="layer-label">Daemon (Loop Principal)</div>
+    <div class="row">
+      <div class="block c-purple">
+        <h3>🔄 Daemon</h3>
+        <p>Event loop: polling de mensagens + heartbeat + gerenciamento de demandas</p>
+        <div class="file">src/daemon.py</div>
+      </div>
+      <div class="block c-purple">
+        <h3>🏭 PlatformFactory</h3>
+        <p>DI Container. Único ponto que conhece implementações concretas</p>
+        <span class="tag tag-core">Core</span>
+        <div class="file">src/factory.py</div>
+      </div>
+      <div class="block c-purple" style="flex: 0.7">
+        <h3>⚙️ PlatformConfig</h3>
+        <p>Dataclass: providers, timeouts, agents, heartbeat, models</p>
+        <div class="file">platform.yaml → factory.py</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow-down">▼</div>
+  <div class="arrow-label">process_demand(demand) → Squad Lead com MCP tools</div>
+
+  <!-- Camada: Orquestração -->
+  <div class="layer layer-orchestration">
+    <div class="layer-label">Orquestração (Squad Lead)</div>
+    <div class="row">
+      <div class="block c-orange" style="flex: 2">
+        <h3>🧠 OrchestrationEngine</h3>
+        <p>Squad Lead hub-spoke. Recebe demandas, decide estratégia, delega via MCP tools (start_agent, advance_step, check_artifacts...). Máx 15 turns por ciclo</p>
+        <span class="tag tag-core">Core</span>
+        <div class="file">src/orchestrator/engine.py (28KB)</div>
+      </div>
+      <div class="block c-orange">
+        <h3>🏃 AgentRunner</h3>
+        <p>Gerencia agentes em background como asyncio.Task. Retries com backoff (2/4/8s). Callbacks ao engine</p>
+        <span class="tag tag-new">NOVO</span>
+        <div class="file">src/orchestrator/agent_runner.py</div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="block c-orange">
+        <h3>📋 PipelineExecutor</h3>
+        <p>Executa steps do pipeline.yaml. Quality gates, checkpoints, loops de revisão (on_reject)</p>
+        <div class="file">src/orchestrator/pipeline_state.py</div>
+      </div>
+      <div class="block c-orange">
+        <h3>📄 PipelineLoader</h3>
+        <p>Parse de pipeline.yaml + step files (.md com frontmatter YAML)</p>
+        <div class="file">src/orchestrator/pipeline.py</div>
+      </div>
+      <div class="block c-orange">
+        <h3>🔧 MCP Tools</h3>
+        <p>start_agent, get_running_agents, advance_step, skip_step, rerun_step, check_artifacts, report_progress...</p>
+        <div class="file">src/orchestrator/tools.py</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow-down">▼</div>
+  <div class="arrow-label">build_prompt() → select_model() → adapter.run()</div>
+
+  <!-- Camada: Inteligência -->
+  <div class="layer layer-intelligence">
+    <div class="layer-label">Camada de Inteligência</div>
+    <div class="row">
+      <div class="block c-green">
+        <h3>🧩 PromptBuilder</h3>
+        <p>Monta contexto: AGENTS.md + daily notes + lessons + conversation history</p>
+        <div class="file">src/orchestrator/prompt_builder.py</div>
+      </div>
+      <div class="block c-green">
+        <h3>🔀 ModelRouter</h3>
+        <p>Classifica complexidade (light/heavy) e roteia para modelo apropriado</p>
+        <div class="file">src/orchestrator/model_router.py</div>
+      </div>
+      <div class="block c-green">
+        <h3>📷 Media</h3>
+        <p>Detecta e envia imagens/arquivos nas respostas dos agentes</p>
+        <div class="file">src/orchestrator/media.py</div>
+      </div>
+      <div class="block c-green">
+        <h3>🎤 Whisper</h3>
+        <p>Transcrição de áudio via Whisper API</p>
+        <div class="file">src/whisper/server.py</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow-down">▼</div>
+  <div class="arrow-label">asyncio.Task → ClaudeAgentSDKAdapter.run() em background</div>
+
+  <!-- Camada: Agentes -->
+  <div class="layer layer-agents">
+    <div class="layer-label">Agentes (Background Tasks)</div>
+    <div class="row">
+      <div class="block c-pink" style="flex: 0.8">
+        <h3>AIAgentAdapter</h3>
+        <p>Interface ABC: run(), ask(), status(), on_human_needed()</p>
+        <span class="tag tag-abc">ABC</span>
+        <div class="file">src/adapters/interface.py</div>
+      </div>
+      <div class="block c-pink" style="flex: 1.5">
+        <h3>🤖 ClaudeAgentSDK</h3>
+        <p>Implementação com Claude Agent SDK. Agentes com MCP tools (filesystem, bash, etc). Retry com backoff. context_length_exceeded → comprime prompt</p>
+        <div class="file">src/adapters/claude_agent_sdk.py (25KB)</div>
+      </div>
+      <div class="block c-pink">
+        <h3>📦 Presets</h3>
+        <p>Templates copiáveis: dev-openspec (PO→Dev→Review→QA), infra-monitor (Triager→SRE→Validator)</p>
+        <div class="file">src/presets/</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow-down">▼</div>
+  <div class="arrow-label">Persistência com atomic_write (fsync) → JSON files</div>
+
+  <!-- Camada: Persistência -->
+  <div class="layer layer-persistence">
+    <div class="layer-label">Persistência & Memória</div>
+    <div class="row">
+      <div class="block c-yellow">
+        <h3>💬 Conversation</h3>
+        <p>Histórico por demanda. Auto-sumarização quando > 20 msgs</p>
+        <div class="file">conversation.py</div>
+      </div>
+      <div class="block c-yellow">
+        <h3>📓 Journal</h3>
+        <p>Decisões do Squad Lead por demanda (raciocínio, delegações)</p>
+        <div class="file">journal.py</div>
+      </div>
+      <div class="block c-yellow">
+        <h3>📚 Lessons</h3>
+        <p>Aprendizado FTS5 entre demandas (problema → solução)</p>
+        <div class="file">lessons.py</div>
+      </div>
+      <div class="block c-yellow">
+        <h3>📅 DailyNotes</h3>
+        <p>Resumo diário. Últimos 3 dias injetados no prompt</p>
+        <div class="file">daily_notes.py</div>
+      </div>
+      <div class="block c-yellow">
+        <h3>💾 State</h3>
+        <p>JSON atômico (fsync). Pipeline state, agent state</p>
+        <div class="file">state.py + atomic_write.py</div>
+      </div>
+      <div class="block c-yellow">
+        <h3>🌳 Worktree</h3>
+        <p>Git worktrees para isolamento de agentes</p>
+        <div class="file">worktree.py</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Camada: CLI -->
+  <div class="layer layer-config">
+    <div class="layer-label">CLI & Gestão de Times</div>
+    <div class="row">
+      <div class="block c-gray">
+        <h3>🖥️ CLI (Typer)</h3>
+        <p>create, list, start, status — gerencia times e execução</p>
+        <div class="file">src/cli/main.py</div>
+      </div>
+      <div class="block c-gray">
+        <h3>👥 TeamManager</h3>
+        <p>Copia presets, configura agents, gerencia diretórios de time</p>
+        <div class="file">src/cli/team_manager.py</div>
+      </div>
+      <div class="block c-gray">
+        <h3>📝 Templates</h3>
+        <p>Gerador de config.yaml para novos times</p>
+        <div class="file">src/cli/templates/config.py</div>
+      </div>
+      <div class="block c-gray">
+        <h3>🌐 ProductContext</h3>
+        <p>Coleta CLAUDE.md + tree do repositório alvo</p>
+        <div class="file">src/orchestrator/context.py</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Fluxo de uma Demanda -->
+<div class="flow-section">
+  <h2>Fluxo de uma Demanda</h2>
+  <div class="flow">
+    <div class="flow-step fs-user">👤 Usuário envia mensagem</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step fs-msg">📱 Telegram/CLI recebe</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step fs-msg">🔄 Daemon cria Demand</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step fs-engine">🧠 Engine processa</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step fs-engine">📋 Pipeline carrega steps</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step fs-intel">🧩 Monta prompt + contexto</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step fs-intel">🔀 Seleciona modelo</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step fs-agent">🏃 AgentRunner inicia task</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step fs-agent">🤖 Agente executa (background)</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step fs-engine">✅ Quality gate valida</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step fs-persist">💾 Persiste estado</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step fs-user">📤 Resposta ao usuário</div>
+  </div>
+</div>
+
+<!-- Status das Funcionalidades -->
+<div class="status-section">
+  <h2>Status das Funcionalidades</h2>
+  <div class="status-grid">
+
+    <div class="status-card">
+      <h3 style="color: #34d399;">Funcionalidades Ativas</h3>
+      <ul>
+        <li class="ok">Pipeline declarativo YAML com steps e quality gates</li>
+        <li class="ok">Squad Lead hub-spoke com MCP tools (15 turns)</li>
+        <li class="ok">Agentes em background (asyncio.Task)</li>
+        <li class="ok">Retry com backoff exponencial (2/4/8s)</li>
+        <li class="ok">Auto-sumarização de conversa (> 20 msgs)</li>
+        <li class="ok">Model routing light/heavy por complexidade</li>
+        <li class="ok">Journal de decisões por demanda</li>
+        <li class="ok">Lessons FTS5 entre demandas</li>
+        <li class="ok">Daily Notes (últimos 3 dias no prompt)</li>
+        <li class="ok">Checkpoints para aprovação humana</li>
+        <li class="ok">Loops de revisão (on_reject)</li>
+        <li class="ok">Transcrição de áudio (Whisper)</li>
+        <li class="ok">Detecção e envio de mídia (imagens/arquivos)</li>
+        <li class="ok">Git worktrees para isolamento</li>
+        <li class="ok">Heartbeat com stall detection</li>
+        <li class="ok">CLI: create, list, start, status</li>
+        <li class="ok">Presets: dev-openspec, infra-monitor</li>
+      </ul>
+    </div>
+
+    <div class="status-card">
+      <h3 style="color: #10b981;">Novidades (Working Tree)</h3>
+      <ul>
+        <li class="new-feat">AgentRunner extraído do engine (separação de concerns)</li>
+        <li class="new-feat">CLIMessageBus com testes dedicados</li>
+        <li class="new-feat">Refactor: barramento → messaging (renomeação)</li>
+      </ul>
+    </div>
+
+    <div class="status-card">
+      <h3 style="color: #ef4444;">Removidos</h3>
+      <ul>
+        <li class="removed">verification.py — lógica movida para pipeline_state</li>
+        <li class="removed">test_barramento.py — renomeado para test_telegram.py</li>
+        <li class="removed">AgentRegistry — substituído por agents dict no config</li>
+        <li class="removed">Fases hardcoded em get_demand_state_summary</li>
+      </ul>
+    </div>
+
+    <div class="status-card">
+      <h3 style="color: #fbbf24;">Interfaces (Extensibilidade)</h3>
+      <ul>
+        <li class="ok"><strong>MessageBus ABC</strong> — Telegram, CLI (extensível)</li>
+        <li class="ok"><strong>AIAgentAdapter ABC</strong> — Claude Agent SDK (extensível)</li>
+        <li class="ok"><strong>PlatformFactory</strong> — register_ai_adapter() / register_message_bus()</li>
+        <li class="ok"><strong>Presets</strong> — diretórios copiáveis com pipeline + agents</li>
+      </ul>
+    </div>
+
+  </div>
+</div>
+
+<!-- Legenda -->
+<div class="legend">
+  <h2>Legenda</h2>
+  <div class="legend-grid">
+    <div class="legend-item"><div class="legend-dot" style="background: #38bdf8;"></div> Entrada — Usuário e canais de mensageria</div>
+    <div class="legend-item"><div class="legend-dot" style="background: #a78bfa;"></div> Daemon — Loop principal e DI container</div>
+    <div class="legend-item"><div class="legend-dot" style="background: #fb923c;"></div> Orquestração — Squad Lead, pipeline e MCP tools</div>
+    <div class="legend-item"><div class="legend-dot" style="background: #34d399;"></div> Inteligência — Prompt building, model routing, media</div>
+    <div class="legend-item"><div class="legend-dot" style="background: #f472b6;"></div> Agentes — Adapter SDK e presets de times</div>
+    <div class="legend-item"><div class="legend-dot" style="background: #fbbf24;"></div> Persistência — State, journal, lessons, daily notes</div>
+    <div class="legend-item"><div class="legend-dot" style="background: #475569;"></div> CLI — Gestão de times e templates</div>
+    <div class="legend-item"><div class="legend-dot" style="background: #7c3aed; color: white; font-size: 10px; display: flex; align-items: center; justify-content: center; font-weight: bold;">ABC</div> Interface abstrata (extensível)</div>
+    <div class="legend-item"><div class="legend-dot" style="background: #10b981; color: white; font-size: 10px; display: flex; align-items: center; justify-content: center; font-weight: bold;">N</div> Novo (não commitado)</div>
+  </div>
+</div>
+
+<p style="text-align: center; margin-top: 48px; color: #475569; font-size: 12px;">
+  Gerado em 17/03/2026 — baseado na análise do working tree atual
+</p>
+
+</body>
+</html>

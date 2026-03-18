@@ -1,12 +1,3 @@
----
-step: "03"
-name: "Revisão de Código"
-type: checkpoint
-agent: code-review
-on_reject: implementacao
-max_review_cycles: 3
----
-
 # Step 03: Revisão de Código (Code Review)
 
 ## Inputs

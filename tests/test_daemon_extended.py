@@ -1,7 +1,5 @@
 """Testes estendidos para o daemon — cobertura de caminhos adicionais."""
 
-import asyncio
-import os
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 

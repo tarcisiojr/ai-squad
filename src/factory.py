@@ -29,17 +29,12 @@ class AgentConfig:
     name: str
     avatar: str
     command: str = ""
-    done_marker: str = ""
     agents_md: str = ""
     role: str = ""  # papel do agente: spec, dev, review, generic (vazio = inferir)
     timeout: int = 0  # 0 = usa agent_timeout padrao
     submodules: list[SubmoduleConfig] = field(
         default_factory=list
     )  # submodulos que o agente trabalha
-
-
-# Alias para retrocompatibilidade
-PersonaConfig = AgentConfig
 
 
 @dataclass
@@ -71,7 +66,6 @@ class PlatformConfig:
     ai_provider: str
     messaging_provider: str
     agent_timeout: int = 300
-    dev_timeout: int = 600
     state_dir: str = "state/"
     repo_path: str = ""
     ai_model: str | None = None
@@ -80,11 +74,6 @@ class PlatformConfig:
     squad_lead: SquadLeadConfig = field(default_factory=SquadLeadConfig)
     heartbeat: HeartbeatConfig = field(default_factory=HeartbeatConfig)
     agents: dict[str, AgentConfig] = field(default_factory=dict)
-
-    @property
-    def personas(self) -> dict[str, AgentConfig]:
-        """Alias para retrocompatibilidade."""
-        return self.agents
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> "PlatformConfig":
@@ -144,7 +133,6 @@ class PlatformConfig:
                 name=config.get("name", nome),
                 avatar=config.get("avatar", ""),
                 command=config.get("command", f"/{nome}"),
-                done_marker=config.get("done_marker", ""),
                 role=config.get("role", ""),
                 timeout=config.get("timeout", 0),
                 submodules=submodules,
@@ -154,7 +142,6 @@ class PlatformConfig:
             ai_provider=data["ai_provider"],
             messaging_provider=data["messaging_provider"],
             agent_timeout=data.get("agent_timeout", 300),
-            dev_timeout=data.get("dev_timeout", 600),
             state_dir=data.get("state_dir", "state/"),
             repo_path=data.get("repo_path", ""),
             ai_model=data.get("ai_model"),
