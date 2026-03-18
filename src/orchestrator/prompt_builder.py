@@ -72,24 +72,32 @@ def get_agents_summary(personas: dict, agents_dir: Path) -> str:
 
 
 def get_running_agents_status(running_agents: dict, personas: dict) -> str:
-    """Retorna status formatado de todos os agentes."""
+    """Retorna status formatado de todos os agentes, agrupados por demanda."""
     if not running_agents:
         return "Nenhum agente ativo no momento."
 
-    lines = []
+    # Agrupa agentes por demand_id
+    by_demand: dict[str, list[tuple[str, object]]] = {}
     for name, ra in running_agents.items():
-        label = _get_agent_label(name, personas)
-        elapsed = ra.elapsed_str()
+        demand_id = ra.demand_id or "sem-demanda"
+        by_demand.setdefault(demand_id, []).append((name, ra))
 
-        if ra.status == "running":
-            lines.append(f"- {label}: rodando ({elapsed})")
-        elif ra.status == "done":
-            preview = (ra.result or "")[:300]
-            if preview:
-                preview = f" — {preview}"
-            lines.append(f"- {label}: concluido ({elapsed}){preview}")
-        elif ra.status == "error":
-            lines.append(f"- {label}: erro ({elapsed}) — {ra.error}")
+    lines = []
+    for demand_id, agents in by_demand.items():
+        lines.append(f"**Demanda: {demand_id}**")
+        for name, ra in agents:
+            label = _get_agent_label(name, personas)
+            elapsed = ra.elapsed_str()
+
+            if ra.status == "running":
+                lines.append(f"  - {label}: rodando ({elapsed})")
+            elif ra.status == "done":
+                preview = (ra.result or "")[:300]
+                if preview:
+                    preview = f" — {preview}"
+                lines.append(f"  - {label}: concluido ({elapsed}){preview}")
+            elif ra.status == "error":
+                lines.append(f"  - {label}: erro ({elapsed}) — {ra.error}")
 
     return "\n".join(lines)
 

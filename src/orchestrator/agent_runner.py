@@ -165,12 +165,14 @@ class AgentRunner:
         prompt: str,
         demand_id: str,
         user_id: str,
+        thread_id: int | None = None,
     ) -> None:
         """Inicia agente como asyncio task em background."""
         running = RunningAgent(
             agent_name=agent_name,
             demand_id=demand_id,
             user_id=user_id,
+            thread_id=thread_id,
             started_at=time.time(),
             status="running",
         )
@@ -306,6 +308,7 @@ class AgentRunner:
                 user_id,
                 f"Concluido!\n\n{preview}",
                 sender=label,  # type: ignore[call-arg]
+                thread_id=running.thread_id,
             )
 
             # Dispara Squad Lead com contexto completo
@@ -338,6 +341,7 @@ class AgentRunner:
                 user_id,
                 f"Erro: {e}",
                 sender=label,  # type: ignore[call-arg]
+                thread_id=running.thread_id,
             )
 
             await self._on_squad_lead_trigger(

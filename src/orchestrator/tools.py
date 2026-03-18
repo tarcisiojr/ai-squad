@@ -12,6 +12,7 @@ class RunningAgent:
     agent_name: str
     demand_id: str
     user_id: str = ""
+    thread_id: int | None = None
     task: asyncio.Task | None = None
     started_at: float = field(default_factory=time.time)
     status: str = "running"  # running, done, error, incomplete

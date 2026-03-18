@@ -61,6 +61,64 @@ class TestTelegramMessageBus:
         assert "PO Agent" in call_kwargs["text"]
 
     @pytest.mark.asyncio
+    async def test_send_message_com_thread_id(self, bus):
+        """Verifica que send_message propaga message_thread_id."""
+        mock_bot = AsyncMock()
+        mock_app = MagicMock()
+        mock_app.bot = mock_bot
+        bus._app = mock_app
+
+        await bus.send_message("12345", "Msg no tópico", thread_id=999)
+
+        call_kwargs = mock_bot.send_message.call_args[1]
+        assert call_kwargs["message_thread_id"] == 999
+
+    @pytest.mark.asyncio
+    async def test_send_message_sem_thread_id(self, bus):
+        """Verifica que send_message sem thread_id passa None."""
+        mock_bot = AsyncMock()
+        mock_app = MagicMock()
+        mock_app.bot = mock_bot
+        bus._app = mock_app
+
+        await bus.send_message("12345", "Msg geral")
+
+        call_kwargs = mock_bot.send_message.call_args[1]
+        assert call_kwargs["message_thread_id"] is None
+
+    @pytest.mark.asyncio
+    async def test_create_thread(self, bus):
+        """Verifica criação de Forum Topic."""
+        mock_bot = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.message_thread_id = 42
+        mock_bot.create_forum_topic.return_value = mock_result
+        mock_app = MagicMock()
+        mock_app.bot = mock_bot
+        bus._app = mock_app
+
+        thread_id = await bus.create_thread("12345", "Login OAuth")
+
+        assert thread_id == 42
+        mock_bot.create_forum_topic.assert_called_once_with(
+            chat_id="12345",
+            name="Login OAuth",
+        )
+
+    @pytest.mark.asyncio
+    async def test_create_thread_falha_retorna_none(self, bus):
+        """Verifica que falha ao criar tópico retorna None."""
+        mock_bot = AsyncMock()
+        mock_bot.create_forum_topic.side_effect = Exception("API error")
+        mock_app = MagicMock()
+        mock_app.bot = mock_bot
+        bus._app = mock_app
+
+        thread_id = await bus.create_thread("12345", "Login OAuth")
+
+        assert thread_id is None
+
+    @pytest.mark.asyncio
     async def test_notify_envia_com_prefixo(self, bus):
         """Verifica que notify envia com prefixo de notificação."""
         mock_bot = AsyncMock()
@@ -128,6 +186,8 @@ class TestTelegramAccessControl:
 
         update = MagicMock()
         update.message.chat_id = 99999
+        update.message.from_user.id = 99999
+        update.message.message_thread_id = None
         update.message.text = "mensagem invasora"
 
         await text_handler_obj.callback(update, MagicMock())
@@ -152,8 +212,43 @@ class TestTelegramAccessControl:
 
         update = MagicMock()
         update.message.chat_id = 12345
+        update.message.from_user.id = 67890
+        update.message.message_thread_id = None
         update.message.text = "mensagem autorizada"
 
         await text_handler_obj.callback(update, MagicMock())
 
-        callback.assert_called_once_with("mensagem autorizada")
+        callback.assert_called_once_with(
+            "mensagem autorizada",
+            thread_id=None,
+            user_id="67890",
+        )
+
+    @pytest.mark.asyncio
+    async def test_handle_text_propaga_thread_id(self):
+        """Mensagem em Forum Topic propaga thread_id e user_id no callback."""
+        bus = TelegramMessageBus(token="fake-token", allowed_chat_id="12345")
+        callback = AsyncMock()
+        await bus.receive_message(callback)
+
+        mock_app = MagicMock()
+        mock_app.bot = AsyncMock()
+        with patch("telegram.ext.ApplicationBuilder") as mock_builder:
+            mock_builder.return_value.token.return_value.build.return_value = mock_app
+            await bus._ensure_app()
+
+        text_handler_obj = mock_app.add_handler.call_args_list[0][0][0]
+
+        update = MagicMock()
+        update.message.chat_id = 12345
+        update.message.from_user.id = 67890
+        update.message.message_thread_id = 999
+        update.message.text = "mensagem no tópico"
+
+        await text_handler_obj.callback(update, MagicMock())
+
+        callback.assert_called_once_with(
+            "mensagem no tópico",
+            thread_id=999,
+            user_id="67890",
+        )

@@ -18,6 +18,7 @@ from src.messaging.telegram import TelegramMessageBus
 from src.orchestrator.engine import OrchestrationEngine
 from src.orchestrator.journal import JournalStore
 from src.orchestrator.state import StateManager
+from src.orchestrator.thread_map import ThreadDemandMap
 
 # Configuração de logging estruturado
 logging.basicConfig(
@@ -43,9 +44,13 @@ class Daemon:
         self._bus: TelegramMessageBus | None = None
         self._config: PlatformConfig | None = None
         self._paths = path_resolver or PathResolver("docker")
-        # Conversa continua com o Squad Lead (sem criar demanda)
+        # Conversa livre com o Squad Lead no Tópico Geral (sem pipeline)
         self._squad_lead_conversation_id = "squad-lead-session"
         self._team_name = os.environ.get("TEAM_NAME", "default")
+        # Mapeamento thread_id ↔ demand_id para Forum Topics
+        self._thread_map: ThreadDemandMap | None = None
+        # Cache: se o chat é um grupo-fórum
+        self._is_forum: bool = False
 
     @property
     def engine(self) -> OrchestrationEngine:
@@ -214,6 +219,13 @@ class Daemon:
         )
 
         self._state_manager = state_mgr
+
+        # Inicializa mapeamento thread ↔ demand para Forum Topics
+        self._thread_map = ThreadDemandMap(state_dir=str(self._paths.state_dir))
+        # Propaga thread_map e callback de criação de tópico para o engine
+        self._engine._thread_map = self._thread_map
+        self._engine._create_topic_callback = self._create_demand_topic
+
         logger.info("Componentes inicializados para time '%s'", self._team_name)
 
     async def _resume_pending_work(self) -> None:
@@ -328,30 +340,58 @@ class Daemon:
                 commands[cmd] = agent_id
         return commands
 
-    async def _handle_new_demand(self, text: str, image_path: str | None = None) -> None:
+    async def _handle_new_demand(
+        self,
+        text: str,
+        image_path: str | None = None,
+        *,
+        thread_id: int | None = None,
+        user_id: str = "",
+    ) -> None:
         """Handler chamado quando uma nova mensagem chega via Telegram.
 
         Processa imediatamente — Squad Lead responde rapido via chamada SDK curta.
         Agentes pesados (PO, Dev, QA) rodam em background via start_agent.
+
+        Em modo fórum, thread_id roteia para a demanda correta:
+        - thread_id mapeado → demand_id correspondente
+        - thread_id=None ou Geral → Squad Lead sessão geral
         """
         chat_id = os.environ["TELEGRAM_CHAT_ID"]
+        # Usa user_id do callback ou fallback para chat_id (DM)
+        user_id = user_id or chat_id
 
-        # Verifica comandos especiais
+        # Roteamento por thread_id (Forum Topics)
+        routed_demand_id = None
+        if thread_id and self._thread_map:
+            routed_demand_id = self._thread_map.get_demand(thread_id)
+
+        # Verifica comandos especiais (antes do mapeamento automático)
         if text.strip().lower() == "/help":
-            await self._send_help(chat_id)
+            await self._send_help(chat_id, thread_id=thread_id)
             return
 
         if text.strip().lower() == "/status":
-            await self._send_status(chat_id)
+            await self._send_status(chat_id, thread_id=thread_id)
             return
 
         if text.strip().lower().startswith("/stop"):
-            await self._stop_agents(chat_id, text.strip())
+            await self._stop_agents(chat_id, text.strip(), thread_id=thread_id)
             return
 
         if text.strip().lower() == "/skills":
-            await self._send_skills(chat_id)
+            await self._send_skills(chat_id, thread_id=thread_id)
             return
+
+        # Tópico existente sem mapeamento → cria demand_id e mapeia automaticamente
+        if thread_id and self._thread_map and not routed_demand_id:
+            routed_demand_id = self._generate_demand_id(text)
+            self._thread_map.add(thread_id, routed_demand_id)
+            logger.info(
+                "Tópico %d mapeado automaticamente → %s",
+                thread_id,
+                routed_demand_id,
+            )
 
         # Detecta direcionamento a agente especifico (comandos da config)
         agent_commands = self._build_agent_commands()
@@ -365,6 +405,7 @@ class Daemon:
                     await self.bus.send_message(
                         chat_id,
                         f"Use: {cmd} <sua mensagem>\nExemplo: {cmd} Criar API de autenticacao",
+                        thread_id=thread_id,
                     )
                     return
                 break
@@ -373,13 +414,25 @@ class Daemon:
         try:
             if target_agent:
                 # Comando /<agente> → conversa direta com agente (background)
-                demand_id = self._generate_demand_id(demand_text)
+                demand_id = routed_demand_id or self._generate_demand_id(demand_text)
                 logger.info("Conversa direta com %s: %s", target_agent, demand_id)
                 asyncio.create_task(
                     self._run_direct_agent(demand_id, chat_id, target_agent, demand_text)
                 )
+            elif routed_demand_id:
+                # Mensagem em tópico mapeado → Squad Lead com demand_id específico
+                logger.info(
+                    "Squad Lead (tópico %d → %s): %s", thread_id, routed_demand_id, demand_text[:50]
+                )
+                await self.engine.run_squad_lead(
+                    routed_demand_id,
+                    chat_id,
+                    demand_text,
+                    image_path=image_path,
+                    thread_id=thread_id,
+                )
             else:
-                # Mensagem sem comando → Squad Lead (responde rapido)
+                # Tópico Geral ou DM → Squad Lead sessão geral
                 demand_id = self._squad_lead_conversation_id
                 logger.info("Squad Lead: %s", demand_text[:50])
                 await self.engine.run_squad_lead(
@@ -387,11 +440,12 @@ class Daemon:
                     chat_id,
                     demand_text,
                     image_path=image_path,
+                    thread_id=thread_id,
                 )
         except Exception as e:
             logger.error("Erro ao processar mensagem: %s", e, exc_info=True)
             try:
-                await self.bus.notify(chat_id, f"Erro ao processar: {e}")
+                await self.bus.notify(chat_id, f"Erro ao processar: {e}", thread_id=thread_id)
             except Exception:
                 logger.error("Falha ao notificar erro via Telegram")
         finally:
@@ -402,7 +456,43 @@ class Daemon:
                 except Exception:
                     pass
 
-    async def _send_help(self, chat_id: str) -> None:
+    async def _detect_forum_mode(self) -> None:
+        """Detecta se o chat configurado é um grupo-fórum do Telegram."""
+        chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
+        if not chat_id or not self._bus:
+            return
+        try:
+            await self.bus._ensure_app()
+            assert self.bus._app is not None
+            chat = await self.bus._app.bot.get_chat(chat_id)
+            self._is_forum = bool(getattr(chat, "is_forum", False))
+            if self._is_forum:
+                logger.info("Modo fórum detectado para chat %s", chat_id)
+            else:
+                logger.info("Chat %s não é fórum — modo flat", chat_id)
+        except Exception as e:
+            logger.warning("Erro ao detectar modo fórum: %s", e)
+            self._is_forum = False
+
+    async def _create_demand_topic(self, demand_id: str, title: str) -> int | None:
+        """Cria tópico para uma demanda no modo fórum e persiste mapeamento."""
+        logger.info(
+            "create_demand_topic chamado: demand=%s, is_forum=%s, thread_map=%s",
+            demand_id,
+            self._is_forum,
+            self._thread_map is not None,
+        )
+        if not self._is_forum or not self._thread_map:
+            return None
+        chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
+        if not chat_id:
+            return None
+        thread_id = await self.bus.create_thread(chat_id, title)
+        if thread_id:
+            self._thread_map.add(thread_id, demand_id)
+        return thread_id
+
+    async def _send_help(self, chat_id: str, *, thread_id: int | None = None) -> None:
         """Envia mensagem de ajuda com comandos disponíveis."""
         sl = self.config.squad_lead if self._config else None
         sl_name = sl.name if sl else "Squad Lead"
@@ -423,9 +513,9 @@ class Daemon:
             f"\nOu envie uma mensagem direta para falar com o {sl_name} (ele coordena o time)."
         )
 
-        await self.bus.send_message(chat_id, "\n".join(lines))
+        await self.bus.send_message(chat_id, "\n".join(lines), thread_id=thread_id)
 
-    async def _send_skills(self, chat_id: str) -> None:
+    async def _send_skills(self, chat_id: str, *, thread_id: int | None = None) -> None:
         """Lista skills disponiveis nos 3 niveis."""
         lines = ["Skills disponiveis:\n"]
 
@@ -476,9 +566,9 @@ class Daemon:
         if len(lines) == 1:
             lines.append("Nenhuma skill configurada.")
 
-        await self.bus.send_message(chat_id, "\n".join(lines))
+        await self.bus.send_message(chat_id, "\n".join(lines), thread_id=thread_id)
 
-    async def _stop_agents(self, chat_id: str, text: str) -> None:
+    async def _stop_agents(self, chat_id: str, text: str, *, thread_id: int | None = None) -> None:
         """Para agentes em execucao. /stop para todos, /stop <nome> para especifico."""
         parts = text.strip().split(maxsplit=1)
         target = parts[1].strip() if len(parts) > 1 else None
@@ -502,13 +592,19 @@ class Daemon:
 
         if stopped:
             labels = ", ".join(self.engine._get_agent_label(n) for n in stopped)
-            await self.bus.send_message(chat_id, f"Agentes parados: {labels}")
+            await self.bus.send_message(chat_id, f"Agentes parados: {labels}", thread_id=thread_id)
         elif target:
             await self.bus.send_message(
-                chat_id, f"Agente '{target}' nao encontrado ou nao esta rodando."
+                chat_id,
+                f"Agente '{target}' nao encontrado ou nao esta rodando.",
+                thread_id=thread_id,
             )
         else:
-            await self.bus.send_message(chat_id, "Nenhum agente em execucao para parar.")
+            await self.bus.send_message(
+                chat_id,
+                "Nenhum agente em execucao para parar.",
+                thread_id=thread_id,
+            )
 
     async def _run_direct_agent(
         self,
@@ -532,10 +628,27 @@ class Daemon:
             except Exception:
                 pass
 
-    async def _send_status(self, chat_id: str) -> None:
-        """Envia status dos agentes ativos."""
-        status = self.engine._get_running_agents_status()
-        await self.bus.send_message(chat_id, status)
+    async def _send_status(self, chat_id: str, *, thread_id: int | None = None) -> None:
+        """Envia status dos agentes ativos. Em tópico, filtra pela demanda."""
+        # Em tópico mapeado, mostra só agentes daquela demanda
+        demand_id = None
+        if thread_id and self._thread_map:
+            demand_id = self._thread_map.get_demand(thread_id)
+
+        if demand_id:
+            # Filtra agentes desta demanda
+            agents = self.engine._running_agents
+            filtered = {k: v for k, v in agents.items() if v.demand_id == demand_id}
+            if filtered:
+                from src.orchestrator.prompt_builder import get_running_agents_status
+
+                status = get_running_agents_status(filtered, self.engine._personas)
+            else:
+                status = f"Nenhum agente ativo para demanda {demand_id}."
+        else:
+            status = self.engine._get_running_agents_status()
+
+        await self.bus.send_message(chat_id, status, thread_id=thread_id)
 
     def _write_healthcheck(self) -> None:
         """Escreve arquivo de heartbeat para health check do Docker."""
@@ -624,14 +737,20 @@ class Daemon:
         await self.bus.receive_message(self._handle_new_demand)
 
         # Registra handler de voz (transcrição → texto → demanda)
-        async def _voice_handler(text: str) -> None:
-            await self._handle_new_demand(text)
+        async def _voice_handler(
+            text: str, *, thread_id: int | None = None, user_id: str = ""
+        ) -> None:
+            await self._handle_new_demand(text, thread_id=thread_id, user_id=user_id)
 
         await self.bus.receive_voice(_voice_handler)
 
         # Registra handler de fotos
-        async def _photo_handler(text: str, image_path: str) -> None:
-            await self._handle_new_demand(text, image_path=image_path)
+        async def _photo_handler(
+            text: str, image_path: str, *, thread_id: int | None = None, user_id: str = ""
+        ) -> None:
+            await self._handle_new_demand(
+                text, image_path=image_path, thread_id=thread_id, user_id=user_id
+            )
 
         if hasattr(self.bus, "receive_photo"):
             await self.bus.receive_photo(_photo_handler)
@@ -640,6 +759,9 @@ class Daemon:
         loop = asyncio.get_event_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, lambda: asyncio.create_task(self._shutdown()))
+
+        # Detecta se o chat é um grupo-fórum
+        await self._detect_forum_mode()
 
         # Retoma trabalho pendente de execução anterior
         await self._resume_pending_work()

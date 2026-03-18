@@ -116,9 +116,14 @@ class OrchestrationEngine:
         if self._pipeline_executor:
             self._agent_runner.set_pipeline_executor(self._pipeline_executor)
 
-        # user_id e demand_id defaults (usados pelo Squad Lead quando nao ha agente)
+        # user_id, demand_id e thread_id defaults (usados pelo Squad Lead)
         self._default_user_id: str = ""
         self._default_demand_id: str = ""
+        self._default_thread_id: int | None = None
+        # Mapeamento thread ↔ demand (injetado pelo daemon)
+        self._thread_map = None
+        # Callback para criar tópico no Telegram (injetado pelo daemon)
+        self._create_topic_callback = None
 
         # Monitor do Squad Lead: detecta respostas vazias consecutivas
         self._squad_lead_empty_count: int = 0
@@ -189,6 +194,18 @@ class OrchestrationEngine:
             return self._running_agents[agent_name].user_id
         return self._default_user_id
 
+    def _resolve_thread_id(self, agent_name: str = "") -> int | None:
+        """Resolve thread_id — do agente em background ou default."""
+        if agent_name and agent_name in self._running_agents:
+            ra = self._running_agents[agent_name]
+            # Primeiro tenta thread_id direto do RunningAgent
+            if ra.thread_id is not None:
+                return ra.thread_id
+            # Fallback: resolve via thread_map a partir do demand_id
+            if self._thread_map and ra.demand_id:
+                return self._thread_map.get_thread(ra.demand_id)
+        return self._default_thread_id
+
     async def _handle_progress(self, agent_name: str, message: str) -> None:
         """Recebe progresso do agente (via report_progress) e envia ao usuario.
 
@@ -199,10 +216,12 @@ class OrchestrationEngine:
             return
         try:
             label = self._get_agent_label(agent_name)
+            thread_id = self._resolve_thread_id(agent_name)
             await self._message_bus.send_message(
                 user_id,
                 message,
                 sender=label,  # type: ignore[call-arg]
+                thread_id=thread_id,
             )
         except Exception as e:
             logger.warning("[%s] Falha ao enviar progresso: %s", agent_name, e)
@@ -221,6 +240,40 @@ class OrchestrationEngine:
         label = self._get_agent_label(agent_name)
         demand_id = self._default_demand_id
         user_id = self._default_user_id
+        thread_id = self._default_thread_id
+
+        # Em modo fórum, gera demand_id real e cria tópico (só na 1ª delegação)
+        if demand_id == "squad-lead-session" and self._create_topic_callback:
+            import re
+            import unicodedata
+            import uuid
+
+            # Gera slug a partir da descrição
+            normalized = unicodedata.normalize("NFKD", task_description)
+            ascii_text = normalized.encode("ascii", "ignore").decode("ascii")
+            clean = re.sub(r"[^a-z0-9\s]", "", ascii_text.lower())
+            words = clean.split()[:5]
+            slug = "-".join(words) if words else "demanda"
+            demand_id = f"{slug}-{uuid.uuid4().hex[:4]}"
+
+            # Atualiza default ANTES de criar tópico — assim chamadas
+            # subsequentes de start_agent na mesma run usam o mesmo demand_id
+            self._default_demand_id = demand_id
+
+            # Cria tópico via callback do daemon
+            title = task_description[:128]
+            try:
+                new_thread_id = await self._create_topic_callback(demand_id, title)
+                if new_thread_id:
+                    thread_id = new_thread_id
+                    self._default_thread_id = thread_id
+                    logger.info("Demanda criada com tópico: %s (thread=%d)", demand_id, thread_id)
+                else:
+                    logger.warning(
+                        "Falha ao criar tópico para demanda %s (sem permissão?)", demand_id
+                    )
+            except Exception as e:
+                logger.error("Erro ao criar tópico: %s", e)
 
         # Cria journal se não existe
         if demand_id and not self._journal.read(demand_id):
@@ -246,6 +299,7 @@ class OrchestrationEngine:
             task_description,
             demand_id,
             user_id,
+            thread_id=thread_id,
         )
 
         return f"Agente {label} iniciado em background. Voce sera notificado quando concluir."
@@ -299,8 +353,14 @@ class OrchestrationEngine:
             if not resolved.exists():
                 logger.warning("Imagem nao encontrada: %s (resolvido: %s)", image_path, resolved)
                 return
+            thread_id = self._default_thread_id
             if hasattr(self._message_bus, "send_photo"):
-                await self._message_bus.send_photo(user_id, str(resolved), caption)
+                await self._message_bus.send_photo(
+                    user_id,
+                    str(resolved),
+                    caption,
+                    thread_id=thread_id,
+                )
             else:
                 logger.warning("MessageBus nao suporta envio de fotos")
         except Exception as e:
@@ -368,9 +428,16 @@ class OrchestrationEngine:
         prompt: str,
         demand_id: str,
         user_id: str,
+        thread_id: int | None = None,
     ) -> None:
         """Delega ao AgentRunner."""
-        self._agent_runner.start_background(agent_name, prompt, demand_id, user_id)
+        self._agent_runner.start_background(
+            agent_name,
+            prompt,
+            demand_id,
+            user_id,
+            thread_id=thread_id,
+        )
 
     async def _on_agent_done(self, agent_name: str, task: asyncio.Task) -> None:
         """Delega ao AgentRunner."""
@@ -384,10 +451,14 @@ class OrchestrationEngine:
         """Dispara Squad Lead com contexto do agente que concluiu."""
         user_id = running.user_id or self._default_user_id
         demand_id = running.demand_id or self._default_demand_id
+        thread_id = running.thread_id
+        # Fallback: resolve via thread_map
+        if thread_id is None and self._thread_map and demand_id:
+            thread_id = self._thread_map.get_thread(demand_id)
         if not user_id or not demand_id:
             return
         try:
-            await self.run_squad_lead(demand_id, user_id, event_context)
+            await self.run_squad_lead(demand_id, user_id, event_context, thread_id=thread_id)
         except Exception as e:
             logger.error("Erro ao disparar Squad Lead: %s", e)
 
@@ -407,6 +478,7 @@ class OrchestrationEngine:
         user_id: str,
         demand_text: str,
         image_path: str | None = None,
+        thread_id: int | None = None,
     ) -> str:
         """Executa Squad Lead com chamada SDK curta.
 
@@ -415,6 +487,7 @@ class OrchestrationEngine:
         """
         self._default_user_id = user_id
         self._default_demand_id = demand_id
+        self._default_thread_id = thread_id
         self._state_manager.save_user_id(demand_id, user_id)
 
         # Monta prompt
@@ -529,6 +602,7 @@ class OrchestrationEngine:
                 user_id,
                 resposta_limpa,
                 sender=label,  # type: ignore[call-arg]
+                thread_id=thread_id,
             )
             # Monitor: resposta ok, reseta contador
             self._squad_lead_empty_count = 0
@@ -548,6 +622,7 @@ class OrchestrationEngine:
                 await self._message_bus.notify(
                     user_id,
                     "Squad Lead parece travado. Sessao resetada. Tente novamente.",
+                    thread_id=thread_id,
                 )
 
         return resposta
@@ -607,12 +682,13 @@ class OrchestrationEngine:
         envia tempo decorrido periodicamente.
         """
         label = self._get_agent_label(agent_name)
+        thread_id = self._resolve_thread_id(agent_name)
         elapsed = 0
         try:
             while True:
                 try:
                     if hasattr(self._message_bus, "send_typing"):
-                        await self._message_bus.send_typing(user_id)
+                        await self._message_bus.send_typing(user_id, thread_id=thread_id)
                 except Exception:
                     pass
                 await asyncio.sleep(self.TYPING_INTERVAL)
@@ -625,6 +701,7 @@ class OrchestrationEngine:
                             user_id,
                             f"Trabalhando... ({tempo})",
                             sender=label,  # type: ignore[call-arg]
+                            thread_id=thread_id,
                         )
                     except Exception:
                         pass

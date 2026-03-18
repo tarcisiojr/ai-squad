@@ -64,6 +64,7 @@ class TestCLIMessageBus:
     @pytest.mark.asyncio
     async def test_receive_voice_registra_callback(self, bus):
         """Verifica que receive_voice registra o callback."""
+
         async def callback(audio):
             pass
 
@@ -74,9 +75,7 @@ class TestCLIMessageBus:
     async def test_send_approval_request_exibe_opcoes(self, bus, capsys, monkeypatch):
         """Verifica que send_approval_request exibe as opções."""
         monkeypatch.setattr("builtins.input", lambda _: "1")
-        resultado = await bus.send_approval_request(
-            "user1", "Aprovar plano?", ["Sim", "Não"]
-        )
+        resultado = await bus.send_approval_request("user1", "Aprovar plano?", ["Sim", "Não"])
         assert resultado == "Sim"
         captured = capsys.readouterr()
         assert "Aprovar plano?" in captured.out

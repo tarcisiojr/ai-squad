@@ -10,17 +10,27 @@ class CLIMessageBus(MessageBus):
     """Barramento de mensageria via stdin/stdout.
 
     Usado para testes locais sem dependência do Telegram.
+    thread_id é ignorado em todos os métodos.
     """
 
     def __init__(self) -> None:
         self._message_callback: Callable | None = None
         self._voice_callback: Callable | None = None
 
-    async def send_message(self, user_id: str, text: str) -> None:
+    async def send_message(
+        self, user_id: str, text: str, *, thread_id: int | None = None, **kwargs: str
+    ) -> None:
         """Exibe mensagem no stdout."""
         print(f"[{user_id}] {text}")
 
-    async def send_approval_request(self, user_id: str, question: str, options: list[str]) -> str:
+    async def send_approval_request(
+        self,
+        user_id: str,
+        question: str,
+        options: list[str],
+        *,
+        thread_id: int | None = None,
+    ) -> str:
         """Solicita aprovação via stdin com opções numeradas."""
         print(f"\n[Aprovação para {user_id}] {question}")
         for i, option in enumerate(options, 1):
@@ -36,7 +46,7 @@ class CLIMessageBus(MessageBus):
             except ValueError:
                 print("Digite um número válido.")
 
-    async def ask_user(self, user_id: str, question: str) -> str:
+    async def ask_user(self, user_id: str, question: str, *, thread_id: int | None = None) -> str:
         """Solicita resposta de texto livre via stdin."""
         print(f"\n[Pergunta para {user_id}] {question}")
         resposta = await asyncio.to_thread(input, "Sua resposta: ")
@@ -50,7 +60,7 @@ class CLIMessageBus(MessageBus):
         """Registra callback para mensagens de voz (não suportado no CLI)."""
         self._voice_callback = callback
 
-    async def notify(self, user_id: str, text: str) -> None:
+    async def notify(self, user_id: str, text: str, *, thread_id: int | None = None) -> None:
         """Exibe notificação no stdout."""
         print(f"[NOTIFICAÇÃO - {user_id}] {text}")
 
