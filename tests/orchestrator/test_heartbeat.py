@@ -127,15 +127,19 @@ class TestHeartbeatConfig:
         from src.factory import PlatformConfig
 
         config_file = tmp_path / "platform.yaml"
-        config_file.write_text(yaml.dump({
-            "ai_provider": "mock",
-            "messaging_provider": "cli",
-            "heartbeat": {
-                "enabled": True,
-                "interval": 120,
-                "stall_timeout": 900,
-            },
-        }))
+        config_file.write_text(
+            yaml.dump(
+                {
+                    "ai_provider": "mock",
+                    "messaging_provider": "cli",
+                    "heartbeat": {
+                        "enabled": True,
+                        "interval": 120,
+                        "stall_timeout": 900,
+                    },
+                }
+            )
+        )
 
         config = PlatformConfig.from_yaml(config_file)
         assert config.heartbeat.enabled is True

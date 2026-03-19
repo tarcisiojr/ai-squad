@@ -109,11 +109,36 @@ class TestLessonsFTS:
     def store(self, tmp_path):
         """Cria LessonsStore com lições pré-populadas para busca."""
         s = LessonsStore(state_dir=str(tmp_path))
-        s.add("deploy", "Docker container sem rede", "Habilitar networking no compose", agent_name="dev-backend")
-        s.add("frontend", "React componente não renderiza", "Verificar export default", agent_name="dev-frontend")
-        s.add("testes", "Coverage abaixo do mínimo", "Adicionar testes unitários para módulo X", agent_name="qa")
-        s.add("api", "Endpoint retornando 500", "Corrigir validação de payload", agent_name="dev-backend")
-        s.add("database", "Migração falhou no PostgreSQL", "Usar transação explícita no schema", agent_name="dev-backend")
+        s.add(
+            "deploy",
+            "Docker container sem rede",
+            "Habilitar networking no compose",
+            agent_name="dev-backend",
+        )
+        s.add(
+            "frontend",
+            "React componente não renderiza",
+            "Verificar export default",
+            agent_name="dev-frontend",
+        )
+        s.add(
+            "testes",
+            "Coverage abaixo do mínimo",
+            "Adicionar testes unitários para módulo X",
+            agent_name="qa",
+        )
+        s.add(
+            "api",
+            "Endpoint retornando 500",
+            "Corrigir validação de payload",
+            agent_name="dev-backend",
+        )
+        s.add(
+            "database",
+            "Migração falhou no PostgreSQL",
+            "Usar transação explícita no schema",
+            agent_name="dev-backend",
+        )
         yield s
         s.close()
 
@@ -204,7 +229,9 @@ class TestLessonsFormatPrompt:
 
     def test_format_for_prompt_formata_corretamente(self, store):
         """Verifica que format_for_prompt gera o formato correto para injeção."""
-        store.add("deploy", "Faltou variável de ambiente", "Adicionar ao .env", agent_name="dev-backend")
+        store.add(
+            "deploy", "Faltou variável de ambiente", "Adicionar ao .env", agent_name="dev-backend"
+        )
         store.add("testes", "Teste flaky por timing", "Usar mock de tempo")
 
         resultado = store.format_for_prompt()
@@ -306,9 +333,7 @@ class TestLessonsMigration:
         store.close()
 
         # Cria arquivo JSON (simula cenário onde JSON aparece depois)
-        lessons_json = [
-            {"category": "nova", "problem": "do json", "solution": "sol json"}
-        ]
+        lessons_json = [{"category": "nova", "problem": "do json", "solution": "sol json"}]
         json_path = tmp_path / "lessons.json"
         json_path.write_text(json.dumps(lessons_json), encoding="utf-8")
 

@@ -95,8 +95,10 @@ class TestCLIList:
         repo = tmp_path / "repo"
         repo.mkdir()
 
-        with patch("src.cli.main._get_manager") as mock, \
-             patch("src.cli.main._get_container_status", return_value="stopped"):
+        with (
+            patch("src.cli.main._get_manager") as mock,
+            patch("src.cli.main._get_container_status", return_value="stopped"),
+        ):
             from src.cli.team_manager import TeamManager
 
             manager = TeamManager(base_dir=tmp_path / ".ai-squad")
@@ -188,8 +190,10 @@ class TestCLIStatus:
         repo = tmp_path / "repo"
         repo.mkdir()
 
-        with patch("src.cli.main._get_manager") as mock, \
-             patch("src.cli.main._get_container_status", return_value="stopped"):
+        with (
+            patch("src.cli.main._get_manager") as mock,
+            patch("src.cli.main._get_container_status", return_value="stopped"),
+        ):
             from src.cli.team_manager import TeamManager
 
             manager = TeamManager(base_dir=tmp_path / ".ai-squad")
@@ -209,10 +213,12 @@ class TestCLIBuild:
         """Verifica que build executa docker build."""
         (tmp_path / "Dockerfile").write_text("FROM python:3.11-slim")
 
-        with patch("src.cli.main._find_source_dir", return_value=tmp_path), \
-             patch("src.cli.main._generate_wheel", return_value=True), \
-             patch("src.docker.get_docker_dir", return_value=tmp_path), \
-             patch("subprocess.run") as mock_run:
+        with (
+            patch("src.cli.main._find_source_dir", return_value=tmp_path),
+            patch("src.cli.main._generate_wheel", return_value=True),
+            patch("src.docker.get_docker_dir", return_value=tmp_path),
+            patch("subprocess.run") as mock_run,
+        ):
             mock_run.return_value = MagicMock(returncode=0)
             result = runner.invoke(cli, ["build"])
 
@@ -225,6 +231,7 @@ class TestCLIAgentManagement:
 
     def _create_team(self, tmp_path):
         from src.cli.team_manager import TeamManager
+
         repo = tmp_path / "repo"
         repo.mkdir()
         manager = TeamManager(base_dir=tmp_path / ".ai-squad")
@@ -236,12 +243,20 @@ class TestCLIAgentManagement:
         manager = self._create_team(tmp_path)
 
         with patch("src.cli.main._get_manager", return_value=manager):
-            result = runner.invoke(cli, [
-                "add-agent", "meu-time", "security",
-                "--name", "Security Agent",
-                "--avatar", "🔒",
-                "--command", "/sec",
-            ])
+            result = runner.invoke(
+                cli,
+                [
+                    "add-agent",
+                    "meu-time",
+                    "security",
+                    "--name",
+                    "Security Agent",
+                    "--avatar",
+                    "🔒",
+                    "--command",
+                    "/sec",
+                ],
+            )
 
         assert result.exit_code == 0
         assert "adicionado" in result.output
@@ -255,6 +270,7 @@ class TestCLIAgentManagement:
 
         # Verifica config.yaml atualizado
         import yaml
+
         config = yaml.safe_load((manager.get_path("meu-time") / "config.yaml").read_text())
         assert "security" in config["agents"]
         assert config["agents"]["security"]["avatar"] == "🔒"
@@ -272,6 +288,7 @@ class TestCLIAgentManagement:
     def test_add_agent_time_inexistente(self, runner, tmp_path):
         """Verifica erro com time inexistente."""
         from src.cli.team_manager import TeamManager
+
         manager = TeamManager(base_dir=tmp_path / ".ai-squad")
 
         with patch("src.cli.main._get_manager", return_value=manager):

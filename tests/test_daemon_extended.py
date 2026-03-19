@@ -1,7 +1,7 @@
 """Testes estendidos para o daemon — cobertura de caminhos adicionais."""
 
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
 import yaml
@@ -32,12 +32,15 @@ class TestDaemonConfig:
         for var in ["AI_PROVIDER", "MESSAGING_PROVIDER", "AGENT_TIMEOUT", "STATE_DIR", "REPO_PATH"]:
             monkeypatch.delenv(var, raising=False)
 
-        _write_config(tmp_path, {
-            "ai_provider": "claude-code",
-            "messaging_provider": "telegram",
-            "agent_timeout": 600,
-            "repo_path": str(tmp_path),
-        })
+        _write_config(
+            tmp_path,
+            {
+                "ai_provider": "claude-code",
+                "messaging_provider": "telegram",
+                "agent_timeout": 600,
+                "repo_path": str(tmp_path),
+            },
+        )
 
         daemon = _local_daemon(tmp_path)
         config = daemon._load_config()
@@ -50,11 +53,14 @@ class TestDaemonConfig:
         monkeypatch.setenv("AI_PROVIDER", "custom-provider")
         monkeypatch.setenv("AGENT_TIMEOUT", "999")
 
-        _write_config(tmp_path, {
-            "ai_provider": "claude-code",
-            "messaging_provider": "telegram",
-            "agent_timeout": 300,
-        })
+        _write_config(
+            tmp_path,
+            {
+                "ai_provider": "claude-code",
+                "messaging_provider": "telegram",
+                "agent_timeout": 300,
+            },
+        )
 
         daemon = _local_daemon(tmp_path)
         config = daemon._load_config()
@@ -71,11 +77,14 @@ class TestDaemonConfig:
         (tmp_path / ".ai-squad").mkdir(exist_ok=True)
         env_file.write_text("AGENT_TIMEOUT=777\n")
 
-        _write_config(tmp_path, {
-            "ai_provider": "claude-code",
-            "messaging_provider": "cli",
-            "agent_timeout": 300,
-        })
+        _write_config(
+            tmp_path,
+            {
+                "ai_provider": "claude-code",
+                "messaging_provider": "cli",
+                "agent_timeout": 300,
+            },
+        )
 
         monkeypatch.setenv("AGENT_TIMEOUT", "777")
 
@@ -96,10 +105,13 @@ class TestDaemonSetup:
         monkeypatch.setenv("TELEGRAM_TOKEN", "bot-test")
         monkeypatch.setenv("TELEGRAM_CHAT_ID", "12345")
 
-        _write_config(tmp_path, {
-            "ai_provider": "claude-code",
-            "messaging_provider": "telegram",
-        })
+        _write_config(
+            tmp_path,
+            {
+                "ai_provider": "claude-code",
+                "messaging_provider": "telegram",
+            },
+        )
 
         (tmp_path / ".ai-squad" / "state").mkdir(parents=True, exist_ok=True)
 
@@ -117,10 +129,11 @@ class TestDaemonNonBlocking:
     @pytest.mark.asyncio
     async def test_mensagem_processa_imediatamente(self, monkeypatch):
         """Verifica que mensagens sao processadas inline, sem fila."""
-        monkeypatch.setenv("TELEGRAM_CHAT_ID", "12345")
-
         daemon = Daemon()
-        daemon._bus = AsyncMock()
+        bus = AsyncMock()
+        type(bus).default_chat_id = PropertyMock(return_value="12345")
+        type(bus).supports_threads = PropertyMock(return_value=False)
+        daemon._bus = bus
         daemon._engine = AsyncMock()
         daemon._config = MagicMock()
         daemon._config.agents = {}
@@ -133,10 +146,11 @@ class TestDaemonNonBlocking:
     @pytest.mark.asyncio
     async def test_erro_nao_derruba_daemon(self, monkeypatch):
         """Verifica que erro no processamento nao derruba o daemon."""
-        monkeypatch.setenv("TELEGRAM_CHAT_ID", "12345")
-
         daemon = Daemon()
-        daemon._bus = AsyncMock()
+        bus = AsyncMock()
+        type(bus).default_chat_id = PropertyMock(return_value="12345")
+        type(bus).supports_threads = PropertyMock(return_value=False)
+        daemon._bus = bus
         daemon._engine = AsyncMock()
         daemon._engine.run_squad_lead.side_effect = RuntimeError("Falha!")
         daemon._config = MagicMock()

@@ -8,7 +8,10 @@ from src.cli.team_manager import (
     TeamManager,
     TeamNotFoundError,
 )
-from src.cli.templates.config import PLACEHOLDER_PREFIX, REQUIRED_ENV_VARS
+from src.cli.templates.config import COMMON_REQUIRED_ENV_VARS, PLACEHOLDER_PREFIX
+
+# Tokens esperados para o provider default (telegram)
+ALL_REQUIRED_VARS = list(COMMON_REQUIRED_ENV_VARS) + ["TELEGRAM_TOKEN", "TELEGRAM_CHAT_ID"]
 
 
 class TestTeamManager:
@@ -58,7 +61,7 @@ class TestTeamManager:
         team_dir = manager.create("test", str(repo))
 
         env_content = (team_dir / ".env").read_text(encoding="utf-8")
-        for var in REQUIRED_ENV_VARS:
+        for var in ALL_REQUIRED_VARS:
             assert var in env_content
         assert PLACEHOLDER_PREFIX in env_content
 
@@ -140,7 +143,7 @@ class TestTeamManager:
         manager.create("test", str(repo))
 
         missing = manager.validate_env("test")
-        assert set(missing) == set(REQUIRED_ENV_VARS)
+        assert set(missing) == set(ALL_REQUIRED_VARS)
 
     def test_validate_env_preenchido(self, tmp_path):
         """Verifica que validate_env aceita .env preenchido."""
@@ -151,9 +154,7 @@ class TestTeamManager:
         team_dir = manager.create("test", str(repo))
 
         # Sobrescreve .env com valores reais
-        env_content = "\n".join(
-            f"{var}=valor_real_{var}" for var in REQUIRED_ENV_VARS
-        )
+        env_content = "\n".join(f"{var}=valor_real_{var}" for var in ALL_REQUIRED_VARS)
         (team_dir / ".env").write_text(env_content, encoding="utf-8")
 
         missing = manager.validate_env("test")

@@ -4,13 +4,11 @@ import pytest
 
 from src.orchestrator.knowledge import (
     FTS5Backend,
-    KnowledgeResult,
     KnowledgeStore,
     _extract_title,
     parse_frontmatter,
     update_frontmatter,
 )
-
 
 # --- Testes de utilidades ---
 

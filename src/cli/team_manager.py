@@ -6,10 +6,10 @@ from pathlib import Path
 import yaml
 
 from src.cli.templates.config import (
+    COMMON_REQUIRED_ENV_VARS,
     DOCKER_COMPOSE_TEMPLATE,
-    ENV_TEMPLATE,
     PLACEHOLDER_PREFIX,
-    REQUIRED_ENV_VARS,
+    get_env_template,
 )
 
 
@@ -63,13 +63,15 @@ class TeamManager:
         """Retorna caminho do diretório de um time."""
         return self._teams_dir / team_name
 
-    def _build_config_from_preset(self, preset: str, repo_path: str = "") -> str:
+    def _build_config_from_preset(
+        self, preset: str, repo_path: str = "", messaging_provider: str = "telegram"
+    ) -> str:
         """Gera config.yaml dinamicamente a partir dos agentes do preset."""
         agents_dir = self._find_preset_dir(preset, "agents")
 
         config: dict = {
             "ai_provider": "claude-agent-sdk",
-            "messaging_provider": "telegram",
+            "messaging_provider": messaging_provider,
             "ai_model": "claude-sonnet-4-20250514",
             "agent_timeout": 300,
             "squad_lead": {"name": "Squad Lead", "avatar": "👨‍💼"},
@@ -113,7 +115,11 @@ class TeamManager:
         return None
 
     def create_local(
-        self, team_name: str, project_dir: Path | None = None, preset: str = "dev-openspec"
+        self,
+        team_name: str,
+        project_dir: Path | None = None,
+        preset: str = "dev-openspec",
+        messaging_provider: str = "telegram",
     ) -> Path:
         """Cria estrutura .ai-squad/ no diretório do projeto (modo local)."""
         project = (project_dir or Path.cwd()).resolve()
@@ -128,11 +134,14 @@ class TeamManager:
         (squad_dir / "state").mkdir()
 
         # Gera config.yaml a partir dos agentes do preset
-        config_content = self._build_config_from_preset(preset)
+        config_content = self._build_config_from_preset(
+            preset, messaging_provider=messaging_provider
+        )
         (squad_dir / "config.yaml").write_text(config_content, encoding="utf-8")
 
-        # Gera .env com placeholders
-        (squad_dir / ".env").write_text(ENV_TEMPLATE, encoding="utf-8")
+        # Gera .env com placeholders (dinâmico por provider)
+        env_content = get_env_template(messaging_provider)
+        (squad_dir / ".env").write_text(env_content, encoding="utf-8")
 
         # Copia agents/ e pipeline/ do preset
         self._copy_default_agents(squad_dir, preset=preset)
@@ -143,7 +152,13 @@ class TeamManager:
 
         return squad_dir
 
-    def create(self, team_name: str, repo_path: str, preset: str = "dev-openspec") -> Path:
+    def create(
+        self,
+        team_name: str,
+        repo_path: str,
+        preset: str = "dev-openspec",
+        messaging_provider: str = "telegram",
+    ) -> Path:
         """Cria estrutura completa para um novo time."""
         repo = Path(repo_path).resolve()
         if not repo.exists():
@@ -159,11 +174,14 @@ class TeamManager:
         (team_dir / "state").mkdir(exist_ok=True)
 
         # Gera config.yaml a partir dos agentes do preset
-        config_content = self._build_config_from_preset(preset, repo_path=str(repo))
+        config_content = self._build_config_from_preset(
+            preset, repo_path=str(repo), messaging_provider=messaging_provider
+        )
         (team_dir / "config.yaml").write_text(config_content, encoding="utf-8")
 
-        # Gera .env com placeholders
-        (team_dir / ".env").write_text(ENV_TEMPLATE, encoding="utf-8")
+        # Gera .env com placeholders (dinâmico por provider)
+        env_content = get_env_template(messaging_provider)
+        (team_dir / ".env").write_text(env_content, encoding="utf-8")
 
         # Copia Whisper service para o time
         self._copy_whisper_service(team_dir)
@@ -266,6 +284,7 @@ class TeamManager:
     def validate_env(self, team_name: str) -> list[str]:
         """Valida se .env tem todas as variáveis obrigatórias preenchidas.
 
+        Verifica tokens comuns + tokens específicos do provider de mensageria.
         Retorna lista de variáveis que ainda contêm placeholders.
         """
         if not self.exists(team_name):
@@ -273,7 +292,7 @@ class TeamManager:
 
         env_path = self.get_path(team_name) / ".env"
         if not env_path.exists():
-            return list(REQUIRED_ENV_VARS)
+            return list(COMMON_REQUIRED_ENV_VARS)
 
         env_content = env_path.read_text(encoding="utf-8")
 
@@ -287,9 +306,28 @@ class TeamManager:
                 key, value = line.split("=", 1)
                 env_vars[key.strip()] = value.strip()
 
+        # Descobre provider de mensageria do config.yaml
+        required_vars = list(COMMON_REQUIRED_ENV_VARS)
+        config_path = self.get_path(team_name) / "config.yaml"
+        if config_path.exists():
+            import yaml
+
+            with open(config_path, encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+            provider_name = data.get("messaging_provider", "telegram")
+            try:
+                from src.messaging.registry import get as get_provider
+                from src.messaging.registry import load_builtin_providers
+
+                load_builtin_providers()
+                provider_cls = get_provider(provider_name)
+                required_vars.extend(provider_cls.required_env_vars())
+            except (ValueError, ImportError):
+                pass
+
         # Verifica quais obrigatórias estão faltando ou com placeholder
         missing = []
-        for var in REQUIRED_ENV_VARS:
+        for var in required_vars:
             value = env_vars.get(var, "")
             if not value or value.startswith(PLACEHOLDER_PREFIX):
                 missing.append(var)

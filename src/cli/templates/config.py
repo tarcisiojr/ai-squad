@@ -1,21 +1,20 @@
 """Templates de configuração para novos times."""
 
-ENV_TEMPLATE = """\
+# Tokens comuns (independem do provider de mensageria)
+COMMON_ENV_TEMPLATE = """\
 # === Tokens obrigatórios ===
 
 # Auth Claude Code CLI (OAuth token)
 CLAUDE_CODE_OAUTH_TOKEN=PREENCHA_AQUI_token_oauth_claude
 
-# GitHub (para criar PRs e push)
-GITHUB_TOKEN=PREENCHA_AQUI_token_github
+"""
 
-# Telegram Bot (criado via @BotFather)
-TELEGRAM_TOKEN=PREENCHA_AQUI_token_bot_telegram
-
-# Chat ID do Telegram (grupo ou chat privado)
-TELEGRAM_CHAT_ID=PREENCHA_AQUI_chat_id_telegram
-
+# Template opcional (GitHub, Whisper/voz)
+OPTIONAL_ENV_TEMPLATE = """\
 # === Opcional ===
+
+# GitHub (para criar PRs e push — necessário se agentes fazem push)
+# GITHUB_TOKEN=PREENCHA_AQUI_token_github
 
 # OpenAI API key (para transcrição de voz via Whisper)
 # OPENAI_API_KEY=PREENCHA_AQUI_api_key_openai
@@ -88,10 +87,53 @@ volumes:
 # Valor placeholder para detectar .env não preenchido
 PLACEHOLDER_PREFIX = "PREENCHA_AQUI_"
 
-# Variáveis obrigatórias que devem ser preenchidas
-REQUIRED_ENV_VARS = [
+# Template de config.yaml com opção agno + campo tools
+CONFIG_YAML_AGNO_EXAMPLE = """\
+# Para usar Agno como provider de IA:
+# ai_provider: agno
+# ai_model: gemini-2.0-flash
+#
+# Toolkits extras por agente (apenas com provider agno):
+# agents:
+#   dev:
+#     name: "Dev Backend"
+#     tools:
+#       - web_search        # DuckDuckGo (gratuito, sem API key)
+#       - code_execution    # PythonTools (sandbox em /tmp)
+#       - shell             # ShellTools (working dir)
+#     # web_search_provider: tavily  # Alternativa: tavily, serpapi
+"""
+
+# Variáveis comuns obrigatórias (independem do provider)
+COMMON_REQUIRED_ENV_VARS = [
     "CLAUDE_CODE_OAUTH_TOKEN",
-    "GITHUB_TOKEN",
-    "TELEGRAM_TOKEN",
-    "TELEGRAM_CHAT_ID",
 ]
+
+
+def get_env_template(messaging_provider: str = "telegram") -> str:
+    """Gera template de .env combinando tokens comuns + específicos do provider.
+
+    Args:
+        messaging_provider: Nome do provider de mensageria.
+
+    Returns:
+        Template completo de .env com placeholders.
+    """
+    parts = [COMMON_ENV_TEMPLATE]
+
+    # Tenta obter template do provider via registry
+    try:
+        from src.messaging.registry import get as get_provider
+        from src.messaging.registry import load_builtin_providers
+
+        load_builtin_providers()
+        provider_cls = get_provider(messaging_provider)
+        provider_template = provider_cls.env_template()
+        if provider_template:
+            parts.append(f"# === {messaging_provider.upper()} ===\n\n{provider_template}\n")
+    except (ValueError, ImportError):
+        # Provider não encontrado — inclui template genérico
+        parts.append(f"# Provider '{messaging_provider}' não encontrado — configure manualmente\n")
+
+    parts.append(OPTIONAL_ENV_TEMPLATE)
+    return "".join(parts)

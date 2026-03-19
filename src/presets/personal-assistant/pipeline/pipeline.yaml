@@ -1,0 +1,30 @@
+# Pipeline: Assistente Pessoal de Rotinas Domésticas
+# Fluxo simples: triagem → ação → confirmação
+
+steps:
+  - id: triagem
+    name: "Triagem e Classificação"
+    description: "Classifica a demanda (tarefa, evento, lista, sugestão) e direciona"
+    type: agent
+    agent: organizador
+    execution: subagent
+    model_tier: fast
+    step_file: steps/step-01-triagem.md
+
+  - id: pesquisa
+    name: "Pesquisa e Enriquecimento"
+    description: "Pesquisa informações complementares quando necessário"
+    type: agent
+    agent: pesquisador
+    execution: background
+    model_tier: fast
+    step_file: steps/step-02-pesquisa.md
+
+  - id: confirmacao
+    name: "Confirmação com Usuário"
+    description: "Apresenta resultado e pede confirmação"
+    type: checkpoint
+    agent: organizador
+    execution: inline
+    model_tier: fast
+    step_file: steps/step-03-confirmacao.md

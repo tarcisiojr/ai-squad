@@ -17,6 +17,7 @@ from claude_agent_sdk import (
 )
 
 from src.adapters.interface import AIAgentAdapter
+from src.adapters.prompt_builder import build_prompt
 from src.models import AgentStatus
 
 logger = logging.getLogger("ai-squad.adapter")
@@ -595,36 +596,7 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
 
     def _build_prompt(self, prompt: str, context: dict) -> str:
         """Monta prompt completo incluindo contexto."""
-        partes = []
-
-        # Contexto do workspace (CLAUDE.md, estrutura, specs)
-        product_ctx = context.pop("workspace_context", None)
-        if product_ctx:
-            partes.append("## Contexto do Projeto")
-            partes.append(product_ctx)
-            partes.append("")
-
-        # System instructions (AGENTS.md)
-        system_instructions = context.pop("system_instructions", None)
-        if system_instructions:
-            partes.append(system_instructions)
-            partes.append("")
-
-        # Filtra chaves internas do contexto
-        display_context = {
-            k: v
-            for k, v in context.items()
-            if k not in ("demand_id", "agent_name", "fase", "max_turns")
-        }
-        if display_context:
-            partes.append("## Contexto")
-            for chave, valor in display_context.items():
-                partes.append(f"- {chave}: {valor}")
-            partes.append("")
-
-        partes.append(prompt)
-
-        return "\n".join(partes)
+        return build_prompt(prompt, context)
 
     def get_session_id(self, conversation_id: str) -> str | None:
         """Retorna session_id de uma conversa ativa."""

@@ -165,7 +165,7 @@ class AgentRunner:
         prompt: str,
         demand_id: str,
         user_id: str,
-        thread_id: int | None = None,
+        thread_id: str | None = None,
     ) -> None:
         """Inicia agente como asyncio task em background."""
         running = RunningAgent(

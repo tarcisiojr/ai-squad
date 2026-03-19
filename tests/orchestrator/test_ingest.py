@@ -79,7 +79,9 @@ class TestDocumentIngest:
     def test_ingest_texto_puro(self, ingest, tmp_path):
         """Verifica ingestão de arquivo .txt."""
         source = tmp_path / "notas-reuniao.txt"
-        source.write_text("Decisões da reunião:\n1. Migrar para novo CRM\n2. Prazo: 30 dias", encoding="utf-8")
+        source.write_text(
+            "Decisões da reunião:\n1. Migrar para novo CRM\n2. Prazo: 30 dias", encoding="utf-8"
+        )
 
         result = ingest.ingest(source, category="processos", title="Notas da Reunião")
 

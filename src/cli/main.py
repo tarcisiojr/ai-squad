@@ -184,23 +184,36 @@ def cli() -> None:
 @cli.command()
 @click.argument("name")
 @click.option("--repo", default=None, help="Caminho do repositório alvo (modo Docker).")
-@click.option("--preset", default="dev-openspec", help="Preset de pipeline/agentes (dev-openspec, infra-monitor, investment-analysis).")
-def create(name: str, repo: str | None, preset: str) -> None:
+@click.option(
+    "--preset",
+    default="dev-openspec",
+    help="Preset de pipeline/agentes (dev-openspec, infra-monitor, investment-analysis).",
+)
+@click.option(
+    "--messaging",
+    default="telegram",
+    help="Provider de mensageria (telegram, cli, discord, slack, gchat).",
+)
+def create(name: str, repo: str | None, preset: str, messaging: str) -> None:
     """Cria um novo time. Sem --repo cria local, com --repo cria para Docker."""
     manager = _get_manager()
     try:
         if repo:
             # Modo Docker: cria em ~/.ai-squad/teams/<nome>/
-            team_dir = manager.create(name, repo, preset=preset)
-            click.echo(f"Time '{name}' criado em {team_dir} (Docker, preset: {preset})")
+            team_dir = manager.create(name, repo, preset=preset, messaging_provider=messaging)
+            click.echo(
+                f"Time '{name}' criado em {team_dir} (Docker, preset: {preset}, messaging: {messaging})"
+            )
             click.echo("")
             click.echo("Próximos passos:")
             click.echo(f"  1. Edite o .env: {team_dir / '.env'}")
             click.echo(f"  2. Inicie o time: ai-squad start {name}")
         else:
             # Modo local: cria .ai-squad/ no diretório corrente
-            squad_dir = manager.create_local(name, preset=preset)
-            click.echo(f"Squad '{name}' criada em {squad_dir} (local, preset: {preset})")
+            squad_dir = manager.create_local(name, preset=preset, messaging_provider=messaging)
+            click.echo(
+                f"Squad '{name}' criada em {squad_dir} (local, preset: {preset}, messaging: {messaging})"
+            )
             click.echo("")
             click.echo("Próximos passos:")
             click.echo(f"  1. Edite o .env: {squad_dir / '.env'}")
@@ -251,12 +264,42 @@ def _start_local(name: str) -> None:
         click.echo(f"Erro: .env não encontrado em {paths.env_path}", err=True)
         sys.exit(1)
 
-    # Valida tokens
-    from src.cli.templates.config import PLACEHOLDER_PREFIX, REQUIRED_ENV_VARS
+    # Valida tokens (comuns + provider)
     import os
 
+    from src.cli.templates.config import PLACEHOLDER_PREFIX
+
+    required_vars = []
+    # Lê config para determinar providers
+    try:
+        import yaml as _yaml
+
+        config_path = paths.config_path
+        if config_path.exists():
+            with open(config_path, encoding="utf-8") as _f:
+                _cfg = _yaml.safe_load(_f) or {}
+
+            # Tokens do provider de IA
+            ai_provider = _cfg.get("ai_provider", "claude-agent-sdk")
+            if ai_provider == "agno":
+                required_vars.append("GOOGLE_API_KEY")
+            else:
+                required_vars.append("CLAUDE_CODE_OAUTH_TOKEN")
+
+            # Tokens do provider de mensageria
+            provider_name = _cfg.get("messaging_provider", "telegram")
+            from src.messaging.registry import get as _get_provider
+            from src.messaging.registry import load_builtin_providers
+
+            load_builtin_providers()
+            provider_cls = _get_provider(provider_name)
+            required_vars.extend(provider_cls.required_env_vars())
+    except (ValueError, ImportError):
+        required_vars.append("CLAUDE_CODE_OAUTH_TOKEN")
+
     missing = [
-        v for v in REQUIRED_ENV_VARS
+        v
+        for v in required_vars
         if not os.environ.get(v) or os.environ.get(v, "").startswith(PLACEHOLDER_PREFIX)
     ]
     if missing:
@@ -403,7 +446,9 @@ def _stop_team(manager: TeamManager, team_name: str) -> None:
 
 @cli.command()
 @click.argument("name")
-@click.confirmation_option(prompt="Tem certeza que deseja remover este time e todos os seus arquivos?")
+@click.confirmation_option(
+    prompt="Tem certeza que deseja remover este time e todos os seus arquivos?"
+)
 def remove(name: str) -> None:
     """Remove um time e todos os seus arquivos."""
     from src.cli.team_manager import TeamNotFoundError
@@ -412,7 +457,7 @@ def remove(name: str) -> None:
     local_dir = Path.cwd() / ".ai-squad"
     if local_dir.exists():
         shutil.rmtree(local_dir)
-        click.echo(f"Squad local removida (.ai-squad/).")
+        click.echo("Squad local removida (.ai-squad/).")
         return
 
     manager = _get_manager()

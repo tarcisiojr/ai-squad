@@ -1,6 +1,5 @@
 """Testes para funcionalidades de inteligência do engine."""
 
-
 from src.adapters.interface import AIAgentAdapter
 from src.factory import AgentConfig
 from src.models import AgentStatus
@@ -66,7 +65,11 @@ class TestGetDemandState:
         workspace = str(tmp_path / "workspace")
         (tmp_path / "workspace").mkdir(exist_ok=True)
         return OrchestrationEngine(
-            adapter, bus, state_mgr, workspace=workspace, personas=TEST_PERSONAS,
+            adapter,
+            bus,
+            state_mgr,
+            workspace=workspace,
+            personas=TEST_PERSONAS,
         )
 
     def test_sem_demandas(self, tmp_path):
@@ -98,7 +101,11 @@ class TestJournalIntegrationWithEngine:
         workspace = str(tmp_path / "workspace")
         (tmp_path / "workspace").mkdir(exist_ok=True)
         return OrchestrationEngine(
-            adapter, bus, state_mgr, workspace=workspace, personas=TEST_PERSONAS,
+            adapter,
+            bus,
+            state_mgr,
+            workspace=workspace,
+            personas=TEST_PERSONAS,
         )
 
     def test_journal_criado_no_start_agent(self, tmp_path):

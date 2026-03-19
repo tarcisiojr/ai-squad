@@ -69,7 +69,10 @@ class TestJournalCRUD:
         """Verifica definição de próxima ação esperada."""
         store.create("demand-005", "Feature Z")
         store.set_next_expected(
-            "demand-005", "dev_completion", "dev", "Dev implementando 5 tasks",
+            "demand-005",
+            "dev_completion",
+            "dev",
+            "Dev implementando 5 tasks",
         )
 
         journal = store.read("demand-005")

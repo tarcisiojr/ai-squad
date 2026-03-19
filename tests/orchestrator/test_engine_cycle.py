@@ -51,12 +51,24 @@ class CycleBus(MessageBus):
         self.mensagens = []
         self.notificacoes = []
 
+    async def start(self) -> None:
+        pass
+
+    async def stop(self) -> None:
+        pass
+
+    @classmethod
+    def required_env_vars(cls) -> list[str]:
+        return []
+
+    @classmethod
+    def env_template(cls) -> str:
+        return ""
+
     async def send_message(self, user_id: str, text: str, **kwargs) -> None:
         self.mensagens.append((user_id, text))
 
-    async def send_approval_request(
-        self, user_id: str, question: str, options: list[str]
-    ) -> str:
+    async def send_approval_request(self, user_id: str, question: str, options: list[str]) -> str:
         # Retorna a primeira opção (aprovação) por padrão
         return options[0] if options else "✅ Aprovar"
 
@@ -84,13 +96,14 @@ class TestRunDemandCycle:
         state_mgr = StateManager(state_dir=str(tmp_path / "state"))
         workspace = str(tmp_path / "workspace")
         (tmp_path / "workspace").mkdir()
-        engine = OrchestrationEngine(adapter, bus, state_mgr, workspace=workspace, personas=TEST_PERSONAS)
+        engine = OrchestrationEngine(
+            adapter, bus, state_mgr, workspace=workspace, personas=TEST_PERSONAS
+        )
 
         await engine.run_squad_lead("cycle-1", "user1", "Criar feature X")
 
         # Squad Lead coordena — verifica que alguma mensagem foi enviada
         assert len(bus.mensagens) > 0 or len(bus.notificacoes) > 0
-
 
 
 class SlowAdapter(AIAgentAdapter):
@@ -132,14 +145,21 @@ class TestFeedbackPeriodico:
         workspace = str(tmp_path / "workspace")
         (tmp_path / "workspace").mkdir()
         engine = OrchestrationEngine(
-            adapter, bus, state_mgr, workspace=workspace, personas=TEST_PERSONAS,
+            adapter,
+            bus,
+            state_mgr,
+            workspace=workspace,
+            personas=TEST_PERSONAS,
         )
         # Reduz intervalos para teste rapido (FEEDBACK deve ser multiplo de TYPING)
         engine.TYPING_INTERVAL = 0.02
         engine.FEEDBACK_INTERVAL = 0.04
 
         resultado = await engine._agent_conversation(
-            "fb-1", "user1", "po", "Testar feedback",
+            "fb-1",
+            "user1",
+            "po",
+            "Testar feedback",
             {"fase": "teste"},
         )
 
@@ -148,10 +168,7 @@ class TestFeedbackPeriodico:
         assert bus.send_typing.call_count >= 1
 
         # Verifica que feedback de tempo foi enviado (sender via kwarg, nao no texto)
-        feedback_msgs = [
-            msg for _, msg in bus.mensagens
-            if "Trabalhando..." in msg
-        ]
+        feedback_msgs = [msg for _, msg in bus.mensagens if "Trabalhando..." in msg]
         assert len(feedback_msgs) >= 1
 
     @pytest.mark.asyncio
@@ -164,22 +181,26 @@ class TestFeedbackPeriodico:
         workspace = str(tmp_path / "workspace")
         (tmp_path / "workspace").mkdir()
         engine = OrchestrationEngine(
-            adapter, bus, state_mgr, workspace=workspace, personas=TEST_PERSONAS,
+            adapter,
+            bus,
+            state_mgr,
+            workspace=workspace,
+            personas=TEST_PERSONAS,
         )
         engine.TYPING_INTERVAL = 0.5  # Alto para nao disparar
         engine.FEEDBACK_INTERVAL = 1.0
 
         resultado = await engine._agent_conversation(
-            "fb-2", "user1", "dev", "Implementar X",
+            "fb-2",
+            "user1",
+            "dev",
+            "Implementar X",
             {"fase": "teste"},
         )
 
         assert resultado
         # Feedback NAO deve ter sido enviado (agente concluiu rapido)
-        feedback_msgs = [
-            msg for _, msg in bus.mensagens
-            if "[🔧 Dev]" in msg and "..." in msg
-        ]
+        feedback_msgs = [msg for _, msg in bus.mensagens if "[🔧 Dev]" in msg and "..." in msg]
         assert len(feedback_msgs) == 0
 
     @pytest.mark.asyncio
@@ -201,21 +222,25 @@ class TestFeedbackPeriodico:
         workspace = str(tmp_path / "workspace")
         (tmp_path / "workspace").mkdir()
         engine = OrchestrationEngine(
-            adapter, bus, state_mgr, workspace=workspace, personas=TEST_PERSONAS,
+            adapter,
+            bus,
+            state_mgr,
+            workspace=workspace,
+            personas=TEST_PERSONAS,
         )
         engine.TYPING_INTERVAL = 0.02
         engine.FEEDBACK_INTERVAL = 0.04
 
         resultado = await engine._agent_conversation(
-            "fb-no-typing", "user1", "po", "Testar sem typing",
+            "fb-no-typing",
+            "user1",
+            "po",
+            "Testar sem typing",
             {"fase": "teste"},
         )
 
         assert resultado
-        feedback_msgs = [
-            msg for _, msg in bus.mensagens
-            if "Trabalhando..." in msg
-        ]
+        feedback_msgs = [msg for _, msg in bus.mensagens if "Trabalhando..." in msg]
         assert len(feedback_msgs) >= 1
 
     @pytest.mark.asyncio
@@ -229,20 +254,24 @@ class TestFeedbackPeriodico:
         workspace = str(tmp_path / "workspace")
         (tmp_path / "workspace").mkdir()
         engine = OrchestrationEngine(
-            adapter, bus, state_mgr, workspace=workspace, personas=TEST_PERSONAS,
+            adapter,
+            bus,
+            state_mgr,
+            workspace=workspace,
+            personas=TEST_PERSONAS,
         )
         engine.TYPING_INTERVAL = 0.02
         engine.FEEDBACK_INTERVAL = 0.04
 
         await engine._agent_conversation(
-            "fb-3", "user1", "po", "Testar tempo",
+            "fb-3",
+            "user1",
+            "po",
+            "Testar tempo",
             {"fase": "teste"},
         )
 
-        feedback_msgs = [
-            msg for _, msg in bus.mensagens
-            if "Trabalhando..." in msg
-        ]
+        feedback_msgs = [msg for _, msg in bus.mensagens if "Trabalhando..." in msg]
         # Deve haver pelo menos 2 feedbacks com tempos diferentes
         if len(feedback_msgs) >= 2:
             assert feedback_msgs[0] != feedback_msgs[1]
@@ -260,13 +289,20 @@ class TestInvokeAgent:
         workspace = str(tmp_path / "workspace")
         (tmp_path / "workspace").mkdir()
         engine = OrchestrationEngine(
-            adapter, bus, state_mgr, workspace=workspace, personas=TEST_PERSONAS,
+            adapter,
+            bus,
+            state_mgr,
+            workspace=workspace,
+            personas=TEST_PERSONAS,
         )
         engine.TYPING_INTERVAL = 0.5
         engine.FEEDBACK_INTERVAL = 5.0
 
         await engine.direct_agent_conversation(
-            "direct-1", "user1", "po", "Olá PO",
+            "direct-1",
+            "user1",
+            "po",
+            "Olá PO",
         )
 
         # Notificacoes de inicio e fim
@@ -280,17 +316,17 @@ class TestInvokeAgent:
         bus = CycleBus()
         state_mgr = StateManager(state_dir=str(tmp_path / "state"))
         engine = OrchestrationEngine(
-            adapter, bus, state_mgr, workspace=str(tmp_path),
+            adapter,
+            bus,
+            state_mgr,
+            workspace=str(tmp_path),
             personas=TEST_PERSONAS,
         )
         engine._default_user_id = "user1"
 
         await engine._handle_progress("po", "Gerando proposal.md")
 
-        assert any(
-            "Gerando proposal.md" in msg
-            for _, msg in bus.mensagens
-        )
+        assert any("Gerando proposal.md" in msg for _, msg in bus.mensagens)
 
     @pytest.mark.asyncio
     async def test_handle_progress_sem_user_id(self, tmp_path):
@@ -299,7 +335,10 @@ class TestInvokeAgent:
         bus = CycleBus()
         state_mgr = StateManager(state_dir=str(tmp_path / "state"))
         engine = OrchestrationEngine(
-            adapter, bus, state_mgr, workspace=str(tmp_path),
+            adapter,
+            bus,
+            state_mgr,
+            workspace=str(tmp_path),
             personas=TEST_PERSONAS,
         )
         engine._default_user_id = ""
@@ -321,8 +360,12 @@ class TestInvokeAgent:
             "# PO\n## Dominio\nGestao de produto\n## Quando Envolver\n- Sempre\n## Criterios de Aceite\n- Escopo definido\n"
         )
         engine = OrchestrationEngine(
-            adapter, bus, state_mgr, workspace=str(tmp_path),
-            personas=TEST_PERSONAS, agents_dir=str(agents_dir),
+            adapter,
+            bus,
+            state_mgr,
+            workspace=str(tmp_path),
+            personas=TEST_PERSONAS,
+            agents_dir=str(agents_dir),
         )
 
         summary = engine._get_agents_summary()
@@ -344,7 +387,11 @@ class TestAsyncAgentDelegation:
         workspace = str(tmp_path / "workspace")
         (tmp_path / "workspace").mkdir(exist_ok=True)
         engine = OrchestrationEngine(
-            adapter, bus, state_mgr, workspace=workspace, personas=TEST_PERSONAS,
+            adapter,
+            bus,
+            state_mgr,
+            workspace=workspace,
+            personas=TEST_PERSONAS,
         )
         engine.TYPING_INTERVAL = 0.5
         engine.FEEDBACK_INTERVAL = 5.0
@@ -408,10 +455,13 @@ class TestAsyncAgentDelegation:
     async def test_handle_get_agents_com_agente_rodando(self, tmp_path):
         """Verifica status com agente ativo."""
         from src.orchestrator.tools import RunningAgent
+
         engine, bus = self._make_engine(tmp_path)
         engine._running_agents["po"] = RunningAgent(
-            agent_name="po", demand_id="d1",
-            started_at=time.time() - 60, status="running",
+            agent_name="po",
+            demand_id="d1",
+            started_at=time.time() - 60,
+            status="running",
         )
 
         result = await engine._handle_get_agents()
@@ -423,10 +473,13 @@ class TestAsyncAgentDelegation:
     async def test_handle_get_agents_com_agente_concluido(self, tmp_path):
         """Verifica status com agente concluido."""
         from src.orchestrator.tools import RunningAgent
+
         engine, bus = self._make_engine(tmp_path)
         engine._running_agents["dev"] = RunningAgent(
-            agent_name="dev", demand_id="d1",
-            started_at=time.time() - 120, status="done",
+            agent_name="dev",
+            demand_id="d1",
+            started_at=time.time() - 120,
+            status="done",
             result="Implementacao concluida",
         )
 
@@ -442,7 +495,10 @@ class TestAsyncAgentDelegation:
         from src.orchestrator.tools import RunningAgent
 
         engine._running_agents["po"] = RunningAgent(
-            agent_name="po", demand_id="d1", user_id="user1", status="running",
+            agent_name="po",
+            demand_id="d1",
+            user_id="user1",
+            status="running",
         )
 
         async def fake_work():
@@ -461,8 +517,12 @@ class TestAsyncAgentDelegation:
         """Verifica que _on_agent_done trata erro."""
         engine, bus = self._make_engine(tmp_path)
         from src.orchestrator.tools import RunningAgent
+
         engine._running_agents["dev"] = RunningAgent(
-            agent_name="dev", demand_id="d1", user_id="user1", status="running",
+            agent_name="dev",
+            demand_id="d1",
+            user_id="user1",
+            status="running",
         )
 
         async def fake_work_error():
@@ -485,20 +545,25 @@ class TestAsyncAgentDelegation:
         engine, bus = self._make_engine(tmp_path)
 
         resposta = await engine.run_squad_lead(
-            "sl-test", "user1", "Criar um site",
+            "sl-test",
+            "user1",
+            "Criar um site",
         )
 
         assert resposta
         # Deve ter enviado mensagem ao bus
         assert len(bus.mensagens) > 0
 
+
 class TestRunningAgent:
     """Testes para dataclass RunningAgent."""
 
     def test_elapsed_str_segundos(self):
         from src.orchestrator.tools import RunningAgent
+
         ra = RunningAgent(
-            agent_name="po", demand_id="d1",
+            agent_name="po",
+            demand_id="d1",
             started_at=time.time() - 30,
         )
         elapsed = ra.elapsed_str()
@@ -506,8 +571,10 @@ class TestRunningAgent:
 
     def test_elapsed_str_minutos(self):
         from src.orchestrator.tools import RunningAgent
+
         ra = RunningAgent(
-            agent_name="po", demand_id="d1",
+            agent_name="po",
+            demand_id="d1",
             started_at=time.time() - 90,
         )
         elapsed = ra.elapsed_str()
@@ -515,9 +582,8 @@ class TestRunningAgent:
 
     def test_status_padrao(self):
         from src.orchestrator.tools import RunningAgent
+
         ra = RunningAgent(agent_name="po", demand_id="d1")
         assert ra.status == "running"
         assert ra.result is None
         assert ra.error is None
-
-

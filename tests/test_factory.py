@@ -1,6 +1,5 @@
 """Testes para configuração e factory de providers."""
 
-
 import pytest
 import yaml
 
@@ -14,12 +13,24 @@ from src.models import AgentStatus
 class FakeMessageBus(MessageBus):
     """Implementação fake de MessageBus para testes."""
 
+    async def start(self) -> None:
+        pass
+
+    async def stop(self) -> None:
+        pass
+
+    @classmethod
+    def required_env_vars(cls) -> list[str]:
+        return []
+
+    @classmethod
+    def env_template(cls) -> str:
+        return ""
+
     async def send_message(self, user_id: str, text: str) -> None:
         pass
 
-    async def send_approval_request(
-        self, user_id: str, question: str, options: list[str]
-    ) -> str:
+    async def send_approval_request(self, user_id: str, question: str, options: list[str]) -> str:
         return options[0]
 
     async def receive_message(self, callback) -> None:
@@ -213,12 +224,8 @@ class TestPlatformFactory:
         self.factory.register_message_bus("cli", FakeMessageBus)
         self.factory.register_message_bus("telegram", FakeMessageBus)
 
-        config_cli = PlatformConfig(
-            ai_provider="claude-code", messaging_provider="cli"
-        )
-        config_telegram = PlatformConfig(
-            ai_provider="claude-code", messaging_provider="telegram"
-        )
+        config_cli = PlatformConfig(ai_provider="claude-code", messaging_provider="cli")
+        config_telegram = PlatformConfig(ai_provider="claude-code", messaging_provider="telegram")
 
         bus_cli = self.factory.create_message_bus(config_cli)
         bus_telegram = self.factory.create_message_bus(config_telegram)

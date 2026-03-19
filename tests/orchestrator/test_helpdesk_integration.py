@@ -80,7 +80,7 @@ class TestHelpdeskFluxoCompleto:
         # 2. Atendente resolve e registra
         path = ingest.ingest_text(
             text="## Problema\nImpressora do 3º andar não imprime.\n\n"
-                 "## Solução\nReiniciar spooler de impressão.\n",
+            "## Solução\nReiniciar spooler de impressão.\n",
             title="Impressora 3º andar",
             category="atendimentos",
         )
@@ -168,8 +168,9 @@ class TestHelpdeskPresetStructure:
 
     def test_pipeline_yaml_valido(self):
         """Verifica que pipeline.yaml é YAML válido com steps."""
-        import yaml
         from pathlib import Path
+
+        import yaml
 
         pipeline = Path("src/presets/helpdesk/pipeline/pipeline.yaml")
         data = yaml.safe_load(pipeline.read_text(encoding="utf-8"))

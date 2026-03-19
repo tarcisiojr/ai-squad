@@ -1,6 +1,5 @@
 """Testes para o coletor de contexto do workspace."""
 
-
 from src.orchestrator.context import WorkspaceContextCollector
 
 

@@ -126,10 +126,10 @@ class OrchestrationEngine:
         # user_id, demand_id e thread_id defaults (usados pelo Squad Lead)
         self._default_user_id: str = ""
         self._default_demand_id: str = ""
-        self._default_thread_id: int | None = None
+        self._default_thread_id: str | None = None
         # Mapeamento thread ↔ demand (injetado pelo daemon)
         self._thread_map = None
-        # Callback para criar tópico no Telegram (injetado pelo daemon)
+        # Callback para criar tópico/thread (injetado pelo daemon)
         self._create_topic_callback = None
 
         # Monitor do Squad Lead: detecta respostas vazias consecutivas
@@ -219,7 +219,7 @@ class OrchestrationEngine:
             return self._running_agents[agent_name].user_id
         return self._default_user_id
 
-    def _resolve_thread_id(self, agent_name: str = "") -> int | None:
+    def _resolve_thread_id(self, agent_name: str = "") -> str | None:
         """Resolve thread_id — do agente em background ou default."""
         if agent_name and agent_name in self._running_agents:
             ra = self._running_agents[agent_name]
@@ -292,7 +292,7 @@ class OrchestrationEngine:
                 if new_thread_id:
                     thread_id = new_thread_id
                     self._default_thread_id = thread_id
-                    logger.info("Demanda criada com tópico: %s (thread=%d)", demand_id, thread_id)
+                    logger.info("Demanda criada com tópico: %s (thread=%s)", demand_id, thread_id)
                 else:
                     logger.warning(
                         "Falha ao criar tópico para demanda %s (sem permissão?)", demand_id
@@ -364,7 +364,7 @@ class OrchestrationEngine:
             logger.warning("Falha ao registrar licao: %s", e)
 
     async def _handle_send_image(self, image_path: str, caption: str = "") -> None:
-        """Callback da MCP tool send_image — envia imagem ao usuario via Telegram.
+        """Callback da MCP tool send_image — envia imagem ao usuario via mensageria.
 
         Resolve caminhos relativos ao workspace. Tolerante a falha.
         """
@@ -453,7 +453,7 @@ class OrchestrationEngine:
         prompt: str,
         demand_id: str,
         user_id: str,
-        thread_id: int | None = None,
+        thread_id: str | None = None,
     ) -> None:
         """Delega ao AgentRunner."""
         self._agent_runner.start_background(
@@ -503,7 +503,7 @@ class OrchestrationEngine:
         user_id: str,
         demand_text: str,
         image_path: str | None = None,
-        thread_id: int | None = None,
+        thread_id: str | None = None,
     ) -> str:
         """Executa Squad Lead com chamada SDK curta.
 

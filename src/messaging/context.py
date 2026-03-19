@@ -13,5 +13,5 @@ class MessageContext:
 
     chat_id: str
     user_id: str
-    thread_id: int | None = None
+    thread_id: str | None = None
     demand_id: str | None = None

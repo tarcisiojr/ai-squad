@@ -14,10 +14,12 @@ class TestPlatformConfigEnvOverrides:
         """Verifica que AI_PROVIDER sobrescreve valor do YAML."""
         config_file = tmp_path / "config.yaml"
         config_file.write_text(
-            yaml.dump({
-                "ai_provider": "original",
-                "messaging_provider": "cli",
-            })
+            yaml.dump(
+                {
+                    "ai_provider": "original",
+                    "messaging_provider": "cli",
+                }
+            )
         )
         monkeypatch.setenv("AI_PROVIDER", "claude-code-override")
 
@@ -28,11 +30,13 @@ class TestPlatformConfigEnvOverrides:
         """Verifica que AGENT_TIMEOUT sobrescreve valor do YAML."""
         config_file = tmp_path / "config.yaml"
         config_file.write_text(
-            yaml.dump({
-                "ai_provider": "claude-code",
-                "messaging_provider": "cli",
-                "agent_timeout": 300,
-            })
+            yaml.dump(
+                {
+                    "ai_provider": "claude-code",
+                    "messaging_provider": "cli",
+                    "agent_timeout": 300,
+                }
+            )
         )
         monkeypatch.setenv("AGENT_TIMEOUT", "600")
 
@@ -47,11 +51,13 @@ class TestPlatformConfigEnvOverrides:
 
         config_file = tmp_path / "config.yaml"
         config_file.write_text(
-            yaml.dump({
-                "ai_provider": "claude-code",
-                "messaging_provider": "telegram",
-                "agent_timeout": 500,
-            })
+            yaml.dump(
+                {
+                    "ai_provider": "claude-code",
+                    "messaging_provider": "telegram",
+                    "agent_timeout": 500,
+                }
+            )
         )
 
         config = PlatformConfig.from_yaml(config_file)
@@ -72,11 +78,13 @@ class TestPlatformConfigRepoPath:
 
         config_file = tmp_path / "config.yaml"
         config_file.write_text(
-            yaml.dump({
-                "ai_provider": "claude-code",
-                "messaging_provider": "cli",
-                "repo_path": str(repo),
-            })
+            yaml.dump(
+                {
+                    "ai_provider": "claude-code",
+                    "messaging_provider": "cli",
+                    "repo_path": str(repo),
+                }
+            )
         )
 
         config = PlatformConfig.from_yaml(config_file)
@@ -89,11 +97,13 @@ class TestPlatformConfigRepoPath:
 
         config_file = tmp_path / "config.yaml"
         config_file.write_text(
-            yaml.dump({
-                "ai_provider": "claude-code",
-                "messaging_provider": "cli",
-                "repo_path": str(tmp_path),
-            })
+            yaml.dump(
+                {
+                    "ai_provider": "claude-code",
+                    "messaging_provider": "cli",
+                    "repo_path": str(tmp_path),
+                }
+            )
         )
 
         config = PlatformConfig.from_yaml(config_file)
@@ -106,11 +116,13 @@ class TestPlatformConfigRepoPath:
 
         config_file = tmp_path / "config.yaml"
         config_file.write_text(
-            yaml.dump({
-                "ai_provider": "claude-code",
-                "messaging_provider": "cli",
-                "repo_path": "/original",
-            })
+            yaml.dump(
+                {
+                    "ai_provider": "claude-code",
+                    "messaging_provider": "cli",
+                    "repo_path": "/original",
+                }
+            )
         )
 
         config = PlatformConfig.from_yaml(config_file)
@@ -134,7 +146,7 @@ class TestPlatformConfigValidation:
 
         missing = config.validate_required_tokens()
         assert "CLAUDE_CODE_OAUTH_TOKEN" in missing
-        assert "GITHUB_TOKEN" in missing
+        # GITHUB_TOKEN agora é opcional
         assert "TELEGRAM_TOKEN" in missing
         assert "TELEGRAM_CHAT_ID" in missing
 

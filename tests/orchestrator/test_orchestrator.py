@@ -44,15 +44,25 @@ class MockMessageBus(MessageBus):
         self._receive_voice_mock = AsyncMock()
         self._notify_mock = AsyncMock()
 
+    async def start(self) -> None:
+        pass
+
+    async def stop(self) -> None:
+        pass
+
+    @classmethod
+    def required_env_vars(cls) -> list[str]:
+        return []
+
+    @classmethod
+    def env_template(cls) -> str:
+        return ""
+
     async def send_message(self, user_id: str, text: str, **kwargs) -> None:
         await self._send_message_mock(user_id, text)
 
-    async def send_approval_request(
-        self, user_id: str, question: str, options: list[str]
-    ) -> str:
-        return await self._send_approval_mock(
-            user_id=user_id, question=question, options=options
-        )
+    async def send_approval_request(self, user_id: str, question: str, options: list[str]) -> str:
+        return await self._send_approval_mock(user_id=user_id, question=question, options=options)
 
     async def receive_message(self, callback) -> None:
         await self._receive_message_mock(callback)
@@ -96,9 +106,7 @@ class TestDispatchAgent:
         """Verifica que contexto inclui demand_id e agent_name."""
         engine, adapter, _ = setup
 
-        await engine.dispatch_agent(
-            "demand-1", "po", "prompt", {"chave": "valor"}
-        )
+        await engine.dispatch_agent("demand-1", "po", "prompt", {"chave": "valor"})
 
         call_args = adapter._run_mock.call_args
         context = call_args[0][1]

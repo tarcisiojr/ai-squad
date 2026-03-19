@@ -20,6 +20,14 @@ dependencies = [
 ai-squad = "src.cli.main:cli"
 
 [project.optional-dependencies]
+gchat = [
+    "google-auth>=2.0",
+    "google-api-python-client>=2.0",
+]
+agno = [
+    "agno",
+    "google-genai",
+]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",

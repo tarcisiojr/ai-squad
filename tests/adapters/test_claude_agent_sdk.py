@@ -38,18 +38,18 @@ class TestClaudeAgentSDKAdapter:
         async def mock_query(**kwargs):
             yield mock_message
 
-        with patch(
-            "src.adapters.claude_agent_sdk.query", side_effect=mock_query
-        ), patch(
-            "src.adapters.claude_agent_sdk.AssistantMessage",
-            type(mock_message),
-        ), patch(
-            "src.adapters.claude_agent_sdk.TextBlock",
-            type(mock_text_block),
+        with (
+            patch("src.adapters.claude_agent_sdk.query", side_effect=mock_query),
+            patch(
+                "src.adapters.claude_agent_sdk.AssistantMessage",
+                type(mock_message),
+            ),
+            patch(
+                "src.adapters.claude_agent_sdk.TextBlock",
+                type(mock_text_block),
+            ),
         ):
-            resultado = await adapter.run(
-                "Crie um hello world", {"lang": "python"}
-            )
+            resultado = await adapter.run("Crie um hello world", {"lang": "python"})
 
         assert resultado == "Resultado do SDK"
         assert adapter.status() == AgentStatus.DONE
@@ -64,9 +64,7 @@ class TestClaudeAgentSDKAdapter:
 
         adapter._timeout = 0.01
 
-        with patch(
-            "src.adapters.claude_agent_sdk.query", side_effect=mock_query_lento
-        ):
+        with patch("src.adapters.claude_agent_sdk.query", side_effect=mock_query_lento):
             with pytest.raises(TimeoutError, match="excedeu timeout"):
                 await adapter.run("prompt longo", {})
 
@@ -80,9 +78,7 @@ class TestClaudeAgentSDKAdapter:
             raise RuntimeError("Erro interno do SDK")
             yield  # pragma: no cover
 
-        with patch(
-            "src.adapters.claude_agent_sdk.query", side_effect=mock_query_erro
-        ):
+        with patch("src.adapters.claude_agent_sdk.query", side_effect=mock_query_erro):
             with pytest.raises(RuntimeError, match="Erro no Claude Agent SDK"):
                 await adapter.run("prompt", {})
 
@@ -100,14 +96,16 @@ class TestClaudeAgentSDKAdapter:
         async def mock_query(**kwargs):
             yield mock_message
 
-        with patch(
-            "src.adapters.claude_agent_sdk.query", side_effect=mock_query
-        ), patch(
-            "src.adapters.claude_agent_sdk.AssistantMessage",
-            type(mock_message),
-        ), patch(
-            "src.adapters.claude_agent_sdk.TextBlock",
-            type(mock_text_block),
+        with (
+            patch("src.adapters.claude_agent_sdk.query", side_effect=mock_query),
+            patch(
+                "src.adapters.claude_agent_sdk.AssistantMessage",
+                type(mock_message),
+            ),
+            patch(
+                "src.adapters.claude_agent_sdk.TextBlock",
+                type(mock_text_block),
+            ),
         ):
             resultado = await adapter.ask("Qual é o sentido da vida?")
 
@@ -244,14 +242,16 @@ class TestClaudeAgentSDKAdapter:
         async def mock_query(**kwargs):
             yield mock_message
 
-        with patch(
-            "src.adapters.claude_agent_sdk.query", side_effect=mock_query
-        ), patch(
-            "src.adapters.claude_agent_sdk.AssistantMessage",
-            type(mock_message),
-        ), patch(
-            "src.adapters.claude_agent_sdk.TextBlock",
-            type(mock_text_block),
+        with (
+            patch("src.adapters.claude_agent_sdk.query", side_effect=mock_query),
+            patch(
+                "src.adapters.claude_agent_sdk.AssistantMessage",
+                type(mock_message),
+            ),
+            patch(
+                "src.adapters.claude_agent_sdk.TextBlock",
+                type(mock_text_block),
+            ),
         ):
             await adapter.run("test", {"agent_name": "po", "demand_id": "d1"})
 

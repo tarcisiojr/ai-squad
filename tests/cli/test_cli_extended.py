@@ -28,9 +28,12 @@ class TestHelperFunctions:
         """Verifica montagem de comando docker compose."""
         cmd = _docker_compose_cmd(tmp_path, "up", "-d")
         assert cmd == [
-            "docker", "compose",
-            "-f", str(tmp_path / "docker-compose.yml"),
-            "up", "-d",
+            "docker",
+            "compose",
+            "-f",
+            str(tmp_path / "docker-compose.yml"),
+            "up",
+            "-d",
         ]
 
     def test_image_exists_true(self):
@@ -65,10 +68,12 @@ class TestHelperFunctions:
 
     def test_build_image_falha(self, tmp_path):
         """Verifica tratamento de erro no build."""
-        with patch("src.cli.main._find_source_dir", return_value=tmp_path), \
-             patch("src.cli.main._generate_wheel", return_value=True), \
-             patch("src.docker.get_docker_dir", return_value=tmp_path), \
-             patch("subprocess.run") as mock_run:
+        with (
+            patch("src.cli.main._find_source_dir", return_value=tmp_path),
+            patch("src.cli.main._generate_wheel", return_value=True),
+            patch("src.docker.get_docker_dir", return_value=tmp_path),
+            patch("subprocess.run") as mock_run,
+        ):
             (tmp_path / "Dockerfile").touch()
             mock_run.return_value = MagicMock(returncode=1)
             with pytest.raises(SystemExit):
@@ -82,6 +87,7 @@ class TestCLIStartExtended:
         """Verifica start --all sem times."""
         with patch("src.cli.main._get_manager") as mock:
             from src.cli.team_manager import TeamManager
+
             manager = TeamManager(base_dir=tmp_path / ".ai-squad")
             mock.return_value = manager
 
@@ -94,16 +100,21 @@ class TestCLIStartExtended:
         repo = tmp_path / "repo"
         repo.mkdir()
 
-        with patch("src.cli.main._get_manager") as mock_mgr, \
-             patch("src.cli.main._image_exists", return_value=True), \
-             patch("subprocess.run") as mock_run:
+        with (
+            patch("src.cli.main._get_manager") as mock_mgr,
+            patch("src.cli.main._image_exists", return_value=True),
+            patch("subprocess.run") as mock_run,
+        ):
             from src.cli.team_manager import TeamManager
+
             manager = TeamManager(base_dir=tmp_path / ".ai-squad")
             team_dir = manager.create("ok", str(repo))
 
-            # Preenche .env
-            from src.cli.templates.config import REQUIRED_ENV_VARS
-            env = "\n".join(f"{v}=valor_real" for v in REQUIRED_ENV_VARS)
+            # Preenche .env (comuns + tokens do Telegram, que é o default)
+            from src.cli.templates.config import COMMON_REQUIRED_ENV_VARS
+
+            all_vars = list(COMMON_REQUIRED_ENV_VARS) + ["TELEGRAM_TOKEN", "TELEGRAM_CHAT_ID"]
+            env = "\n".join(f"{v}=valor_real" for v in all_vars)
             (team_dir / ".env").write_text(env)
 
             mock_mgr.return_value = manager
@@ -118,15 +129,20 @@ class TestCLIStartExtended:
         repo = tmp_path / "repo"
         repo.mkdir()
 
-        with patch("src.cli.main._get_manager") as mock_mgr, \
-             patch("src.cli.main._image_exists", return_value=True), \
-             patch("subprocess.run") as mock_run:
+        with (
+            patch("src.cli.main._get_manager") as mock_mgr,
+            patch("src.cli.main._image_exists", return_value=True),
+            patch("subprocess.run") as mock_run,
+        ):
             from src.cli.team_manager import TeamManager
+
             manager = TeamManager(base_dir=tmp_path / ".ai-squad")
             team_dir = manager.create("fail", str(repo))
 
-            from src.cli.templates.config import REQUIRED_ENV_VARS
-            env = "\n".join(f"{v}=valor" for v in REQUIRED_ENV_VARS)
+            from src.cli.templates.config import COMMON_REQUIRED_ENV_VARS
+
+            all_vars = list(COMMON_REQUIRED_ENV_VARS) + ["TELEGRAM_TOKEN", "TELEGRAM_CHAT_ID"]
+            env = "\n".join(f"{v}=valor" for v in all_vars)
             (team_dir / ".env").write_text(env)
 
             mock_mgr.return_value = manager
@@ -145,9 +161,9 @@ class TestCLIStopExtended:
         repo = tmp_path / "repo"
         repo.mkdir()
 
-        with patch("src.cli.main._get_manager") as mock_mgr, \
-             patch("subprocess.run") as mock_run:
+        with patch("src.cli.main._get_manager") as mock_mgr, patch("subprocess.run") as mock_run:
             from src.cli.team_manager import TeamManager
+
             manager = TeamManager(base_dir=tmp_path / ".ai-squad")
             manager.create("t1", str(repo))
             mock_mgr.return_value = manager
@@ -162,9 +178,9 @@ class TestCLIStopExtended:
         repo = tmp_path / "repo"
         repo.mkdir()
 
-        with patch("src.cli.main._get_manager") as mock_mgr, \
-             patch("subprocess.run") as mock_run:
+        with patch("src.cli.main._get_manager") as mock_mgr, patch("subprocess.run") as mock_run:
             from src.cli.team_manager import TeamManager
+
             manager = TeamManager(base_dir=tmp_path / ".ai-squad")
             manager.create("fail", str(repo))
             mock_mgr.return_value = manager
@@ -183,9 +199,12 @@ class TestCLIStatusExtended:
         repo = tmp_path / "repo"
         repo.mkdir()
 
-        with patch("src.cli.main._get_manager") as mock_mgr, \
-             patch("src.cli.main._get_container_status", return_value="running"):
+        with (
+            patch("src.cli.main._get_manager") as mock_mgr,
+            patch("src.cli.main._get_container_status", return_value="running"),
+        ):
             from src.cli.team_manager import TeamManager
+
             manager = TeamManager(base_dir=tmp_path / ".ai-squad")
             team_dir = manager.create("active", str(repo))
 
@@ -196,9 +215,7 @@ class TestCLIStatusExtended:
                 "state": "dev_working",
                 "description": "Criar API de autenticação",
             }
-            (state_dir / "demand-abc123.json").write_text(
-                json.dumps(demand), encoding="utf-8"
-            )
+            (state_dir / "demand-abc123.json").write_text(json.dumps(demand), encoding="utf-8")
 
             mock_mgr.return_value = manager
             result = runner.invoke(cli, ["status", "active"])
@@ -214,6 +231,7 @@ class TestCLILogs:
         """Verifica erro com time inexistente."""
         with patch("src.cli.main._get_manager") as mock:
             from src.cli.team_manager import TeamManager
+
             manager = TeamManager(base_dir=tmp_path / ".ai-squad")
             mock.return_value = manager
 
@@ -226,9 +244,9 @@ class TestCLILogs:
         repo = tmp_path / "repo"
         repo.mkdir()
 
-        with patch("src.cli.main._get_manager") as mock_mgr, \
-             patch("subprocess.run") as mock_run:
+        with patch("src.cli.main._get_manager") as mock_mgr, patch("subprocess.run") as mock_run:
             from src.cli.team_manager import TeamManager
+
             manager = TeamManager(base_dir=tmp_path / ".ai-squad")
             manager.create("logtest", str(repo))
             mock_mgr.return_value = manager

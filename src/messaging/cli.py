@@ -4,6 +4,7 @@ import asyncio
 from typing import Callable
 
 from src.messaging.interface import MessageBus
+from src.messaging.registry import register
 
 
 class CLIMessageBus(MessageBus):
@@ -13,12 +14,35 @@ class CLIMessageBus(MessageBus):
     thread_id é ignorado em todos os métodos.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, **kwargs) -> None:
+        # Aceita kwargs extras (persona_name, etc) para compatibilidade com daemon
         self._message_callback: Callable | None = None
         self._voice_callback: Callable | None = None
 
+    # --- Ciclo de vida ---
+
+    async def start(self) -> None:
+        """No-op — CLI não precisa de loop de recebimento."""
+
+    async def stop(self) -> None:
+        """No-op — CLI não precisa de shutdown."""
+
+    # --- Auto-descrição ---
+
+    @classmethod
+    def required_env_vars(cls) -> list[str]:
+        """CLI não precisa de variáveis de ambiente."""
+        return []
+
+    @classmethod
+    def env_template(cls) -> str:
+        """CLI não precisa de template de .env."""
+        return ""
+
+    # --- Comunicação ---
+
     async def send_message(
-        self, user_id: str, text: str, *, thread_id: int | None = None, **kwargs: str
+        self, user_id: str, text: str, *, thread_id: str | None = None, **kwargs: str
     ) -> None:
         """Exibe mensagem no stdout."""
         print(f"[{user_id}] {text}")
@@ -29,7 +53,7 @@ class CLIMessageBus(MessageBus):
         question: str,
         options: list[str],
         *,
-        thread_id: int | None = None,
+        thread_id: str | None = None,
     ) -> str:
         """Solicita aprovação via stdin com opções numeradas."""
         print(f"\n[Aprovação para {user_id}] {question}")
@@ -46,7 +70,7 @@ class CLIMessageBus(MessageBus):
             except ValueError:
                 print("Digite um número válido.")
 
-    async def ask_user(self, user_id: str, question: str, *, thread_id: int | None = None) -> str:
+    async def ask_user(self, user_id: str, question: str, *, thread_id: str | None = None) -> str:
         """Solicita resposta de texto livre via stdin."""
         print(f"\n[Pergunta para {user_id}] {question}")
         resposta = await asyncio.to_thread(input, "Sua resposta: ")
@@ -60,7 +84,7 @@ class CLIMessageBus(MessageBus):
         """Registra callback para mensagens de voz (não suportado no CLI)."""
         self._voice_callback = callback
 
-    async def notify(self, user_id: str, text: str, *, thread_id: int | None = None) -> None:
+    async def notify(self, user_id: str, text: str, *, thread_id: str | None = None) -> None:
         """Exibe notificação no stdout."""
         print(f"[NOTIFICAÇÃO - {user_id}] {text}")
 
@@ -68,3 +92,7 @@ class CLIMessageBus(MessageBus):
         """Processa input simulado (útil para testes)."""
         if self._message_callback:
             await self._message_callback(text)
+
+
+# Auto-registro no registry
+register("cli", CLIMessageBus)

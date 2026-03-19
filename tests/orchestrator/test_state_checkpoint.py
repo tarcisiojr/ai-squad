@@ -1,7 +1,5 @@
 """Testes para checkpoint e retomada de demandas no StateManager."""
 
-
-
 from src.orchestrator.state import StateManager
 
 

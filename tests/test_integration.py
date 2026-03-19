@@ -53,9 +53,7 @@ class TestFluxoCompleto:
         demand_id = "integ-001"
 
         # PO produz resultado
-        resultado = await engine.dispatch_agent(
-            demand_id, "po", "Nova feature", {"repo": "test"}
-        )
+        resultado = await engine.dispatch_agent(demand_id, "po", "Nova feature", {"repo": "test"})
         assert "po" in resultado
 
         # Dev produz resultado
@@ -65,9 +63,7 @@ class TestFluxoCompleto:
         assert "dev-orchestrator" in resultado_dev
 
         # QA valida
-        resultado_qa = await engine.dispatch_agent(
-            demand_id, "qa", "Validar", {}
-        )
+        resultado_qa = await engine.dispatch_agent(demand_id, "qa", "Validar", {})
         assert "qa" in resultado_qa
 
     @pytest.mark.asyncio
@@ -173,9 +169,5 @@ class TestDesacoplamento:
             modulo = importlib.import_module(nome_modulo)
             source = inspect.getsource(modulo)
             # Módulos core não devem importar implementações concretas
-            assert "ClaudeCodeAdapter" not in source, (
-                f"{nome_modulo} importa ClaudeCodeAdapter"
-            )
-            assert "TelegramMessageBus" not in source, (
-                f"{nome_modulo} importa TelegramMessageBus"
-            )
+            assert "ClaudeCodeAdapter" not in source, f"{nome_modulo} importa ClaudeCodeAdapter"
+            assert "TelegramMessageBus" not in source, f"{nome_modulo} importa TelegramMessageBus"

@@ -2,9 +2,11 @@
 
 import asyncio
 import logging
+import os
 from typing import Callable
 
 from src.messaging.interface import MessageBus
+from src.messaging.registry import register
 
 logger = logging.getLogger("ai-squad.telegram")
 
@@ -20,17 +22,18 @@ class TelegramMessageBus(MessageBus):
 
     def __init__(
         self,
-        token: str,
+        token: str = "",
         persona_name: str = "Agent",
         persona_avatar: str = "",
         whisper_api_key: str | None = None,
         allowed_chat_id: str = "",
     ) -> None:
-        self._token = token
+        # Permite instanciar sem token (lê do env em start())
+        self._token = token or os.environ.get("TELEGRAM_TOKEN", "")
         self._persona_name = persona_name
         self._persona_avatar = persona_avatar
         self._whisper_api_key = whisper_api_key
-        self._allowed_chat_id = allowed_chat_id
+        self._allowed_chat_id = allowed_chat_id or os.environ.get("TELEGRAM_CHAT_ID", "")
         self._message_callback: Callable | None = None
         self._voice_callback: Callable | None = None
         self._photo_callback: Callable | None = None
@@ -39,12 +42,100 @@ class TelegramMessageBus(MessageBus):
         self._app = None
         self._pending_approvals: dict[str, asyncio.Future] = {}
         self._pending_text_reply: dict[str, asyncio.Future] = {}
+        self._is_forum: bool = False
+
+    # --- Ciclo de vida ---
+
+    async def start(self) -> None:
+        """Inicia o bot do Telegram: inicializa app + polling."""
+        await self._ensure_app()
+        assert self._app is not None
+
+        # Detecta modo fórum
+        await self._detect_forum_mode()
+
+        await self._app.initialize()
+        await self._app.start()
+        assert self._app.updater is not None
+        await self._app.updater.start_polling()
+
+    async def stop(self) -> None:
+        """Para polling e encerra o bot gracefully."""
+        if self._app is None:
+            return
+        if self._app.updater and self._app.updater.running:
+            await self._app.updater.stop()
+        if self._app.running:
+            await self._app.stop()
+        await self._app.shutdown()
+
+    # --- Auto-descrição ---
+
+    @classmethod
+    def required_env_vars(cls) -> list[str]:
+        """Variáveis obrigatórias para o Telegram."""
+        return ["TELEGRAM_TOKEN", "TELEGRAM_CHAT_ID"]
+
+    @classmethod
+    def env_template(cls) -> str:
+        """Template de .env para Telegram."""
+        return (
+            "# Telegram Bot (criado via @BotFather)\n"
+            "TELEGRAM_TOKEN=PREENCHA_AQUI_token_bot_telegram\n"
+            "\n"
+            "# Chat ID do Telegram (grupo ou chat privado)\n"
+            "TELEGRAM_CHAT_ID=PREENCHA_AQUI_chat_id_telegram\n"
+        )
+
+    # --- Capacidades ---
+
+    @property
+    def supports_threads(self) -> bool:
+        """Retorna True se o chat é um grupo-fórum do Telegram."""
+        return self._is_forum
+
+    @property
+    def default_chat_id(self) -> str:
+        """Retorna o chat_id principal (allowed_chat_id)."""
+        return self._allowed_chat_id
+
+    # --- Internals ---
+
+    def _to_int_thread(self, thread_id: str | None) -> int | None:
+        """Converte thread_id str para int (formato interno do Telegram)."""
+        if thread_id is None:
+            return None
+        try:
+            return int(thread_id)
+        except (ValueError, TypeError):
+            return None
+
+    def _to_str_thread(self, thread_id: int | None) -> str | None:
+        """Converte thread_id int (Telegram) para str (interface genérica)."""
+        if thread_id is None:
+            return None
+        return str(thread_id)
 
     def _is_authorized(self, chat_id: str) -> bool:
         """Verifica se o chat_id está autorizado a interagir com o bot."""
         if not self._allowed_chat_id:
             return True
         return chat_id == self._allowed_chat_id
+
+    async def _detect_forum_mode(self) -> None:
+        """Detecta se o chat configurado é um grupo-fórum do Telegram."""
+        if not self._allowed_chat_id or not self._app:
+            return
+        try:
+            chat = await self._app.bot.get_chat(self._allowed_chat_id)
+            self._is_forum = bool(getattr(chat, "is_forum", False))
+            if self._is_forum:
+                logger.info("Modo fórum detectado para chat %s", self._allowed_chat_id)
+            else:
+                logger.info("Chat %s não é fórum — modo flat", self._allowed_chat_id)
+        except Exception as e:
+            logger.warning("Erro ao detectar modo fórum: %s", e)
+            self._is_forum = False
 
     async def _ensure_app(self):
         """Inicializa o bot do Telegram sob demanda."""
@@ -71,7 +162,7 @@ class TelegramMessageBus(MessageBus):
                 return
             chat_id = str(update.message.chat_id)
             user_id = str(update.message.from_user.id) if update.message.from_user else chat_id
-            thread_id = update.message.message_thread_id
+            thread_id = self._to_str_thread(update.message.message_thread_id)
 
             if not self._is_authorized(chat_id):
                 logger.warning("Mensagem ignorada de chat_id nao autorizado: %s", chat_id)
@@ -84,7 +175,7 @@ class TelegramMessageBus(MessageBus):
                 await self._app.bot.send_chat_action(
                     chat_id=chat_id,
                     action="typing",
-                    message_thread_id=thread_id,
+                    message_thread_id=update.message.message_thread_id,
                 )
             except Exception:
                 pass
@@ -114,7 +205,7 @@ class TelegramMessageBus(MessageBus):
                 return
             chat_id = str(update.message.chat_id)
             user_id = str(update.message.from_user.id) if update.message.from_user else chat_id
-            thread_id = update.message.message_thread_id
+            thread_id = self._to_str_thread(update.message.message_thread_id)
 
             if not self._is_authorized(chat_id):
                 logger.warning("Voz ignorada de chat_id nao autorizado: %s", chat_id)
@@ -147,7 +238,7 @@ class TelegramMessageBus(MessageBus):
                 return
             chat_id = str(update.message.chat_id)
             user_id = str(update.message.from_user.id) if update.message.from_user else chat_id
-            thread_id = update.message.message_thread_id
+            thread_id = self._to_str_thread(update.message.message_thread_id)
 
             if not self._is_authorized(chat_id):
                 logger.warning("Foto ignorada de chat_id nao autorizado: %s", chat_id)
@@ -178,7 +269,7 @@ class TelegramMessageBus(MessageBus):
                 return
             chat_id = str(update.message.chat_id)
             user_id = str(update.message.from_user.id) if update.message.from_user else chat_id
-            thread_id = update.message.message_thread_id
+            thread_id = self._to_str_thread(update.message.message_thread_id)
 
             if not self._is_authorized(chat_id):
                 logger.warning("Documento ignorado de chat_id nao autorizado: %s", chat_id)
@@ -284,7 +375,7 @@ class TelegramMessageBus(MessageBus):
             logging.getLogger("ai-squad.telegram").error("Erro na transcricao: %s", e)
             return None
 
-    async def send_typing(self, chat_id: str, *, thread_id: int | None = None) -> None:
+    async def send_typing(self, chat_id: str, *, thread_id: str | None = None) -> None:
         """Envia acao 'digitando...' no Telegram."""
         await self._ensure_app()
         assert self._app is not None
@@ -292,7 +383,7 @@ class TelegramMessageBus(MessageBus):
             await self._app.bot.send_chat_action(
                 chat_id=chat_id,
                 action="typing",
-                message_thread_id=thread_id,
+                message_thread_id=self._to_int_thread(thread_id),
             )
         except Exception:
             pass
@@ -326,7 +417,7 @@ class TelegramMessageBus(MessageBus):
 
         return result
 
-    async def _send(self, chat_id: str, text: str, *, thread_id: int | None = None, **kwargs):
+    async def _send(self, chat_id: str, text: str, *, thread_id: str | None = None, **kwargs):
         """Envia mensagem com Markdown. Fallback para texto plano se falhar."""
         max_len = 4096
         if len(text) > max_len:
@@ -337,6 +428,7 @@ class TelegramMessageBus(MessageBus):
                 msg = await self._send(chat_id, part, thread_id=thread_id, **part_kwargs)
             return msg
 
+        int_thread = self._to_int_thread(thread_id)
         assert self._app is not None
         # Tenta enviar com Markdown primeiro, fallback para texto plano
         try:
@@ -344,19 +436,19 @@ class TelegramMessageBus(MessageBus):
                 chat_id=chat_id,
                 text=text,
                 parse_mode="Markdown",
-                message_thread_id=thread_id,
+                message_thread_id=int_thread,
                 **kwargs,
             )
         except Exception:
             return await self._app.bot.send_message(
                 chat_id=chat_id,
                 text=text,
-                message_thread_id=thread_id,
+                message_thread_id=int_thread,
                 **kwargs,
             )
 
     async def send_message(
-        self, user_id: str, text: str, *, thread_id: int | None = None, **kwargs: str
+        self, user_id: str, text: str, *, thread_id: str | None = None, **kwargs: str
     ) -> None:
         """Envia mensagem de texto via Telegram. Mostra 'digitando...' antes."""
         await self.send_typing(user_id, thread_id=thread_id)
@@ -376,7 +468,7 @@ class TelegramMessageBus(MessageBus):
         question: str,
         options: list[str],
         *,
-        thread_id: int | None = None,
+        thread_id: str | None = None,
     ) -> str:
         """Envia pedido de aprovação com botões inline."""
         await self._ensure_app()
@@ -405,7 +497,7 @@ class TelegramMessageBus(MessageBus):
         finally:
             self._pending_approvals.pop(key, None)
 
-    async def ask_user(self, user_id: str, question: str, *, thread_id: int | None = None) -> str:
+    async def ask_user(self, user_id: str, question: str, *, thread_id: str | None = None) -> str:
         """Envia pergunta e aguarda resposta de texto livre do usuário."""
         await self._ensure_app()
 
@@ -442,7 +534,7 @@ class TelegramMessageBus(MessageBus):
         photo_path: str,
         caption: str = "",
         *,
-        thread_id: int | None = None,
+        thread_id: str | None = None,
     ) -> None:
         """Envia foto via Telegram."""
         await self._ensure_app()
@@ -453,7 +545,7 @@ class TelegramMessageBus(MessageBus):
                     chat_id=user_id,
                     photo=f,
                     caption=caption or None,
-                    message_thread_id=thread_id,
+                    message_thread_id=self._to_int_thread(thread_id),
                 )
         except Exception as e:
             import logging
@@ -464,8 +556,8 @@ class TelegramMessageBus(MessageBus):
                 user_id, f"Nao consegui enviar a imagem: {e}", thread_id=thread_id
             )
 
-    async def create_thread(self, chat_id: str, title: str) -> int | None:
-        """Cria Forum Topic no Telegram e retorna o thread_id."""
+    async def create_thread(self, chat_id: str, title: str) -> str | None:
+        """Cria Forum Topic no Telegram e retorna o thread_id como string."""
         await self._ensure_app()
         assert self._app is not None
         try:
@@ -477,7 +569,7 @@ class TelegramMessageBus(MessageBus):
             )
             thread_id = result.message_thread_id
             logger.info("Forum Topic criado: '%s' (thread_id=%d)", title, thread_id)
-            return thread_id
+            return str(thread_id)
         except Exception as e:
             logger.error("Erro ao criar Forum Topic '%s': %s", title, e)
             return None
@@ -490,6 +582,10 @@ class TelegramMessageBus(MessageBus):
         """Registra callback para reações em mensagens."""
         self._reaction_callback = callback
 
-    async def notify(self, user_id: str, text: str, *, thread_id: int | None = None) -> None:
+    async def notify(self, user_id: str, text: str, *, thread_id: str | None = None) -> None:
         """Envia notificação via Telegram."""
         await self.send_message(user_id, f"🔔 {text}", thread_id=thread_id)
+
+
+# Auto-registro no registry
+register("telegram", TelegramMessageBus)

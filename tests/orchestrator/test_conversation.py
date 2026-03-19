@@ -1,7 +1,5 @@
 """Testes para persistência de histórico de conversa."""
 
-
-
 from src.orchestrator.conversation import ConversationStore
 
 

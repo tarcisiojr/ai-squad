@@ -158,16 +158,19 @@ class TestPipelineLoader:
 
     def test_carrega_pipeline_valido(self, tmp_path):
         """Carrega pipeline.yaml com steps corretamente."""
-        _write_pipeline_yaml(tmp_path, {
-            "name": "Meu Pipeline",
-            "description": "Pipeline de teste",
-            "pipeline": {
-                "steps": [
-                    {"id": "plan", "name": "Planejamento", "agent": "po"},
-                    {"id": "dev", "name": "Desenvolvimento", "agent": "dev-backend"},
-                ],
+        _write_pipeline_yaml(
+            tmp_path,
+            {
+                "name": "Meu Pipeline",
+                "description": "Pipeline de teste",
+                "pipeline": {
+                    "steps": [
+                        {"id": "plan", "name": "Planejamento", "agent": "po"},
+                        {"id": "dev", "name": "Desenvolvimento", "agent": "dev-backend"},
+                    ],
+                },
             },
-        })
+        )
 
         loader = PipelineLoader(tmp_path)
         pipeline = loader.load()
@@ -181,12 +184,15 @@ class TestPipelineLoader:
 
     def test_carrega_steps_na_raiz(self, tmp_path):
         """Carrega steps quando definidos na raiz do YAML (formato alternativo)."""
-        _write_pipeline_yaml(tmp_path, {
-            "name": "Alt",
-            "steps": [
-                {"id": "s1", "name": "Step 1", "agent": "po"},
-            ],
-        })
+        _write_pipeline_yaml(
+            tmp_path,
+            {
+                "name": "Alt",
+                "steps": [
+                    {"id": "s1", "name": "Step 1", "agent": "po"},
+                ],
+            },
+        )
 
         loader = PipelineLoader(tmp_path)
         pipeline = loader.load()
@@ -201,9 +207,7 @@ class TestPipelineLoader:
 
     def test_retorna_none_yaml_invalido(self, tmp_path):
         """Retorna None para YAML malformado."""
-        (tmp_path / "pipeline.yaml").write_text(
-            "invalid: [yaml: {broken", encoding="utf-8"
-        )
+        (tmp_path / "pipeline.yaml").write_text("invalid: [yaml: {broken", encoding="utf-8")
 
         loader = PipelineLoader(tmp_path)
         assert loader.load() is None
@@ -249,22 +253,25 @@ Instruções detalhadas do step.
 - Requisitos contraditórios
 """
         _write_step_file(tmp_path, "plan.md", step_content)
-        _write_pipeline_yaml(tmp_path, {
-            "name": "Test",
-            "pipeline": {
-                "steps": [
-                    {
-                        "id": "plan",
-                        "name": "Plan",
-                        "agent": "po",
-                        "file": "plan.md",
-                        "model_tier": "fast",
-                        "on_reject": "plan",
-                        "max_review_cycles": 5,
-                    },
-                ],
+        _write_pipeline_yaml(
+            tmp_path,
+            {
+                "name": "Test",
+                "pipeline": {
+                    "steps": [
+                        {
+                            "id": "plan",
+                            "name": "Plan",
+                            "agent": "po",
+                            "file": "plan.md",
+                            "model_tier": "fast",
+                            "on_reject": "plan",
+                            "max_review_cycles": 5,
+                        },
+                    ],
+                },
             },
-        })
+        )
 
         loader = PipelineLoader(tmp_path)
         pipeline = loader.load()
@@ -303,20 +310,23 @@ Instruções sem frontmatter.
 - Especificação aprovada
 """
         _write_step_file(tmp_path, "dev.md", step_content)
-        _write_pipeline_yaml(tmp_path, {
-            "name": "Test",
-            "pipeline": {
-                "steps": [
-                    {
-                        "id": "dev",
-                        "name": "Dev",
-                        "agent": "dev-backend",
-                        "file": "dev.md",
-                        "model_tier": "powerful",
-                    },
-                ],
+        _write_pipeline_yaml(
+            tmp_path,
+            {
+                "name": "Test",
+                "pipeline": {
+                    "steps": [
+                        {
+                            "id": "dev",
+                            "name": "Dev",
+                            "agent": "dev-backend",
+                            "file": "dev.md",
+                            "model_tier": "powerful",
+                        },
+                    ],
+                },
             },
-        })
+        )
 
         loader = PipelineLoader(tmp_path)
         pipeline = loader.load()
@@ -377,21 +387,24 @@ model_tier: fast
 Instruções.
 """
         _write_step_file(tmp_path, "review.md", step_content)
-        _write_pipeline_yaml(tmp_path, {
-            "name": "Test",
-            "pipeline": {
-                "steps": [
-                    {
-                        "id": "review",
-                        "name": "Review",
-                        "agent": "code-review",
-                        "file": "review.md",
-                        "on_reject": "dev",
-                        "model_tier": "powerful",
-                    },
-                ],
+        _write_pipeline_yaml(
+            tmp_path,
+            {
+                "name": "Test",
+                "pipeline": {
+                    "steps": [
+                        {
+                            "id": "review",
+                            "name": "Review",
+                            "agent": "code-review",
+                            "file": "review.md",
+                            "on_reject": "dev",
+                            "model_tier": "powerful",
+                        },
+                    ],
+                },
             },
-        })
+        )
 
         loader = PipelineLoader(tmp_path)
         pipeline = loader.load()
@@ -403,19 +416,22 @@ Instruções.
 
     def test_step_file_nao_encontrado(self, tmp_path):
         """Step file inexistente é tratado graciosamente."""
-        _write_pipeline_yaml(tmp_path, {
-            "name": "Test",
-            "pipeline": {
-                "steps": [
-                    {
-                        "id": "s1",
-                        "name": "Step 1",
-                        "agent": "po",
-                        "file": "nao_existe.md",
-                    },
-                ],
+        _write_pipeline_yaml(
+            tmp_path,
+            {
+                "name": "Test",
+                "pipeline": {
+                    "steps": [
+                        {
+                            "id": "s1",
+                            "name": "Step 1",
+                            "agent": "po",
+                            "file": "nao_existe.md",
+                        },
+                    ],
+                },
             },
-        })
+        )
 
         loader = PipelineLoader(tmp_path)
         pipeline = loader.load()
@@ -427,14 +443,17 @@ Instruções.
 
     def test_agents_como_string_vira_lista(self, tmp_path):
         """Campo 'agents' como string é convertido para lista."""
-        _write_pipeline_yaml(tmp_path, {
-            "name": "Test",
-            "pipeline": {
-                "steps": [
-                    {"id": "s1", "name": "Step", "agents": "dev-backend"},
-                ],
+        _write_pipeline_yaml(
+            tmp_path,
+            {
+                "name": "Test",
+                "pipeline": {
+                    "steps": [
+                        {"id": "s1", "name": "Step", "agents": "dev-backend"},
+                    ],
+                },
             },
-        })
+        )
 
         loader = PipelineLoader(tmp_path)
         pipeline = loader.load()

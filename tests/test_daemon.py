@@ -1,10 +1,18 @@
 """Testes para o daemon do ai-squad."""
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, PropertyMock
 
 import pytest
 
 from src.daemon import Daemon
+
+
+def _mock_bus(chat_id: str = "12345") -> MagicMock:
+    """Cria mock de MessageBus com default_chat_id configurado."""
+    bus = AsyncMock()
+    type(bus).default_chat_id = PropertyMock(return_value=chat_id)
+    type(bus).supports_threads = PropertyMock(return_value=False)
+    return bus
 
 
 class TestDaemon:
@@ -42,7 +50,13 @@ class TestDaemon:
         monkeypatch.delenv("TELEGRAM_TOKEN", raising=False)
         monkeypatch.delenv("TELEGRAM_CHAT_ID", raising=False)
 
+        from src.factory import PlatformConfig
+
         daemon = Daemon()
+        daemon._config = PlatformConfig(
+            ai_provider="claude-agent-sdk",
+            messaging_provider="telegram",
+        )
 
         with pytest.raises(SystemExit):
             daemon._validate_tokens()
@@ -54,7 +68,13 @@ class TestDaemon:
         monkeypatch.setenv("TELEGRAM_TOKEN", "real")
         monkeypatch.setenv("TELEGRAM_CHAT_ID", "123")
 
+        from src.factory import PlatformConfig
+
         daemon = Daemon()
+        daemon._config = PlatformConfig(
+            ai_provider="claude-agent-sdk",
+            messaging_provider="telegram",
+        )
 
         with pytest.raises(SystemExit):
             daemon._validate_tokens()
@@ -66,7 +86,13 @@ class TestDaemon:
         monkeypatch.setenv("TELEGRAM_TOKEN", "bot-real")
         monkeypatch.setenv("TELEGRAM_CHAT_ID", "12345")
 
+        from src.factory import PlatformConfig
+
         daemon = Daemon()
+        daemon._config = PlatformConfig(
+            ai_provider="claude-agent-sdk",
+            messaging_provider="telegram",
+        )
         daemon._validate_tokens()
 
     def test_slugify_texto_normal(self):
@@ -103,7 +129,7 @@ class TestDaemon:
         monkeypatch.setenv("TELEGRAM_CHAT_ID", "12345")
 
         daemon = Daemon()
-        daemon._bus = AsyncMock()
+        daemon._bus = _mock_bus()
         daemon._engine = AsyncMock()
         daemon._config = MagicMock()
         daemon._config.agents = {}
@@ -111,7 +137,11 @@ class TestDaemon:
         await daemon._handle_new_demand("Criar API de auth")
 
         daemon._engine.run_squad_lead.assert_called_once_with(
-            "squad-lead-session", "12345", "Criar API de auth", image_path=None, thread_id=None,
+            "squad-lead-session",
+            "12345",
+            "Criar API de auth",
+            image_path=None,
+            thread_id=None,
         )
 
     @pytest.mark.asyncio
@@ -120,7 +150,7 @@ class TestDaemon:
         monkeypatch.setenv("TELEGRAM_CHAT_ID", "12345")
 
         daemon = Daemon()
-        daemon._bus = AsyncMock()
+        daemon._bus = _mock_bus()
         daemon._config = MagicMock()
         daemon._config.agents = {}
         daemon._config.squad_lead = MagicMock()
@@ -136,7 +166,7 @@ class TestDaemon:
         monkeypatch.setenv("TELEGRAM_CHAT_ID", "12345")
 
         daemon = Daemon()
-        daemon._bus = AsyncMock()
+        daemon._bus = _mock_bus()
         daemon._engine = MagicMock()
         daemon._engine._get_running_agents_status.return_value = "Nenhum agente ativo."
 
@@ -150,7 +180,7 @@ class TestDaemon:
         monkeypatch.setenv("TELEGRAM_CHAT_ID", "12345")
 
         daemon = Daemon()
-        daemon._bus = AsyncMock()
+        daemon._bus = _mock_bus()
         daemon._engine = MagicMock()
         daemon._engine._running_agents = {}
         daemon._engine._get_agent_label = lambda n: n
@@ -166,13 +196,16 @@ class TestDaemon:
         monkeypatch.setenv("TELEGRAM_CHAT_ID", "12345")
 
         daemon = Daemon()
-        daemon._bus = AsyncMock()
+        daemon._bus = _mock_bus()
         daemon._engine = MagicMock()
 
         from src.orchestrator.tools import RunningAgent
+
         mock_task = MagicMock()
         daemon._engine._running_agents = {
-            "dev": RunningAgent(agent_name="dev", demand_id="d1", user_id="12345", status="running", task=mock_task),
+            "dev": RunningAgent(
+                agent_name="dev", demand_id="d1", user_id="12345", status="running", task=mock_task
+            ),
         }
         daemon._engine._get_agent_label = lambda n: f"Dev ({n})"
 
@@ -188,7 +221,7 @@ class TestDaemon:
         monkeypatch.setenv("TELEGRAM_CHAT_ID", "12345")
 
         daemon = Daemon()
-        daemon._bus = AsyncMock()
+        daemon._bus = _mock_bus()
         daemon._config = MagicMock()
         daemon._config.repo_path = str(tmp_path)
 
@@ -204,7 +237,7 @@ class TestDaemon:
         monkeypatch.setenv("TELEGRAM_CHAT_ID", "12345")
 
         daemon = Daemon()
-        daemon._bus = AsyncMock()
+        daemon._bus = _mock_bus()
         daemon._engine = AsyncMock()
         daemon._engine.run_squad_lead.side_effect = RuntimeError("Falha!")
         daemon._config = MagicMock()
@@ -217,6 +250,7 @@ class TestDaemon:
     def test_write_healthcheck(self):
         """Verifica escrita do arquivo de healthcheck."""
         from pathlib import Path
+
         daemon = Daemon()
         daemon._write_healthcheck()
         assert Path("/tmp/ai-squad-healthy").exists() or True
@@ -225,7 +259,7 @@ class TestDaemon:
     async def test_shutdown_seta_evento(self):
         """Verifica que shutdown seta o evento de parada."""
         daemon = Daemon()
-        daemon._bus = AsyncMock()
+        daemon._bus = _mock_bus()
 
         await daemon._shutdown()
 

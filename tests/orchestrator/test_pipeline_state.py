@@ -182,7 +182,8 @@ class TestPipelineExecutor:
     """Testes para o PipelineExecutor: ciclo de vida completo do pipeline."""
 
     def test_start_pipeline_cria_estado_para_todos_os_steps(
-        self, executor: PipelineExecutor,
+        self,
+        executor: PipelineExecutor,
     ) -> None:
         """Verifica que start_pipeline inicializa todos os steps com primeiro running."""
         state = executor.start_pipeline("D-001")
@@ -203,7 +204,8 @@ class TestPipelineExecutor:
         assert state.steps["qa"].status == "pending"
 
     def test_complete_step_avanca_para_proximo(
-        self, executor: PipelineExecutor,
+        self,
+        executor: PipelineExecutor,
     ) -> None:
         """Verifica que completar um step avança para o próximo."""
         executor.start_pipeline("D-001")
@@ -220,7 +222,8 @@ class TestPipelineExecutor:
         assert state.steps["dev"].status == "running"
 
     def test_complete_step_com_quality_gate_falho_nao_avanca(
-        self, executor: PipelineExecutor,
+        self,
+        executor: PipelineExecutor,
     ) -> None:
         """Verifica que quality gate failed não avança o pipeline."""
         executor.start_pipeline("D-001")
@@ -236,7 +239,8 @@ class TestPipelineExecutor:
         assert state.steps["spec"].retries == 1
 
     def test_pipeline_completa_quando_ultimo_step_finaliza(
-        self, executor: PipelineExecutor,
+        self,
+        executor: PipelineExecutor,
     ) -> None:
         """Verifica que pipeline muda para completed ao finalizar último step."""
         executor.start_pipeline("D-001")
@@ -255,7 +259,8 @@ class TestPipelineExecutor:
         assert state.current_step == ""
 
     def test_skip_step_marca_como_skipped_e_avanca(
-        self, executor: PipelineExecutor,
+        self,
+        executor: PipelineExecutor,
     ) -> None:
         """Verifica que skip_step pula o step e avança para o próximo."""
         executor.start_pipeline("D-001")
@@ -271,7 +276,8 @@ class TestPipelineExecutor:
         assert state.steps["spec"].completed_at != ""
 
     def test_rerun_step_reseta_para_running(
-        self, executor: PipelineExecutor,
+        self,
+        executor: PipelineExecutor,
     ) -> None:
         """Verifica que rerun_step reseta o step para running."""
         executor.start_pipeline("D-001")
@@ -290,7 +296,8 @@ class TestPipelineExecutor:
         assert state.status == "running"
 
     def test_handle_reject_volta_para_step_on_reject(
-        self, executor: PipelineExecutor,
+        self,
+        executor: PipelineExecutor,
     ) -> None:
         """Verifica que rejeição no review volta para o step dev."""
         executor.start_pipeline("D-001")
@@ -309,7 +316,8 @@ class TestPipelineExecutor:
         assert state.steps["review"].status == "pending"
 
     def test_handle_reject_retorna_none_quando_max_review_cycles_atingido(
-        self, executor: PipelineExecutor,
+        self,
+        executor: PipelineExecutor,
     ) -> None:
         """Verifica que handle_reject retorna None ao atingir max_review_cycles."""
         executor.start_pipeline("D-001")
@@ -332,7 +340,8 @@ class TestPipelineExecutor:
         assert state.steps["review"].status == "failed"
 
     def test_handle_reject_registra_review_history(
-        self, executor: PipelineExecutor,
+        self,
+        executor: PipelineExecutor,
     ) -> None:
         """Verifica que handle_reject registra histórico de revisão."""
         executor.start_pipeline("D-001")
@@ -352,7 +361,8 @@ class TestPipelineExecutor:
         assert "timestamp" in historico[0]
 
     def test_update_agent_status_atualiza_agente_individual(
-        self, executor: PipelineExecutor,
+        self,
+        executor: PipelineExecutor,
     ) -> None:
         """Verifica que update_agent_status atualiza status de agente específico."""
         executor.start_pipeline("D-001")
@@ -367,7 +377,8 @@ class TestPipelineExecutor:
         assert state.steps["dev"].agent_status["dev-frontend"] == "idle"
 
     def test_format_state_for_prompt_gera_saida_visual(
-        self, executor: PipelineExecutor,
+        self,
+        executor: PipelineExecutor,
     ) -> None:
         """Verifica que format_state_for_prompt gera texto com ícones e informações."""
         executor.start_pipeline("D-001")
@@ -385,13 +396,16 @@ class TestPipelineExecutor:
         assert "checkpoint" in saida.lower()
 
     def test_format_state_for_prompt_demanda_inexistente(
-        self, executor: PipelineExecutor,
+        self,
+        executor: PipelineExecutor,
     ) -> None:
         """Verifica que format_state_for_prompt retorna string vazia para demanda inexistente."""
         assert executor.format_state_for_prompt("nao-existe") == ""
 
     def test_load_state_persistencia_em_arquivo(
-        self, executor: PipelineExecutor, tmp_path: Path,
+        self,
+        executor: PipelineExecutor,
+        tmp_path: Path,
     ) -> None:
         """Verifica que estado é persistido em JSON e pode ser recarregado."""
         executor.start_pipeline("D-001")
@@ -410,13 +424,15 @@ class TestPipelineExecutor:
         assert state.steps["spec"].status == "completed"
 
     def test_load_state_retorna_none_para_demanda_inexistente(
-        self, executor: PipelineExecutor,
+        self,
+        executor: PipelineExecutor,
     ) -> None:
         """Verifica que load_state retorna None quando não há estado salvo."""
         assert executor.load_state("nao-existe") is None
 
     def test_get_active_demands_retorna_pipelines_em_execucao(
-        self, executor: PipelineExecutor,
+        self,
+        executor: PipelineExecutor,
     ) -> None:
         """Verifica que get_active_demands retorna apenas pipelines running/paused."""
         executor.start_pipeline("D-001")
@@ -435,7 +451,8 @@ class TestPipelineExecutor:
         assert "D-002" not in ids_ativos
 
     def test_get_current_step_retorna_step_config_correto(
-        self, executor: PipelineExecutor,
+        self,
+        executor: PipelineExecutor,
     ) -> None:
         """Verifica que get_current_step retorna StepConfig do step atual."""
         executor.start_pipeline("D-001")
@@ -452,13 +469,15 @@ class TestPipelineExecutor:
         assert step.id == "dev"
 
     def test_get_current_step_retorna_none_para_demanda_inexistente(
-        self, executor: PipelineExecutor,
+        self,
+        executor: PipelineExecutor,
     ) -> None:
         """Verifica que get_current_step retorna None sem estado."""
         assert executor.get_current_step("nao-existe") is None
 
     def test_checkpoint_step_recebe_status_checkpoint(
-        self, executor: PipelineExecutor,
+        self,
+        executor: PipelineExecutor,
     ) -> None:
         """Verifica que step checkpoint recebe status 'checkpoint' ao ser ativado."""
         executor.start_pipeline("D-001")

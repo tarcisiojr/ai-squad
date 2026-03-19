@@ -33,17 +33,21 @@ class TestRetryLogic:
                 raise RuntimeError("Erro temporário")
             yield mock_message
 
-        with patch(
-            "src.adapters.claude_agent_sdk.query", side_effect=mock_query
-        ), patch(
-            "src.adapters.claude_agent_sdk.AssistantMessage",
-            type(mock_message),
-        ), patch(
-            "src.adapters.claude_agent_sdk.TextBlock",
-            type(mock_text_block),
-        ), patch("asyncio.sleep", new_callable=AsyncMock):
+        with (
+            patch("src.adapters.claude_agent_sdk.query", side_effect=mock_query),
+            patch(
+                "src.adapters.claude_agent_sdk.AssistantMessage",
+                type(mock_message),
+            ),
+            patch(
+                "src.adapters.claude_agent_sdk.TextBlock",
+                type(mock_text_block),
+            ),
+            patch("asyncio.sleep", new_callable=AsyncMock),
+        ):
             resultado = await adapter._execute_sdk(
-                "teste", agent_name="test-agent",
+                "teste",
+                agent_name="test-agent",
             )
 
         assert resultado == "Sucesso"
@@ -52,16 +56,19 @@ class TestRetryLogic:
     @pytest.mark.asyncio
     async def test_esgota_retries(self, adapter):
         """Verifica que esgota todas as tentativas e propaga erro."""
+
         async def mock_query(**kwargs):
             raise RuntimeError("Erro persistente")
             yield  # pragma: no cover
 
-        with patch(
-            "src.adapters.claude_agent_sdk.query", side_effect=mock_query
-        ), patch("asyncio.sleep", new_callable=AsyncMock):
+        with (
+            patch("src.adapters.claude_agent_sdk.query", side_effect=mock_query),
+            patch("asyncio.sleep", new_callable=AsyncMock),
+        ):
             with pytest.raises(RuntimeError, match="Erro persistente"):
                 await adapter._execute_sdk(
-                    "teste", agent_name="test-agent",
+                    "teste",
+                    agent_name="test-agent",
                 )
 
     @pytest.mark.asyncio
@@ -77,12 +84,12 @@ class TestRetryLogic:
 
         adapter._timeout = 1
 
-        with patch(
-            "src.adapters.claude_agent_sdk.query", side_effect=mock_query
-        ):
+        with patch("src.adapters.claude_agent_sdk.query", side_effect=mock_query):
             with pytest.raises(asyncio.TimeoutError):
                 await adapter._execute_sdk(
-                    "teste", agent_name="test-agent", timeout=1,
+                    "teste",
+                    agent_name="test-agent",
+                    timeout=1,
                 )
 
         assert call_count == 1  # sem retry
@@ -104,17 +111,20 @@ class TestRetryLogic:
                 raise RuntimeError("context_length_exceeded: prompt is too long")
             yield mock_message
 
-        with patch(
-            "src.adapters.claude_agent_sdk.query", side_effect=mock_query
-        ), patch(
-            "src.adapters.claude_agent_sdk.AssistantMessage",
-            type(mock_message),
-        ), patch(
-            "src.adapters.claude_agent_sdk.TextBlock",
-            type(mock_text_block),
+        with (
+            patch("src.adapters.claude_agent_sdk.query", side_effect=mock_query),
+            patch(
+                "src.adapters.claude_agent_sdk.AssistantMessage",
+                type(mock_message),
+            ),
+            patch(
+                "src.adapters.claude_agent_sdk.TextBlock",
+                type(mock_text_block),
+            ),
         ):
             resultado = await adapter._execute_sdk(
-                "prompt longo " * 100, agent_name="test-agent",
+                "prompt longo " * 100,
+                agent_name="test-agent",
             )
 
         assert resultado == "Sucesso após compressão"
@@ -155,7 +165,8 @@ class TestModelOverride:
     @pytest.fixture
     def adapter(self):
         return ClaudeAgentSDKAdapter(
-            timeout=30, model="claude-sonnet-4-20250514",
+            timeout=30,
+            model="claude-sonnet-4-20250514",
         )
 
     @pytest.mark.asyncio
@@ -169,14 +180,16 @@ class TestModelOverride:
         async def mock_query(**kwargs):
             yield mock_message
 
-        with patch(
-            "src.adapters.claude_agent_sdk.query", side_effect=mock_query
-        ), patch(
-            "src.adapters.claude_agent_sdk.AssistantMessage",
-            type(mock_message),
-        ), patch(
-            "src.adapters.claude_agent_sdk.TextBlock",
-            type(mock_text_block),
+        with (
+            patch("src.adapters.claude_agent_sdk.query", side_effect=mock_query),
+            patch(
+                "src.adapters.claude_agent_sdk.AssistantMessage",
+                type(mock_message),
+            ),
+            patch(
+                "src.adapters.claude_agent_sdk.TextBlock",
+                type(mock_text_block),
+            ),
         ):
             await adapter.run(
                 "teste",
@@ -189,13 +202,15 @@ class TestModelOverride:
     @pytest.mark.asyncio
     async def test_model_override_restaurado_apos_erro(self, adapter):
         """Verifica restauração do modelo mesmo após erro."""
+
         async def mock_query_erro(**kwargs):
             raise RuntimeError("Erro")
             yield  # pragma: no cover
 
-        with patch(
-            "src.adapters.claude_agent_sdk.query", side_effect=mock_query_erro
-        ), patch("asyncio.sleep", new_callable=AsyncMock):
+        with (
+            patch("src.adapters.claude_agent_sdk.query", side_effect=mock_query_erro),
+            patch("asyncio.sleep", new_callable=AsyncMock),
+        ):
             with pytest.raises(RuntimeError):
                 await adapter.run(
                     "teste",

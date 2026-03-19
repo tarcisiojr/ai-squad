@@ -36,7 +36,9 @@ class TestSummarization:
     async def test_sumarizacao_ocorre_acima_threshold(self, tmp_path):
         """Verifica que sumarização ocorre quando ultrapassa threshold."""
         store = ConversationStore(str(tmp_path))
-        callback = AsyncMock(return_value="Resumo das mensagens anteriores com decisões e contexto.")
+        callback = AsyncMock(
+            return_value="Resumo das mensagens anteriores com decisões e contexto."
+        )
         store.set_summarize_callback(callback)
 
         # Salva 25 mensagens (acima do threshold de 20)

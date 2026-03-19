@@ -351,8 +351,11 @@ class QmdBackend(KnowledgeBackend):
 
     def __init__(self, knowledge_dir: Path) -> None:
         self._knowledge_dir = knowledge_dir
-        self._collection_name = "knowledge"
+        # Nome único baseado no caminho — evita colisão entre times/testes
+        slug = str(knowledge_dir).replace("/", "_").replace("\\", "_").strip("_")[-60:]
+        self._collection_name = f"kb-{slug}"
         self._initialized = False
+        self._has_embeddings: bool | None = None
 
     def _ensure_collection(self) -> None:
         """Garante que a collection qmd existe."""
@@ -377,33 +380,80 @@ class QmdBackend(KnowledgeBackend):
             logger.warning("Falha ao inicializar qmd collection: %s", e)
 
     def index(self, doc_path: Path) -> None:
-        """Indexa via qmd embed (reindexação completa)."""
+        """Atualiza índice e tenta gerar embeddings."""
         self._ensure_collection()
+        # Atualiza índice de texto
         try:
             subprocess.run(
-                ["qmd", "embed", "-c", self._collection_name],
+                ["qmd", "update"],
                 capture_output=True,
                 text=True,
                 timeout=120,
             )
         except (subprocess.TimeoutExpired, FileNotFoundError) as e:
-            logger.warning("Falha ao indexar via qmd: %s", e)
+            logger.warning("Falha ao atualizar índice qmd: %s", e)
+
+        # Tenta embeddings (tolerante a falha)
+        try:
+            result = subprocess.run(
+                ["qmd", "embed", "-c", self._collection_name],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if result.returncode == 0:
+                self._has_embeddings = True
+            else:
+                self._has_embeddings = False
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            self._has_embeddings = False
+
+    def _check_embeddings(self) -> bool:
+        """Verifica se embeddings estão disponíveis (cacheado)."""
+        if self._has_embeddings is not None:
+            return self._has_embeddings
+        try:
+            result = subprocess.run(
+                ["qmd", "status"],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            # Se "Pending: 0" ou "Vectors: N" (N>0), embeddings ok
+            output = result.stdout
+            if "Pending:  0" in output:
+                self._has_embeddings = True
+            elif "need embedding" in output:
+                self._has_embeddings = False
+            else:
+                # Conservador: assume sem embeddings
+                self._has_embeddings = False
+        except Exception:
+            self._has_embeddings = False
+        return self._has_embeddings
 
     def search(self, query: str, limit: int = 5) -> list[KnowledgeResult]:
-        """Busca semântica via qmd query."""
+        """Busca via qmd. Usa 'query' (híbrido) se embeddings ok, senão 'search' (BM25)."""
         if not query or not query.strip():
             return []
 
         self._ensure_collection()
+
+        # Decide comando: 'query' (híbrido) ou 'search' (BM25 puro)
+        if self._check_embeddings():
+            cmd = ["qmd", "query", query, "-c", self._collection_name, "--json"]
+        else:
+            cmd = ["qmd", "search", query, "-c", self._collection_name, "--json"]
+
         try:
             result = subprocess.run(
-                ["qmd", "query", query, "-c", self._collection_name, "--json"],
+                cmd,
                 capture_output=True,
                 text=True,
                 timeout=120,
             )
             if result.returncode != 0:
-                logger.warning("qmd query falhou: %s", result.stderr)
+                logger.warning("qmd %s falhou: %s", cmd[1], result.stderr.strip()[:200])
                 return []
 
             import json
@@ -439,17 +489,39 @@ class QmdBackend(KnowledgeBackend):
             return []
 
     def reindex_all(self) -> None:
-        """Reindexa via qmd embed."""
+        """Reindexa: atualiza índice de texto e tenta gerar embeddings."""
         self._ensure_collection()
+        # Atualiza índice de texto (sempre funciona)
         try:
             subprocess.run(
+                ["qmd", "update"],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+        except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+            logger.warning("Falha ao atualizar índice qmd: %s", e)
+
+        # Tenta gerar embeddings (pode falhar se sqlite-vec indisponível)
+        try:
+            result = subprocess.run(
                 ["qmd", "embed", "-c", self._collection_name, "--force"],
                 capture_output=True,
                 text=True,
                 timeout=300,
             )
+            if result.returncode == 0:
+                self._has_embeddings = True
+                logger.info("Embeddings gerados para collection %s", self._collection_name)
+            else:
+                self._has_embeddings = False
+                logger.info(
+                    "Embeddings indisponíveis (sqlite-vec?) — usando busca BM25: %s",
+                    result.stderr.strip()[:100],
+                )
         except (subprocess.TimeoutExpired, FileNotFoundError) as e:
-            logger.warning("Falha ao reindexar via qmd: %s", e)
+            self._has_embeddings = False
+            logger.info("Embeddings indisponíveis — usando busca BM25: %s", e)
 
     def remove(self, doc_path: Path) -> None:
         """Qmd reindexação é batch — remove exige reindex completo."""

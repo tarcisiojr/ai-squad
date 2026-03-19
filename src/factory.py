@@ -32,6 +32,8 @@ class AgentConfig:
     agents_md: str = ""
     role: str = ""  # papel do agente: spec, dev, review, generic (vazio = inferir)
     timeout: int = 0  # 0 = usa agent_timeout padrao
+    tools: list[str] = field(default_factory=list)  # toolkits extras: web_search, code_execution, shell
+    web_search_provider: str = ""  # provider de web search: duckduckgo (default), tavily, serpapi
     submodules: list[SubmoduleConfig] = field(
         default_factory=list
     )  # submodulos que o agente trabalha
@@ -153,6 +155,8 @@ class PlatformConfig:
                 command=config.get("command", f"/{nome}"),
                 role=config.get("role", ""),
                 timeout=config.get("timeout", 0),
+                tools=config.get("tools", []),
+                web_search_provider=config.get("web_search_provider", ""),
                 submodules=submodules,
             )
 
@@ -202,16 +206,37 @@ class PlatformConfig:
     def validate_required_tokens(self) -> list[str]:
         """Valida que tokens obrigatórios estão configurados.
 
+        Verifica tokens comuns + tokens específicos do provider de mensageria.
         Retorna lista de tokens ausentes ou com placeholder.
         """
-        required = {
-            "CLAUDE_CODE_OAUTH_TOKEN": os.environ.get("CLAUDE_CODE_OAUTH_TOKEN", ""),
-            "GITHUB_TOKEN": os.environ.get("GITHUB_TOKEN", ""),
-            "TELEGRAM_TOKEN": os.environ.get("TELEGRAM_TOKEN", ""),
-            "TELEGRAM_CHAT_ID": os.environ.get("TELEGRAM_CHAT_ID", ""),
-        }
+        # Tokens do provider de IA
+        missing = []
+        if self.ai_provider == "agno":
+            # Agno usa GOOGLE_API_KEY (ou outra key dependendo do modelo)
+            google_key = os.environ.get("GOOGLE_API_KEY", "")
+            if not google_key or google_key.startswith(_PLACEHOLDER_PREFIX):
+                missing.append("GOOGLE_API_KEY")
+        else:
+            # Claude Agent SDK usa OAuth token
+            claude_token = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN", "")
+            if not claude_token or claude_token.startswith(_PLACEHOLDER_PREFIX):
+                missing.append("CLAUDE_CODE_OAUTH_TOKEN")
 
-        return [k for k, v in required.items() if not v or v.startswith(_PLACEHOLDER_PREFIX)]
+        # Tokens específicos do provider de mensageria
+        try:
+            from src.messaging.registry import get as get_provider
+            from src.messaging.registry import load_builtin_providers
+
+            load_builtin_providers()
+            provider_cls = get_provider(self.messaging_provider)
+            for var_name in provider_cls.required_env_vars():
+                value = os.environ.get(var_name, "")
+                if not value or value.startswith(_PLACEHOLDER_PREFIX):
+                    missing.append(var_name)
+        except (ValueError, ImportError):
+            pass
+
+        return missing
 
 
 class PlatformFactory:

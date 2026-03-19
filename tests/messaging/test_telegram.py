@@ -68,7 +68,7 @@ class TestTelegramMessageBus:
         mock_app.bot = mock_bot
         bus._app = mock_app
 
-        await bus.send_message("12345", "Msg no tópico", thread_id=999)
+        await bus.send_message("12345", "Msg no tópico", thread_id="999")
 
         call_kwargs = mock_bot.send_message.call_args[1]
         assert call_kwargs["message_thread_id"] == 999
@@ -99,7 +99,7 @@ class TestTelegramMessageBus:
 
         thread_id = await bus.create_thread("12345", "Login OAuth")
 
-        assert thread_id == 42
+        assert thread_id == "42"
         mock_bot.create_forum_topic.assert_called_once_with(
             chat_id="12345",
             name="Login OAuth",
@@ -249,6 +249,6 @@ class TestTelegramAccessControl:
 
         callback.assert_called_once_with(
             "mensagem no tópico",
-            thread_id=999,
+            thread_id="999",
             user_id="67890",
         )

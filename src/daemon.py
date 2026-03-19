@@ -1,4 +1,4 @@
-"""Daemon do ai-squad — loop infinito escutando Telegram."""
+"""Daemon do ai-squad — loop infinito escutando mensageria."""
 
 import asyncio
 import logging
@@ -14,7 +14,9 @@ from dotenv import load_dotenv
 
 from src.adapters.claude_agent_sdk import ClaudeAgentSDKAdapter
 from src.factory import PlatformConfig
-from src.messaging.telegram import TelegramMessageBus
+from src.messaging.interface import MessageBus
+from src.messaging.registry import get as get_provider
+from src.messaging.registry import load_builtin_providers
 from src.orchestrator.engine import OrchestrationEngine
 from src.orchestrator.journal import JournalStore
 from src.orchestrator.state import StateManager
@@ -30,7 +32,7 @@ logger = logging.getLogger("ai-squad.daemon")
 
 
 class Daemon:
-    """Processo daemon que escuta Telegram e orquestra demandas.
+    """Processo daemon que escuta mensageria e orquestra demandas.
 
     Roda em loop infinito (Docker ou local foreground).
     Processa uma demanda por vez, enfileirando as demais.
@@ -41,16 +43,14 @@ class Daemon:
 
         self._shutdown_event = asyncio.Event()
         self._engine: OrchestrationEngine | None = None
-        self._bus: TelegramMessageBus | None = None
+        self._bus: MessageBus | None = None
         self._config: PlatformConfig | None = None
         self._paths = path_resolver or PathResolver("docker")
         # Conversa livre com o Squad Lead no Tópico Geral (sem pipeline)
         self._squad_lead_conversation_id = "squad-lead-session"
         self._team_name = os.environ.get("TEAM_NAME", "default")
-        # Mapeamento thread_id ↔ demand_id para Forum Topics
+        # Mapeamento thread_id ↔ demand_id para threads/tópicos
         self._thread_map: ThreadDemandMap | None = None
-        # Cache: se o chat é um grupo-fórum
-        self._is_forum: bool = False
 
     @property
     def engine(self) -> OrchestrationEngine:
@@ -61,7 +61,7 @@ class Daemon:
         return self._engine
 
     @property
-    def bus(self) -> TelegramMessageBus:
+    def bus(self) -> MessageBus:
         """Acesso seguro ao message bus — falha se não inicializado."""
         assert self._bus is not None, (
             "MessageBus não inicializado — chame _setup_components primeiro"
@@ -106,7 +106,7 @@ class Daemon:
         return config
 
     def _create_adapter(self):
-        """Cria adapter de IA via Claude Agent SDK."""
+        """Cria adapter de IA baseado no provider configurado."""
         kwargs = {
             "timeout": self.config.agent_timeout,
             "working_dir": str(self._paths.workspace),
@@ -118,6 +118,14 @@ class Daemon:
         if self.config.ai_model:
             kwargs["model"] = self.config.ai_model
 
+        # Seleciona adapter baseado no provider configurado
+        if self.config.ai_provider == "agno":
+            return self._create_agno_adapter(kwargs)
+
+        return self._create_claude_adapter(kwargs)
+
+    def _create_claude_adapter(self, kwargs: dict):
+        """Cria adapter Claude Agent SDK."""
         logger.info("Usando adapter: Claude Agent SDK (model: %s)", self.config.ai_model)
         adapter = ClaudeAgentSDKAdapter(**kwargs)
 
@@ -128,6 +136,23 @@ class Daemon:
             logger.info("Subagentes configurados: %s", list(agent_defs.keys()))
 
         return adapter
+
+    def _create_agno_adapter(self, kwargs: dict):
+        """Cria adapter Agno (import condicional)."""
+        try:
+            from src.adapters.agno_adapter import AgnoAdapter
+        except ImportError as e:
+            logger.error(
+                "Provider 'agno' selecionado mas dependencias nao instaladas. "
+                "Instale com: pip install -e '.[agno]'"
+            )
+            raise RuntimeError(
+                "Dependencias do Agno nao instaladas. Use: pip install -e '.[agno]'"
+            ) from e
+
+        kwargs["state_dir"] = str(self._paths.state_dir)
+        logger.info("Usando adapter: Agno (model: %s)", self.config.ai_model)
+        return AgnoAdapter(**kwargs)
 
     def _build_agent_definitions(self) -> dict:
         """Constroi AgentDefinition para cada agente a partir dos AGENTS.md."""
@@ -158,21 +183,23 @@ class Daemon:
 
         return defs
 
-    def _validate_tokens(self) -> None:
-        """Valida tokens obrigatórios. Delega para PlatformConfig quando disponível."""
-        if self._config:
-            missing = self._config.validate_required_tokens()
-        else:
-            # Fallback direto (antes de _load_config ou em testes)
-            from src.factory import _PLACEHOLDER_PREFIX
+    def _create_message_bus(self) -> MessageBus:
+        """Cria instância de MessageBus via registry."""
+        load_builtin_providers()
+        provider_name = self.config.messaging_provider
+        provider_cls = get_provider(provider_name)
 
-            required = {
-                "CLAUDE_CODE_OAUTH_TOKEN": os.environ.get("CLAUDE_CODE_OAUTH_TOKEN", ""),
-                "GITHUB_TOKEN": os.environ.get("GITHUB_TOKEN", ""),
-                "TELEGRAM_TOKEN": os.environ.get("TELEGRAM_TOKEN", ""),
-                "TELEGRAM_CHAT_ID": os.environ.get("TELEGRAM_CHAT_ID", ""),
-            }
-            missing = [k for k, v in required.items() if not v or v.startswith(_PLACEHOLDER_PREFIX)]
+        # Instancia o provider — cada um lê suas env vars internamente
+        bus = provider_cls(
+            persona_name=f"ai-squad ({self._team_name})",
+            persona_avatar="🤖",
+        )
+        logger.info("MessageBus: %s", provider_name)
+        return bus
+
+    def _validate_tokens(self) -> None:
+        """Valida tokens obrigatórios: comuns + específicos do provider."""
+        missing = self._config.validate_required_tokens() if self._config else []
         if missing:
             logger.error("Tokens obrigatórios não configurados: %s", missing)
             sys.exit(1)
@@ -185,19 +212,8 @@ class Daemon:
         # Configura adapter de IA baseado no provider configurado
         adapter = self._create_adapter()
 
-        # Configura barramento Telegram
-        telegram_token = os.environ["TELEGRAM_TOKEN"]
-        whisper_key = os.environ.get("OPENAI_API_KEY")
-
-        allowed_chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
-
-        self._bus = TelegramMessageBus(
-            token=telegram_token,
-            persona_name=f"ai-squad ({self._team_name})",
-            persona_avatar="🤖",
-            whisper_api_key=whisper_key,
-            allowed_chat_id=allowed_chat_id,
-        )
+        # Configura barramento de mensageria via registry
+        self._bus = self._create_message_bus()
 
         # Configura state manager
         state_mgr = StateManager(state_dir=str(self._paths.state_dir))
@@ -220,7 +236,7 @@ class Daemon:
 
         self._state_manager = state_mgr
 
-        # Inicializa mapeamento thread ↔ demand para Forum Topics
+        # Inicializa mapeamento thread ↔ demand para threads/tópicos
         self._thread_map = ThreadDemandMap(state_dir=str(self._paths.state_dir))
         # Propaga thread_map e callback de criação de tópico para o engine
         self._engine._thread_map = self._thread_map
@@ -251,7 +267,7 @@ class Daemon:
         Injeta contexto rico: journal (decisoes anteriores), conversation
         (historico de chat) e changes pendentes (openspec).
         """
-        chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
+        chat_id = self.bus.default_chat_id
         if not chat_id:
             return
 
@@ -362,23 +378,26 @@ class Daemon:
         text: str,
         image_path: str | None = None,
         *,
-        thread_id: int | None = None,
+        thread_id: str | None = None,
         user_id: str = "",
     ) -> None:
-        """Handler chamado quando uma nova mensagem chega via Telegram.
+        """Handler chamado quando uma nova mensagem chega via mensageria.
 
         Processa imediatamente — Squad Lead responde rapido via chamada SDK curta.
         Agentes pesados (PO, Dev, QA) rodam em background via start_agent.
 
-        Em modo fórum, thread_id roteia para a demanda correta:
+        Em modo com threads, thread_id roteia para a demanda correta:
         - thread_id mapeado → demand_id correspondente
         - thread_id=None ou Geral → Squad Lead sessão geral
         """
-        chat_id = os.environ["TELEGRAM_CHAT_ID"]
+        chat_id = self.bus.default_chat_id
+        if not chat_id:
+            # Fallback para providers sem chat_id global
+            chat_id = user_id or "default"
         # Usa user_id do callback ou fallback para chat_id (DM)
         user_id = user_id or chat_id
 
-        # Roteamento por thread_id (Forum Topics)
+        # Roteamento por thread_id (threads/tópicos)
         routed_demand_id = None
         if thread_id and self._thread_map:
             routed_demand_id = self._thread_map.get_demand(thread_id)
@@ -405,7 +424,7 @@ class Daemon:
             routed_demand_id = self._generate_demand_id(text)
             self._thread_map.add(thread_id, routed_demand_id)
             logger.info(
-                "Tópico %d mapeado automaticamente → %s",
+                "Tópico %s mapeado automaticamente → %s",
                 thread_id,
                 routed_demand_id,
             )
@@ -439,7 +458,7 @@ class Daemon:
             elif routed_demand_id:
                 # Mensagem em tópico mapeado → Squad Lead com demand_id específico
                 logger.info(
-                    "Squad Lead (tópico %d → %s): %s", thread_id, routed_demand_id, demand_text[:50]
+                    "Squad Lead (tópico %s → %s): %s", thread_id, routed_demand_id, demand_text[:50]
                 )
                 await self.engine.run_squad_lead(
                     routed_demand_id,
@@ -464,7 +483,7 @@ class Daemon:
             try:
                 await self.bus.notify(chat_id, f"Erro ao processar: {e}", thread_id=thread_id)
             except Exception:
-                logger.error("Falha ao notificar erro via Telegram")
+                logger.error("Falha ao notificar erro via mensageria")
         finally:
             # Limpa imagem temporária
             if image_path:
@@ -473,35 +492,11 @@ class Daemon:
                 except Exception:
                     pass
 
-    async def _detect_forum_mode(self) -> None:
-        """Detecta se o chat configurado é um grupo-fórum do Telegram."""
-        chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
-        if not chat_id or not self._bus:
-            return
-        try:
-            await self.bus._ensure_app()
-            assert self.bus._app is not None
-            chat = await self.bus._app.bot.get_chat(chat_id)
-            self._is_forum = bool(getattr(chat, "is_forum", False))
-            if self._is_forum:
-                logger.info("Modo fórum detectado para chat %s", chat_id)
-            else:
-                logger.info("Chat %s não é fórum — modo flat", chat_id)
-        except Exception as e:
-            logger.warning("Erro ao detectar modo fórum: %s", e)
-            self._is_forum = False
-
-    async def _create_demand_topic(self, demand_id: str, title: str) -> int | None:
-        """Cria tópico para uma demanda no modo fórum e persiste mapeamento."""
-        logger.info(
-            "create_demand_topic chamado: demand=%s, is_forum=%s, thread_map=%s",
-            demand_id,
-            self._is_forum,
-            self._thread_map is not None,
-        )
-        if not self._is_forum or not self._thread_map:
+    async def _create_demand_topic(self, demand_id: str, title: str) -> str | None:
+        """Cria tópico para uma demanda e persiste mapeamento."""
+        if not self.bus.supports_threads or not self._thread_map:
             return None
-        chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
+        chat_id = self.bus.default_chat_id
         if not chat_id:
             return None
         thread_id = await self.bus.create_thread(chat_id, title)
@@ -509,7 +504,7 @@ class Daemon:
             self._thread_map.add(thread_id, demand_id)
         return thread_id
 
-    async def _send_help(self, chat_id: str, *, thread_id: int | None = None) -> None:
+    async def _send_help(self, chat_id: str, *, thread_id: str | None = None) -> None:
         """Envia mensagem de ajuda com comandos disponíveis."""
         sl = self.config.squad_lead if self._config else None
         sl_name = sl.name if sl else "Squad Lead"
@@ -532,7 +527,7 @@ class Daemon:
 
         await self.bus.send_message(chat_id, "\n".join(lines), thread_id=thread_id)
 
-    async def _send_skills(self, chat_id: str, *, thread_id: int | None = None) -> None:
+    async def _send_skills(self, chat_id: str, *, thread_id: str | None = None) -> None:
         """Lista skills disponiveis nos 3 niveis."""
         lines = ["Skills disponiveis:\n"]
 
@@ -585,7 +580,7 @@ class Daemon:
 
         await self.bus.send_message(chat_id, "\n".join(lines), thread_id=thread_id)
 
-    async def _stop_agents(self, chat_id: str, text: str, *, thread_id: int | None = None) -> None:
+    async def _stop_agents(self, chat_id: str, text: str, *, thread_id: str | None = None) -> None:
         """Para agentes em execucao. /stop para todos, /stop <nome> para especifico."""
         parts = text.strip().split(maxsplit=1)
         target = parts[1].strip() if len(parts) > 1 else None
@@ -645,7 +640,7 @@ class Daemon:
             except Exception:
                 pass
 
-    async def _send_status(self, chat_id: str, *, thread_id: int | None = None) -> None:
+    async def _send_status(self, chat_id: str, *, thread_id: str | None = None) -> None:
         """Envia status dos agentes ativos. Em tópico, filtra pela demanda."""
         # Em tópico mapeado, mostra só agentes daquela demanda
         demand_id = None
@@ -684,7 +679,7 @@ class Daemon:
 
         hb = self.config.heartbeat
         journal = JournalStore(state_dir=self.config.state_dir)
-        chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
+        chat_id = self.bus.default_chat_id
 
         logger.info(
             "Heartbeat ativo (intervalo: %ds, stall: %ds, reminder: %ds)",
@@ -745,7 +740,7 @@ class Daemon:
             await asyncio.sleep(10)
 
     async def run(self) -> None:
-        """Inicia o daemon: conecta ao Telegram e processa demandas."""
+        """Inicia o daemon: conecta à mensageria e processa demandas."""
         logger.info("Iniciando daemon ai-squad (time: %s)", self._team_name)
 
         self._setup_components()
@@ -755,7 +750,7 @@ class Daemon:
 
         # Registra handler de voz (transcrição → texto → demanda)
         async def _voice_handler(
-            text: str, *, thread_id: int | None = None, user_id: str = ""
+            text: str, *, thread_id: str | None = None, user_id: str = ""
         ) -> None:
             await self._handle_new_demand(text, thread_id=thread_id, user_id=user_id)
 
@@ -763,7 +758,7 @@ class Daemon:
 
         # Registra handler de fotos
         async def _photo_handler(
-            text: str, image_path: str, *, thread_id: int | None = None, user_id: str = ""
+            text: str, image_path: str, *, thread_id: str | None = None, user_id: str = ""
         ) -> None:
             await self._handle_new_demand(
                 text, image_path=image_path, thread_id=thread_id, user_id=user_id
@@ -777,7 +772,7 @@ class Daemon:
             caption: str,
             file_path: str,
             *,
-            thread_id: int | None = None,
+            thread_id: str | None = None,
             user_id: str = "",
             original_filename: str = "",
         ) -> None:
@@ -787,7 +782,7 @@ class Daemon:
         if hasattr(self.bus, "receive_document"):
             await self.bus.receive_document(_document_handler)
 
-        # Registra handler de reações (helpdesk — reforço 👍/👎)
+        # Registra handler de reações (helpdesk — reforço positivo/negativo)
         async def _reaction_handler(
             chat_id: str, message_id: int, emoji: str, user_id: str
         ) -> None:
@@ -803,24 +798,22 @@ class Daemon:
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, lambda: asyncio.create_task(self._shutdown()))
 
-        # Detecta se o chat é um grupo-fórum
-        await self._detect_forum_mode()
-
         # Retoma trabalho pendente de execução anterior
         await self._resume_pending_work()
 
-        # Notifica início via Telegram
-        chat_id = os.environ["TELEGRAM_CHAT_ID"]
-        await self.bus.notify(
-            chat_id,
-            f"Time '{self._team_name}' online e escutando. "
-            "Envie uma mensagem para criar uma demanda.",
-        )
+        # Notifica início via mensageria
+        chat_id = self.bus.default_chat_id
+        if chat_id:
+            await self.bus.notify(
+                chat_id,
+                f"Time '{self._team_name}' online e escutando. "
+                "Envie uma mensagem para criar uma demanda.",
+            )
 
-        logger.info("Daemon pronto. Escutando Telegram...")
+        logger.info("Daemon pronto. Escutando mensageria (%s)...", self.config.messaging_provider)
 
-        # Inicia Telegram polling + healthcheck
-        await self.bus._ensure_app()
+        # Inicia o provider de mensageria (polling, websocket, etc)
+        await self.bus.start()
 
         # Healthcheck em background
         health_task = asyncio.create_task(self._healthcheck_loop())
@@ -828,28 +821,15 @@ class Daemon:
         # Heartbeat para retomada de demandas paradas
         heartbeat_task = asyncio.create_task(self._heartbeat_loop())
 
-        app = self.bus._app
-        assert app is not None, "Telegram app não inicializado após _ensure_app"
-        assert app.updater is not None, "Telegram updater não disponível"
-
         try:
-            # Inicia polling do Telegram (bloqueante)
-            await app.initialize()
-            await app.start()
-            await app.updater.start_polling()
-
             # Aguarda sinal de shutdown
             await self._shutdown_event.wait()
         finally:
             health_task.cancel()
             heartbeat_task.cancel()
 
-            # Para polling do Telegram
-            if app.updater.running:
-                await app.updater.stop()
-            if app.running:
-                await app.stop()
-            await app.shutdown()
+            # Para o provider de mensageria
+            await self.bus.stop()
 
             self._remove_healthcheck()
             logger.info("Daemon encerrado.")
@@ -858,9 +838,9 @@ class Daemon:
         """Graceful shutdown: salva estado e notifica."""
         logger.info("Sinal de shutdown recebido.")
 
-        # Notifica via Telegram
+        # Notifica via mensageria
         try:
-            chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
+            chat_id = self._bus.default_chat_id if self._bus else ""
             if chat_id and self._bus:
                 await self._bus.notify(
                     chat_id,
