@@ -742,5 +742,28 @@ def list_agents(team_name: str) -> None:
         )
 
 
+@cli.command()
+def generate() -> None:
+    """Cria um time via IA a partir de uma descrição em linguagem natural."""
+    from src.cli.generate import generate_team
+    from src.cli.wizard import GenerateWizard
+
+    wizard = GenerateWizard()
+
+    try:
+        result = wizard.run()
+    except click.Abort:
+        click.echo("\nGeração cancelada.")
+        return
+
+    try:
+        generate_team(result)
+    except SystemExit:
+        return
+    except Exception as e:
+        click.echo(f"\nErro na geração: {e}", err=True)
+        sys.exit(1)
+
+
 if __name__ == "__main__":
     cli()
