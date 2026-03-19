@@ -32,11 +32,25 @@ class AgentConfig:
     agents_md: str = ""
     role: str = ""  # papel do agente: spec, dev, review, generic (vazio = inferir)
     timeout: int = 0  # 0 = usa agent_timeout padrao
-    tools: list[str] = field(default_factory=list)  # toolkits extras: web_search, code_execution, shell
+    tools: list[str] = field(
+        default_factory=list
+    )  # toolkits extras: web_search, code_execution, shell
     web_search_provider: str = ""  # provider de web search: duckduckgo (default), tavily, serpapi
     submodules: list[SubmoduleConfig] = field(
         default_factory=list
     )  # submodulos que o agente trabalha
+
+
+VALID_ACTIVATION_MODES = ("mention", "all", "command")
+
+
+@dataclass
+class ThreadTrackingConfig:
+    """Configuração do rastreamento de estado por thread."""
+
+    standby_timeout: int = 1800  # 30min — bot oferece ajuda se humano sumiu
+    inactive_thread_ttl: int = 86400  # 24h — limpa threads inativas
+    handoff_message: bool = True  # envia "Fulano assumiu" ao recuar
 
 
 @dataclass
@@ -76,6 +90,8 @@ class PlatformConfig:
 
     ai_provider: str
     messaging_provider: str
+    activation_mode: str = "mention"
+    thread_tracking: ThreadTrackingConfig = field(default_factory=ThreadTrackingConfig)
     agent_timeout: int = 300
     state_dir: str = "state/"
     repo_path: str = ""
@@ -105,6 +121,22 @@ class PlatformConfig:
 
         if "messaging_provider" not in data:
             raise ValueError("Configuração inválida: 'messaging_provider' é obrigatório")
+
+        # Processar activation_mode
+        activation_mode = data.get("activation_mode", "mention")
+        if activation_mode not in VALID_ACTIVATION_MODES:
+            raise ValueError(
+                f"Configuração inválida: 'activation_mode' deve ser um de "
+                f"{VALID_ACTIVATION_MODES}, mas recebeu '{activation_mode}'"
+            )
+
+        # Processar thread_tracking
+        tt_data = data.get("thread_tracking", {})
+        thread_tracking = ThreadTrackingConfig(
+            standby_timeout=tt_data.get("standby_timeout", 1800),
+            inactive_thread_ttl=tt_data.get("inactive_thread_ttl", 86400),
+            handoff_message=tt_data.get("handoff_message", True),
+        )
 
         # Processar heartbeat
         hb_data = data.get("heartbeat", {})
@@ -163,6 +195,8 @@ class PlatformConfig:
         instance = cls(
             ai_provider=data["ai_provider"],
             messaging_provider=data["messaging_provider"],
+            activation_mode=activation_mode,
+            thread_tracking=thread_tracking,
             agent_timeout=data.get("agent_timeout", 300),
             state_dir=data.get("state_dir", "state/"),
             repo_path=data.get("repo_path", ""),

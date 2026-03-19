@@ -14,7 +14,7 @@ def bus(monkeypatch):
     """Cria instância de GChatMessageBus com env vars mockadas."""
     monkeypatch.setenv("GCHAT_CREDENTIALS_PATH", "/fake/creds.json")
     monkeypatch.setenv("GCHAT_SPACE_ID", "spaces/AAAA123")
-    return GChatMessageBus(persona_name="Squad", persona_avatar="🤖")
+    return GChatMessageBus(persona_name="Squad", persona_avatar="🤖", activation_mode="all")
 
 
 class TestGChatMessageBus:

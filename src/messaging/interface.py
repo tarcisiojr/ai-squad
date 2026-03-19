@@ -41,6 +41,21 @@ class MessageBus(ABC):
         """Template de .env com placeholders para este provider."""
         ...
 
+    # --- Activation mode ---
+
+    @property
+    def bot_identifier(self) -> str:
+        """Username ou identificador do bot para detecção de menção. Vazio se não aplicável."""
+        return ""
+
+    def is_mention(self, message_data: dict) -> bool:
+        """Verifica se a mensagem menciona o bot. Default: True (sem filtro)."""
+        return True
+
+    def is_dm(self, message_data: dict) -> bool:
+        """Verifica se a mensagem é DM (chat 1:1). Default: False."""
+        return False
+
     # --- Capacidades ---
 
     @property

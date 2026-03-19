@@ -30,6 +30,7 @@ class GChatMessageBus(MessageBus):
         self._poll_interval = int(os.environ.get("GCHAT_POLL_INTERVAL", str(DEFAULT_POLL_INTERVAL)))
         self._persona_name = kwargs.get("persona_name", "Agent")
         self._persona_avatar = kwargs.get("persona_avatar", "")
+        self._activation_mode = kwargs.get("activation_mode", "mention")
         self._service = None
         self._bot_id: str = ""
         self._message_callback: Callable | None = None
@@ -48,7 +49,11 @@ class GChatMessageBus(MessageBus):
         self._build_service()
         self._running = True
         self._poll_task = asyncio.create_task(self._poll_loop())
-        logger.info("GChat polling iniciado (space: %s, intervalo: %ds)", self._space_id, self._poll_interval)
+        logger.info(
+            "GChat polling iniciado (space: %s, intervalo: %ds)",
+            self._space_id,
+            self._poll_interval,
+        )
 
     async def stop(self) -> None:
         """Para o polling."""
@@ -81,6 +86,49 @@ class GChatMessageBus(MessageBus):
             "# Intervalo de polling em segundos (opcional, default: 3)\n"
             "# GCHAT_POLL_INTERVAL=3\n"
         )
+
+    # --- Activation mode ---
+
+    @property
+    def bot_identifier(self) -> str:
+        """Identificador do bot no GChat."""
+        return self._bot_id
+
+    def is_mention(self, message_data: dict) -> bool:
+        """Verifica se a mensagem menciona o bot via annotations do GChat."""
+        annotations = message_data.get("annotations", [])
+        for ann in annotations:
+            if ann.get("type") == "USER_MENTION":
+                user_mention = ann.get("userMention", {})
+                if user_mention.get("type") == "BOT":
+                    return True
+        return False
+
+    def is_dm(self, message_data: dict) -> bool:
+        """Verifica se é DM. No GChat, espaços tipo DM têm spaceType DM."""
+        return message_data.get("space_type") == "DIRECT_MESSAGE"
+
+    def _should_process_msg(self, msg: dict) -> bool:
+        """Decide se a mensagem deve ser processada conforme activation_mode."""
+        # Pending reply — sempre captura
+        thread = msg.get("thread", {})
+        thread_name = thread.get("name", "")
+        thread_id = thread_name if thread_name else None
+        reply_key = f"{self._space_id}:{thread_id}" if thread_id else self._space_id
+        if reply_key in self._pending_text_reply or self._space_id in self._pending_text_reply:
+            return True
+
+        # Modo all — processa tudo
+        if self._activation_mode == "all":
+            return True
+
+        # Modo command — só mensagens com /
+        if self._activation_mode == "command":
+            text = msg.get("text", "").strip()
+            return text.startswith("/")
+
+        # Modo mention (default) — verifica annotations
+        return self.is_mention(msg)
 
     # --- Capacidades ---
 
@@ -189,6 +237,10 @@ class GChatMessageBus(MessageBus):
         if not text:
             return
 
+        # Filtro de activation_mode
+        if not self._should_process_msg(msg):
+            return
+
         user_id = sender.get("name", "")  # users/XXXXX
         # Extrai thread_id do thread name
         thread = msg.get("thread", {})
@@ -236,7 +288,10 @@ class GChatMessageBus(MessageBus):
 
         # Split de mensagens longas
         if len(full_text) > MAX_MESSAGE_LENGTH:
-            parts = [full_text[i : i + MAX_MESSAGE_LENGTH] for i in range(0, len(full_text), MAX_MESSAGE_LENGTH)]
+            parts = [
+                full_text[i : i + MAX_MESSAGE_LENGTH]
+                for i in range(0, len(full_text), MAX_MESSAGE_LENGTH)
+            ]
             for part in parts:
                 await self._send_text(part, thread_id=thread_id)
             return
@@ -316,9 +371,7 @@ class GChatMessageBus(MessageBus):
             if thread_id:
                 kwargs["messageReplyOption"] = "REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD"
 
-            await asyncio.to_thread(
-                self._service.spaces().messages().create(**kwargs).execute
-            )
+            await asyncio.to_thread(self._service.spaces().messages().create(**kwargs).execute)
         except Exception as e:
             logger.error("Erro ao enviar card de aprovação: %s", e)
             # Fallback: envia como texto
@@ -387,11 +440,14 @@ class GChatMessageBus(MessageBus):
 
         try:
             result = await asyncio.to_thread(
-                self._service.spaces().messages().create(
+                self._service.spaces()
+                .messages()
+                .create(
                     parent=self._format_space(),
                     body=body,
                     messageReplyOption="REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD",
-                ).execute
+                )
+                .execute
             )
             # Retorna o thread name completo (spaces/XXX/threads/YYY)
             thread_name = result.get("thread", {}).get("name", "")

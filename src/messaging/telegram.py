@@ -27,6 +27,7 @@ class TelegramMessageBus(MessageBus):
         persona_avatar: str = "",
         whisper_api_key: str | None = None,
         allowed_chat_id: str = "",
+        activation_mode: str = "mention",
     ) -> None:
         # Permite instanciar sem token (lê do env em start())
         self._token = token or os.environ.get("TELEGRAM_TOKEN", "")
@@ -34,6 +35,8 @@ class TelegramMessageBus(MessageBus):
         self._persona_avatar = persona_avatar
         self._whisper_api_key = whisper_api_key
         self._allowed_chat_id = allowed_chat_id or os.environ.get("TELEGRAM_CHAT_ID", "")
+        self._activation_mode = activation_mode
+        self._bot_username: str = ""
         self._message_callback: Callable | None = None
         self._voice_callback: Callable | None = None
         self._photo_callback: Callable | None = None
@@ -50,6 +53,14 @@ class TelegramMessageBus(MessageBus):
         """Inicia o bot do Telegram: inicializa app + polling."""
         await self._ensure_app()
         assert self._app is not None
+
+        # Detecta username do bot para filtragem de menções
+        try:
+            bot_info = await self._app.bot.get_me()
+            self._bot_username = bot_info.username or ""
+            logger.info("Bot username: @%s", self._bot_username)
+        except Exception as e:
+            logger.warning("Erro ao obter username do bot: %s", e)
 
         # Detecta modo fórum
         await self._detect_forum_mode()
@@ -86,6 +97,78 @@ class TelegramMessageBus(MessageBus):
             "# Chat ID do Telegram (grupo ou chat privado)\n"
             "TELEGRAM_CHAT_ID=PREENCHA_AQUI_chat_id_telegram\n"
         )
+
+    # --- Activation mode ---
+
+    @property
+    def bot_identifier(self) -> str:
+        """Username do bot (@username)."""
+        return self._bot_username
+
+    def is_mention(self, message_data: dict) -> bool:
+        """Verifica se a mensagem menciona o bot via entities do Telegram."""
+        entities = message_data.get("entities", [])
+        text = message_data.get("text", "")
+        bot_username = self._bot_username.lower()
+        if not bot_username:
+            return True  # Sem username, não filtra
+
+        for entity in entities:
+            if entity.get("type") == "mention":
+                offset = entity.get("offset", 0)
+                length = entity.get("length", 0)
+                mention = text[offset : offset + length].lower().lstrip("@")
+                if mention == bot_username:
+                    return True
+            elif entity.get("type") == "text_mention":
+                # Menção sem username (por ID)
+                return True
+        return False
+
+    def is_dm(self, message_data: dict) -> bool:
+        """Verifica se é chat privado (1:1)."""
+        return message_data.get("chat_type") == "private"
+
+    def _should_process(self, update) -> bool:
+        """Decide se a mensagem deve ser processada conforme activation_mode."""
+        if not update.message:
+            return False
+
+        chat_type = update.message.chat.type  # private, group, supergroup
+        # DM sempre processa
+        if chat_type == "private":
+            return True
+
+        # Pending reply — sempre captura
+        chat_id = str(update.message.chat_id)
+        thread_id = self._to_str_thread(update.message.message_thread_id)
+        reply_key = f"{chat_id}:{thread_id}" if thread_id else chat_id
+        if reply_key in self._pending_text_reply or chat_id in self._pending_text_reply:
+            return True
+
+        # Activation mode
+        if self._activation_mode == "all":
+            return True
+
+        if self._activation_mode == "command":
+            text = update.message.text or ""
+            return text.strip().startswith("/")
+
+        # mention (default)
+        entities = update.message.entities or []
+        text = update.message.text or ""
+        bot_username = self._bot_username.lower()
+        if not bot_username:
+            return True  # Sem username conhecido, processa tudo
+
+        for entity in entities:
+            if entity.type == "mention":
+                mention = text[entity.offset : entity.offset + entity.length].lower().lstrip("@")
+                if mention == bot_username:
+                    return True
+            elif entity.type == "bot_command":
+                return True
+        return False
 
     # --- Capacidades ---
 
@@ -166,6 +249,10 @@ class TelegramMessageBus(MessageBus):
 
             if not self._is_authorized(chat_id):
                 logger.warning("Mensagem ignorada de chat_id nao autorizado: %s", chat_id)
+                return
+
+            # Filtro de activation_mode (antes de processar)
+            if not self._should_process(update):
                 return
 
             text = update.message.text

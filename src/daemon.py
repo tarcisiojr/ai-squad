@@ -21,6 +21,7 @@ from src.orchestrator.engine import OrchestrationEngine
 from src.orchestrator.journal import JournalStore
 from src.orchestrator.state import StateManager
 from src.orchestrator.thread_map import ThreadDemandMap
+from src.orchestrator.thread_tracker import ThreadAction, ThreadTracker
 
 # Configuração de logging estruturado
 logging.basicConfig(
@@ -51,6 +52,8 @@ class Daemon:
         self._team_name = os.environ.get("TEAM_NAME", "default")
         # Mapeamento thread_id ↔ demand_id para threads/tópicos
         self._thread_map: ThreadDemandMap | None = None
+        # Rastreamento de estado do bot por thread
+        self._thread_tracker: ThreadTracker | None = None
 
     @property
     def engine(self) -> OrchestrationEngine:
@@ -190,9 +193,11 @@ class Daemon:
         provider_cls = get_provider(provider_name)
 
         # Instancia o provider — cada um lê suas env vars internamente
+        activation_mode = self.config.activation_mode if self._config else "mention"
         bus = provider_cls(
             persona_name=f"ai-squad ({self._team_name})",
             persona_avatar="🤖",
+            activation_mode=activation_mode,
         )
         logger.info("MessageBus: %s", provider_name)
         return bus
@@ -238,6 +243,16 @@ class Daemon:
 
         # Inicializa mapeamento thread ↔ demand para threads/tópicos
         self._thread_map = ThreadDemandMap(state_dir=str(self._paths.state_dir))
+
+        # Inicializa thread tracker (estado do bot por thread)
+        tt_config = self.config.thread_tracking
+        self._thread_tracker = ThreadTracker(
+            state_dir=str(self._paths.state_dir),
+            standby_timeout=tt_config.standby_timeout,
+            inactive_thread_ttl=tt_config.inactive_thread_ttl,
+            handoff_message=tt_config.handoff_message,
+        )
+        self._thread_tracker.load()
         # Propaga thread_map e callback de criação de tópico para o engine
         self._engine._thread_map = self._thread_map
         self._engine._create_topic_callback = self._create_demand_topic
@@ -396,6 +411,25 @@ class Daemon:
             chat_id = user_id or "default"
         # Usa user_id do callback ou fallback para chat_id (DM)
         user_id = user_id or chat_id
+
+        # Consulta ThreadTracker para decidir se deve processar
+        if thread_id and self._thread_tracker:
+            # is_mention: verifica se o texto original menciona o bot
+            bot_id = self.bus.bot_identifier
+            has_mention = bool(bot_id and f"@{bot_id}".lower() in text.lower())
+            action = self._thread_tracker.on_message(
+                thread_id, is_bot=False, is_mention=has_mention, user_name=user_id
+            )
+            if action == ThreadAction.IGNORE:
+                return
+            if action == ThreadAction.HANDOFF:
+                if self._thread_tracker.handoff_message_enabled:
+                    await self.bus.send_message(
+                        chat_id,
+                        "Entendido, alguém assumiu. Me mencione se precisar de mim novamente.",
+                        thread_id=thread_id,
+                    )
+                return
 
         # Roteamento por thread_id (threads/tópicos)
         routed_demand_id = None
@@ -739,6 +773,30 @@ class Daemon:
             self._write_healthcheck()
             await asyncio.sleep(10)
 
+    async def _standby_timeout_loop(self) -> None:
+        """Verifica periodicamente threads em standby cujo timeout expirou."""
+        if not self._thread_tracker:
+            return
+
+        check_interval = min(self._thread_tracker.standby_timeout // 3, 300)
+        while not self._shutdown_event.is_set():
+            await asyncio.sleep(check_interval)
+            try:
+                stale = self._thread_tracker.get_stale_standby_threads()
+                chat_id = self.bus.default_chat_id
+                for thread_id, info in stale:
+                    if chat_id:
+                        await self.bus.send_message(
+                            chat_id,
+                            "Sem atualizações há um tempo. Precisa de ajuda? Me mencione se sim.",
+                            thread_id=thread_id,
+                        )
+                    self._thread_tracker.reactivate(thread_id)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error("Erro no standby timeout check: %s", e)
+
     async def run(self) -> None:
         """Inicia o daemon: conecta à mensageria e processa demandas."""
         logger.info("Iniciando daemon ai-squad (time: %s)", self._team_name)
@@ -821,12 +879,16 @@ class Daemon:
         # Heartbeat para retomada de demandas paradas
         heartbeat_task = asyncio.create_task(self._heartbeat_loop())
 
+        # Thread tracker — check periódico de standby timeout
+        standby_task = asyncio.create_task(self._standby_timeout_loop())
+
         try:
             # Aguarda sinal de shutdown
             await self._shutdown_event.wait()
         finally:
             health_task.cancel()
             heartbeat_task.cancel()
+            standby_task.cancel()
 
             # Para o provider de mensageria
             await self.bus.stop()
