@@ -28,6 +28,9 @@ agno = [
     "agno",
     "google-genai",
 ]
+copilot = [
+    "github-copilot-sdk>=0.1",
+]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",

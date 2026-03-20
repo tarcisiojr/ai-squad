@@ -87,6 +87,15 @@ volumes:
 # Valor placeholder para detectar .env não preenchido
 PLACEHOLDER_PREFIX = "PREENCHA_AQUI_"
 
+# Template de .env para provider Copilot (substitui COMMON_ENV_TEMPLATE)
+COPILOT_ENV_TEMPLATE = """\
+# === Copilot ===
+# Autenticação: execute 'copilot auth login' antes de iniciar
+# Opcional: defina GITHUB_TOKEN para autenticar via token
+# GITHUB_TOKEN=seu_token_aqui
+
+"""
+
 # Template de config.yaml com opção agno + campo tools
 CONFIG_YAML_AGNO_EXAMPLE = """\
 # Para usar Agno como provider de IA:
@@ -110,16 +119,23 @@ COMMON_REQUIRED_ENV_VARS = [
 ]
 
 
-def get_env_template(messaging_provider: str = "telegram") -> str:
+def get_env_template(
+    messaging_provider: str = "telegram", ai_provider: str = "claude-agent-sdk"
+) -> str:
     """Gera template de .env combinando tokens comuns + específicos do provider.
 
     Args:
         messaging_provider: Nome do provider de mensageria.
+        ai_provider: Nome do provider de IA.
 
     Returns:
         Template completo de .env com placeholders.
     """
-    parts = [COMMON_ENV_TEMPLATE]
+    # Seleciona template base conforme provider de IA
+    if ai_provider == "copilot":
+        parts = [COPILOT_ENV_TEMPLATE]
+    else:
+        parts = [COMMON_ENV_TEMPLATE]
 
     # Tenta obter template do provider via registry
     try:

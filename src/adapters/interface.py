@@ -33,6 +33,10 @@ class AIAgentAdapter(ABC):
         """Registra callback para quando intervenção humana é necessária."""
         ...
 
+    async def shutdown(self) -> None:
+        """Libera recursos do adapter. No-op por padrão."""
+        pass
+
     # Callbacks opcionais — no-op por padrão, adapter concreto sobrescreve
     def set_progress_callback(self, callback: Callable) -> None:
         pass

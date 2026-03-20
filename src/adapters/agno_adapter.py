@@ -321,6 +321,7 @@ class AgnoAdapter(AIAgentAdapter):
 
     async def run(self, prompt: str, context: dict) -> str:
         """Executa agente Agno com prompt e contexto."""
+        context = dict(context)
         self._status = AgentStatus.RUNNING
         agent_name = context.get("agent_name", "")
         self._current_agent_name = agent_name

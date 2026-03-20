@@ -359,6 +359,7 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
 
     async def run(self, prompt: str, context: dict) -> str:
         """Executa Claude Agent SDK com prompt e contexto."""
+        context = dict(context)
         self._status = AgentStatus.RUNNING
         agent_name = context.get("agent_name", "")
         # Mantém para compatibilidade com report_progress

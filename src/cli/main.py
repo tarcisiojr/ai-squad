@@ -279,12 +279,13 @@ def _start_local(name: str) -> None:
             with open(config_path, encoding="utf-8") as _f:
                 _cfg = _yaml.safe_load(_f) or {}
 
-            # Tokens do provider de IA
+            # Tokens do provider de IA (usa mapeamento centralizado)
+            from src.factory import _PROVIDER_AI_TOKENS
+
             ai_provider = _cfg.get("ai_provider", "claude-agent-sdk")
-            if ai_provider == "agno":
-                required_vars.append("GOOGLE_API_KEY")
-            else:
-                required_vars.append("CLAUDE_CODE_OAUTH_TOKEN")
+            ai_token = _PROVIDER_AI_TOKENS.get(ai_provider, "CLAUDE_CODE_OAUTH_TOKEN")
+            if ai_token:
+                required_vars.append(ai_token)
 
             # Tokens do provider de mensageria
             provider_name = _cfg.get("messaging_provider", "telegram")

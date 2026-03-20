@@ -13,6 +13,12 @@ from src.messaging.interface import MessageBus
 # Prefixo de placeholder para tokens não preenchidos
 _PLACEHOLDER_PREFIX = "PREENCHA_AQUI_"
 
+# Token obrigatório por provider de IA (vazio = sem token obrigatório)
+_PROVIDER_AI_TOKENS: dict[str, str] = {
+    "agno": "GOOGLE_API_KEY",
+    "copilot": "",  # autentica via 'copilot auth login', sem token no .env
+}
+
 
 @dataclass
 class SubmoduleConfig:
@@ -243,18 +249,12 @@ class PlatformConfig:
         Verifica tokens comuns + tokens específicos do provider de mensageria.
         Retorna lista de tokens ausentes ou com placeholder.
         """
-        # Tokens do provider de IA
         missing = []
-        if self.ai_provider == "agno":
-            # Agno usa GOOGLE_API_KEY (ou outra key dependendo do modelo)
-            google_key = os.environ.get("GOOGLE_API_KEY", "")
-            if not google_key or google_key.startswith(_PLACEHOLDER_PREFIX):
-                missing.append("GOOGLE_API_KEY")
-        else:
-            # Claude Agent SDK usa OAuth token
-            claude_token = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN", "")
-            if not claude_token or claude_token.startswith(_PLACEHOLDER_PREFIX):
-                missing.append("CLAUDE_CODE_OAUTH_TOKEN")
+        token_var = _PROVIDER_AI_TOKENS.get(self.ai_provider, "CLAUDE_CODE_OAUTH_TOKEN")
+        if token_var:  # vazio = provider sem token obrigatório
+            token_val = os.environ.get(token_var, "")
+            if not token_val or token_val.startswith(_PLACEHOLDER_PREFIX):
+                missing.append(token_var)
 
         # Tokens específicos do provider de mensageria
         try:

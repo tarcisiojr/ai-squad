@@ -9,11 +9,13 @@ import sys
 import unicodedata
 import uuid
 from pathlib import Path
+from typing import Any
 
 from dotenv import load_dotenv
 
 from src.adapters.claude_agent_sdk import ClaudeAgentSDKAdapter
-from src.factory import PlatformConfig
+from src.adapters.interface import AIAgentAdapter
+from src.factory import AgentConfig, PlatformConfig, SquadLeadConfig
 from src.messaging.interface import MessageBus
 from src.messaging.registry import get as get_provider
 from src.messaging.registry import load_builtin_providers
@@ -45,6 +47,7 @@ class Daemon:
         self._shutdown_event = asyncio.Event()
         self._engine: OrchestrationEngine | None = None
         self._bus: MessageBus | None = None
+        self._adapter: AIAgentAdapter | None = None
         self._config: PlatformConfig | None = None
         self._paths = path_resolver or PathResolver("docker")
         # Conversa livre com o Squad Lead no Tópico Geral (sem pipeline)
@@ -108,9 +111,9 @@ class Daemon:
 
         return config
 
-    def _create_adapter(self):
+    def _create_adapter(self) -> AIAgentAdapter:
         """Cria adapter de IA baseado no provider configurado."""
-        kwargs = {
+        kwargs: dict[str, Any] = {
             "timeout": self.config.agent_timeout,
             "working_dir": str(self._paths.workspace),
             "allowed_tools": ["WebSearchTool"],
@@ -122,12 +125,14 @@ class Daemon:
             kwargs["model"] = self.config.ai_model
 
         # Seleciona adapter baseado no provider configurado
-        if self.config.ai_provider == "agno":
-            return self._create_agno_adapter(kwargs)
+        creators = {
+            "copilot": self._create_copilot_adapter,
+            "agno": self._create_agno_adapter,
+        }
+        create = creators.get(self.config.ai_provider, self._create_claude_adapter)
+        return create(kwargs)
 
-        return self._create_claude_adapter(kwargs)
-
-    def _create_claude_adapter(self, kwargs: dict):
+    def _create_claude_adapter(self, kwargs: dict[str, Any]) -> AIAgentAdapter:
         """Cria adapter Claude Agent SDK."""
         logger.info("Usando adapter: Claude Agent SDK (model: %s)", self.config.ai_model)
         adapter = ClaudeAgentSDKAdapter(**kwargs)
@@ -140,14 +145,32 @@ class Daemon:
 
         return adapter
 
-    def _create_agno_adapter(self, kwargs: dict):
+    def _create_copilot_adapter(self, kwargs: dict[str, Any]) -> AIAgentAdapter:
+        """Cria adapter Copilot SDK (import condicional)."""
+        try:
+            from src.adapters.copilot_adapter import CopilotAdapter
+        except ImportError as e:
+            logger.error(
+                "Provider 'copilot' selecionado mas dependencias nao instaladas. "
+                "Instale com: pip install -e '.[copilot]': %s",
+                e,
+            )
+            raise RuntimeError(
+                "Dependencias do Copilot SDK nao instaladas. Use: pip install -e '.[copilot]'"
+            ) from e
+
+        logger.info("Usando adapter: Copilot SDK (model: %s)", self.config.ai_model)
+        return CopilotAdapter(**kwargs)
+
+    def _create_agno_adapter(self, kwargs: dict[str, Any]) -> AIAgentAdapter:
         """Cria adapter Agno (import condicional)."""
         try:
             from src.adapters.agno_adapter import AgnoAdapter
         except ImportError as e:
             logger.error(
                 "Provider 'agno' selecionado mas dependencias nao instaladas. "
-                "Instale com: pip install -e '.[agno]'"
+                "Instale com: pip install -e '.[agno]': %s",
+                e,
             )
             raise RuntimeError(
                 "Dependencias do Agno nao instaladas. Use: pip install -e '.[agno]'"
@@ -216,6 +239,7 @@ class Daemon:
 
         # Configura adapter de IA baseado no provider configurado
         adapter = self._create_adapter()
+        self._adapter = adapter
 
         # Configura barramento de mensageria via registry
         self._bus = self._create_message_bus()
@@ -224,7 +248,9 @@ class Daemon:
         state_mgr = StateManager(state_dir=str(self._paths.state_dir))
 
         # Monta dict de personas incluindo squad-lead
-        personas = dict(self.config.agents) if self.config.agents else {}
+        personas: dict[str, AgentConfig | SquadLeadConfig] = (
+            dict(self.config.agents) if self.config.agents else {}
+        )
         if self.config.squad_lead:
             personas["squad-lead"] = self.config.squad_lead
 
@@ -413,7 +439,9 @@ class Daemon:
         user_id = user_id or chat_id
 
         # Consulta ThreadTracker para decidir se deve processar
-        if thread_id and self._thread_tracker:
+        # Em activation_mode "all", pula o tracker — processa toda mensagem
+        activation = self.config.activation_mode if self._config else "mention"
+        if thread_id and self._thread_tracker and activation != "all":
             # is_mention: verifica se o texto original menciona o bot
             bot_id = self.bus.bot_identifier
             has_mention = bool(bot_id and f"@{bot_id}".lower() in text.lower())
@@ -910,6 +938,13 @@ class Daemon:
                 )
         except Exception:
             pass
+
+        # Shutdown do adapter (ex: Copilot SDK precisa parar o client)
+        if self._adapter:
+            try:
+                await self._adapter.shutdown()
+            except Exception as e:
+                logger.warning("Erro no shutdown do adapter: %s", e)
 
         self._shutdown_event.set()
 

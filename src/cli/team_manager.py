@@ -6,7 +6,6 @@ from pathlib import Path
 import yaml
 
 from src.cli.templates.config import (
-    COMMON_REQUIRED_ENV_VARS,
     DOCKER_COMPOSE_TEMPLATE,
     PLACEHOLDER_PREFIX,
     get_env_template,
@@ -292,7 +291,7 @@ class TeamManager:
 
         env_path = self.get_path(team_name) / ".env"
         if not env_path.exists():
-            return list(COMMON_REQUIRED_ENV_VARS)
+            return ["CLAUDE_CODE_OAUTH_TOKEN"]
 
         env_content = env_path.read_text(encoding="utf-8")
 
@@ -306,14 +305,24 @@ class TeamManager:
                 key, value = line.split("=", 1)
                 env_vars[key.strip()] = value.strip()
 
-        # Descobre provider de mensageria do config.yaml
-        required_vars = list(COMMON_REQUIRED_ENV_VARS)
+        # Descobre providers do config.yaml para montar lista de tokens
+        required_vars: list[str] = []
         config_path = self.get_path(team_name) / "config.yaml"
         if config_path.exists():
             import yaml
 
+            from src.factory import _PROVIDER_AI_TOKENS
+
             with open(config_path, encoding="utf-8") as f:
                 data = yaml.safe_load(f) or {}
+
+            # Token obrigatório do provider de IA
+            ai_provider = data.get("ai_provider", "claude-agent-sdk")
+            ai_token = _PROVIDER_AI_TOKENS.get(ai_provider, "CLAUDE_CODE_OAUTH_TOKEN")
+            if ai_token:
+                required_vars.append(ai_token)
+
+            # Tokens do provider de mensageria
             provider_name = data.get("messaging_provider", "telegram")
             try:
                 from src.messaging.registry import get as get_provider
