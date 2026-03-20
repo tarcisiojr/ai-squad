@@ -35,36 +35,22 @@
 
 AI Squad is an **autonomous multi-agent orchestration platform** that coordinates specialized AI agents through **declarative YAML pipelines**. Define your workflow once — with steps, quality gates, and human checkpoints — and let the **Squad Lead** agent orchestrate everything.
 
-```
-You (Telegram/CLI)                    AI Squad
-     │                                    │
-     │  "Build auth API"                  │
-     │───────────────────────────────────▶│
-     │                                    │
-     │                    ┌───────────────┴───────────────┐
-     │                    │         Squad Lead            │
-     │                    │   (reads pipeline, delegates) │
-     │                    └───────┬───────────────────────┘
-     │                            │
-     │                    Pipeline: step-by-step
-     │                    ┌───────▼───────┐
-     │  📋 "Approve?"     │  Step 1: PO   │
-     │◀──────────────────│  (checkpoint) │
-     │  ✅ Approve        └───────┬───────┘
-     │───────────────────────────▶│
-     │                    ┌───────▼───────┐  ┌───────────────┐
-     │                    │  Step 2: Dev  │──│  Dev Frontend  │
-     │                    │  (parallel)   │  │  (background)  │
-     │                    └───────┬───────┘  └───────┬───────┘
-     │                            └────────┬─────────┘
-     │                    ┌───────▼────────┐
-     │  🔍 "Approve?"     │  Step 3: Review│
-     │◀──────────────────│  (checkpoint)  │──▶ reject? → back to Step 2
-     │  ✅ Approve        └───────┬────────┘
-     │───────────────────────────▶│
-     │                    ┌───────▼───────┐
-     │  ✅ "Done!"        │  Step 4: QA   │
-     │◀──────────────────└───────────────┘
+```mermaid
+flowchart TD
+    User["You (Telegram / CLI)"] -->|"Build auth API"| SL["Squad Lead"]
+    SL -->|reads pipeline, delegates| PO["Step 1: PO (checkpoint)"]
+    PO -->|"Approve?"| User
+    User -->|"Approved"| Dev
+    subgraph parallel ["Parallel Execution"]
+        Dev["Step 2: Dev Backend"]
+        DevFE["Step 2: Dev Frontend"]
+    end
+    Dev --> Review["Step 3: Code Review (checkpoint)"]
+    DevFE --> Review
+    Review -->|reject?| Dev
+    Review -->|"Approve?"| User
+    User -->|"Approved"| QA["Step 4: QA"]
+    QA -->|"Done!"| User
 ```
 
 **Think of it as CI/CD for AI agent workflows** — define your pipeline once, run it on any demand.
@@ -110,7 +96,7 @@ You (Telegram/CLI)                    AI Squad
 |-------------|---------|
 | **Python 3.11+** | Runtime |
 | **[uv](https://docs.astral.sh/uv/)** (recommended) or pip | Package manager |
-| **Anthropic API key** | AI provider ([get one here](https://console.anthropic.com/)) |
+| **AI Provider** | One of: Claude Code OAuth, GitHub Copilot subscription, or Google API key |
 | **Telegram Bot Token** | Messaging (optional — [create a bot](https://core.telegram.org/bots#how-do-i-create-a-new-bot)) |
 
 ### Installation
@@ -123,7 +109,13 @@ cd ai-squad
 # Option 1: Install globally with uv (recommended)
 uv tool install --editable .
 
-# Option 2: Install with pip in a virtualenv
+# Option 2: With Copilot SDK support
+uv tool install --editable ".[copilot]"
+
+# Option 3: With Agno (Google Gemini) support
+uv tool install --editable ".[agno]"
+
+# Option 4: Install with pip in a virtualenv
 python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -e .
@@ -237,9 +229,16 @@ my-project/
 ### config.yaml
 
 ```yaml
+# AI Providers: claude-agent-sdk (default), copilot, agno
 ai_provider: claude-agent-sdk
 messaging_provider: telegram        # or 'cli'
 ai_model: claude-sonnet-4-20250514
+
+# Activation mode for Telegram (default: mention)
+#   mention — bot responds only when @mentioned (recommended for groups)
+#   all     — bot responds to every message (useful for forum topics)
+#   command — bot responds only to /commands
+# activation_mode: mention
 
 # Model routing by tier (optional)
 light_model: claude-haiku-4-5-20251001    # used for 'fast' tier steps
@@ -265,10 +264,12 @@ agents:
 
 ### Environment Variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `ANTHROPIC_API_KEY` | Always | Anthropic API key for Claude |
-| `TELEGRAM_BOT_TOKEN` | Telegram mode | Bot token from [@BotFather](https://t.me/BotFather) |
+| Variable | Required for | Description |
+|----------|-------------|-------------|
+| `CLAUDE_CODE_OAUTH_TOKEN` | `claude-agent-sdk` | Claude Code OAuth token |
+| `GITHUB_TOKEN` | `copilot` (optional) | GitHub token. Alternative: run `copilot auth login` |
+| `GOOGLE_API_KEY` | `agno` | Google API key for Gemini models |
+| `TELEGRAM_TOKEN` | Telegram mode | Bot token from [@BotFather](https://t.me/BotFather) |
 | `TELEGRAM_CHAT_ID` | Telegram mode | Target chat/group ID |
 
 ### pipeline.yaml
@@ -361,7 +362,11 @@ ai-squad/
 │   │   └── telegram.py          # Telegram adapter (text, voice, photos)
 │   ├── adapters/
 │   │   ├── interface.py         # ABC: AIAgentAdapter (+ optional callbacks)
-│   │   └── claude_agent_sdk.py  # Claude Agent SDK with MCP tools
+│   │   ├── claude_agent_sdk.py  # Claude Agent SDK with native subagents
+│   │   ├── copilot_adapter.py   # GitHub Copilot SDK with in-process tools
+│   │   ├── agno_adapter.py      # Agno (Google Gemini) with toolkits
+│   │   ├── mcp_tools_server.py  # Orchestration tools (engine callbacks)
+│   │   └── prompt_builder.py    # Shared prompt assembly
 │   ├── orchestrator/
 │   │   ├── engine.py            # Squad Lead: hub-spoke coordination
 │   │   ├── agent_runner.py      # Background agent lifecycle management
@@ -517,7 +522,14 @@ class MyAdapter(AIAgentAdapter):
         return self._status
 ```
 
-Register in `factory.py`, then set `ai_provider: my-adapter` in config.
+Register in `daemon.py` (`_create_<name>_adapter`), add token mapping in `factory.py` (`_PROVIDER_AI_TOKENS`), then set `ai_provider: my-adapter` in config.
+
+Available providers:
+| Provider | SDK | Auth | Install |
+|----------|-----|------|---------|
+| `claude-agent-sdk` | Claude Agent SDK | `CLAUDE_CODE_OAUTH_TOKEN` | included |
+| `copilot` | GitHub Copilot SDK | `copilot auth login` or `GITHUB_TOKEN` | `pip install -e ".[copilot]"` |
+| `agno` | Agno (Google Gemini) | `GOOGLE_API_KEY` | `pip install -e ".[agno]"` |
 
 ### Adding a New Messaging Channel
 

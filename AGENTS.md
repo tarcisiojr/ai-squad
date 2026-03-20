@@ -23,7 +23,11 @@ ai-squad/
 │   │   └── telegram.py        # TelegramMessageBus (voz, fotos, markdown)
 │   ├── adapters/
 │   │   ├── interface.py       # ABC AIAgentAdapter (+ callbacks opcionais)
-│   │   └── claude_agent_sdk.py # Claude Agent SDK com MCP tools
+│   │   ├── claude_agent_sdk.py # Claude Agent SDK com subagentes nativos
+│   │   ├── copilot_adapter.py # GitHub Copilot SDK com tools in-process
+│   │   ├── agno_adapter.py    # Agno (Google Gemini) com toolkits
+│   │   ├── mcp_tools_server.py # Tools de orquestração (callbacks do engine)
+│   │   └── prompt_builder.py  # Montagem de prompt compartilhada
 │   ├── orchestrator/
 │   │   ├── engine.py          # Squad Lead hub-spoke + delegação async
 │   │   ├── agent_runner.py    # Gerencia agentes em background (asyncio tasks)
@@ -80,6 +84,8 @@ O `PathResolver` centraliza a resolução de caminhos — modo local usa `.ai-sq
 - **Módulos independentes, não microserviços** — desacoplamento via ABC sem overhead de comunicação inter-serviços
 - **Factory pattern** — `PlatformFactory` é o único ponto que conhece implementações concretas
 - **Callbacks opcionais na interface** — `AIAgentAdapter` define callbacks como no-op, adapter concreto sobrescreve
+- **Tools in-process (Copilot)** — tools registradas via `define_tool()` no mesmo processo, sem subprocess MCP. Cada agente tem session isolada (`agent_name--demand_id`)
+- **Token obrigatório por provider** — mapeamento centralizado em `_PROVIDER_AI_TOKENS` (factory.py). Copilot não requer token (auth via CLI), Agno requer `GOOGLE_API_KEY`
 - **PathResolver** — resolução dinâmica de caminhos (local vs docker), daemon é agnóstico ao ambiente
 - **Model routing por tier** — pipeline define `model_tier` (fast/powerful) por step, config mapeia para modelos concretos
 - **Escrita atômica com fsync** — `atomic_write.py` compartilhado por state, journal, conversation, daily_notes
@@ -123,9 +129,14 @@ Campos de configuração do step (no pipeline.yaml):
 Centralizada em `config.yaml` (dentro de `.ai-squad/` local ou `~/.ai-squad/teams/<nome>/` Docker):
 
 ```yaml
+# Providers de IA: claude-agent-sdk (default), copilot, agno
 ai_provider: claude-agent-sdk
 messaging_provider: telegram
 ai_model: claude-sonnet-4-20250514
+
+# activation_mode: mention (default), all, command
+# Em modo fórum do Telegram, "mention" exige @bot para ativar tópico
+# "all" processa toda mensagem sem precisar de menção
 
 # Model routing por tier (opcional)
 # light_model: claude-haiku-4-5-20251001
@@ -171,7 +182,15 @@ agents:
 ### Novo provider de IA
 1. Criar classe herdando `AIAgentAdapter` em `src/adapters/`
 2. Implementar métodos abstratos + sobrescrever callbacks desejados
-3. `config.yaml`: `ai_provider: nome`
+3. Registrar no `daemon.py` (`_create_<nome>_adapter`) e no mapeamento `creators`
+4. Adicionar token obrigatório em `_PROVIDER_AI_TOKENS` (factory.py) — vazio = sem token
+5. Adicionar template de `.env` em `src/cli/templates/config.py` se necessário
+6. `config.yaml`: `ai_provider: nome`
+
+Providers disponíveis:
+- **claude-agent-sdk** — Claude com subagentes nativos e MCP tools (default)
+- **copilot** — GitHub Copilot SDK com tools in-process via `define_tool()`. Auth via `copilot auth login` (sem token obrigatório). Instalar com `pip install -e '.[copilot]'`
+- **agno** — Google Gemini via Agno SDK com toolkits (web_search, code_execution, shell). Requer `GOOGLE_API_KEY`
 
 ### Novo canal de mensageria
 1. Criar classe herdando `MessageBus` em `src/messaging/`
