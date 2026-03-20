@@ -6,7 +6,23 @@ build-backend = "setuptools.build_meta"
 name = "ai-squad"
 version = "0.2.0"
 description = "Time completo de desenvolvimento autônomo por IA"
+readme = "README.md"
+license = "MIT"
 requires-python = ">=3.11"
+authors = [
+    { name = "Tarcísio Junior", email = "tarcisiojr@gmail.com" },
+]
+keywords = ["ai", "agents", "multi-agent", "orchestration", "autonomous", "squad"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
     "python-telegram-bot>=20.0",
     "pyyaml>=6.0",
@@ -15,6 +31,11 @@ dependencies = [
     "claude-agent-sdk>=0.1",
     "aiohttp>=3.9",
 ]
+
+[project.urls]
+Homepage = "https://github.com/tarcisiojr/ai-squad"
+Repository = "https://github.com/tarcisiojr/ai-squad"
+Issues = "https://github.com/tarcisiojr/ai-squad/issues"
 
 [project.scripts]
 ai-squad = "src.cli.main:cli"

@@ -37,20 +37,20 @@ AI Squad is an **autonomous multi-agent orchestration platform** that coordinate
 
 ```mermaid
 flowchart TD
-    User["You (Telegram / CLI)"] -->|"Build auth API"| SL["Squad Lead"]
-    SL -->|reads pipeline, delegates| PO["Step 1: PO (checkpoint)"]
-    PO -->|"Approve?"| User
-    User -->|"Approved"| Dev
-    subgraph parallel ["Parallel Execution"]
-        Dev["Step 2: Dev Backend"]
-        DevFE["Step 2: Dev Frontend"]
+    User[You - Telegram or CLI] -->|Build auth API| SL[Squad Lead]
+    SL -->|delegates| PO[Step 1 - PO]
+    PO -->|Approve?| User
+    User -->|Approved| Dev
+    subgraph Parallel
+        Dev[Step 2 - Dev Backend]
+        DevFE[Step 2 - Dev Frontend]
     end
-    Dev --> Review["Step 3: Code Review (checkpoint)"]
+    Dev --> Review[Step 3 - Code Review]
     DevFE --> Review
-    Review -->|reject?| Dev
-    Review -->|"Approve?"| User
-    User -->|"Approved"| QA["Step 4: QA"]
-    QA -->|"Done!"| User
+    Review -->|reject| Dev
+    Review -->|Approve?| User
+    User -->|Approved| QA[Step 4 - QA]
+    QA -->|Done| User
 ```
 
 **Think of it as CI/CD for AI agent workflows** — define your pipeline once, run it on any demand.
