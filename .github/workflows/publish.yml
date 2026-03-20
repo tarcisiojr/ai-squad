@@ -1,51 +1,55 @@
 name: Publish to PyPI
 
 on:
+  push:
+    branches: [main]
   release:
     types: [published]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  build:
-    name: Build distribution
+  build-and-publish:
+    name: Build and Publish
     runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/ai-squad
+    permissions:
+      contents: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
+      - name: Auto-version on push to main
+        if: github.event_name == 'push'
+        run: |
+          # Pega a última tag de versão ou usa 0.0.0
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          BASE_VERSION="${LAST_TAG#v}"
+
+          # Conta commits desde a última tag
+          COMMITS=$(git rev-list "${LAST_TAG}..HEAD" --count 2>/dev/null || echo "1")
+
+          # Gera versão dev: X.Y.Z.devN
+          DEV_VERSION="${BASE_VERSION}.dev${COMMITS}"
+
+          echo "Version: ${DEV_VERSION}"
+          sed -i "s/^version = .*/version = \"${DEV_VERSION}\"/" pyproject.toml
+
       - name: Install build dependencies
         run: pip install build
 
       - name: Build package
         run: python -m build
-
-      - name: Upload distribution artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: python-package-distributions
-          path: dist/
-
-  publish-pypi:
-    name: Publish to PyPI
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/p/ai-squad
-    permissions:
-      id-token: write
-    steps:
-      - name: Download distribution artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: python-package-distributions
-          path: dist/
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
