@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ai-squad"
-version = "0.2.1"
+version = "0.2.2"
 description = "Time completo de desenvolvimento autônomo por IA"
 readme = "README.md"
 license = "MIT"
