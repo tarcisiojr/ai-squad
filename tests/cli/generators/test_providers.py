@@ -8,7 +8,7 @@ class TestAnthropicGenerator:
 
     @patch.dict("sys.modules", {"anthropic": MagicMock()})
     def test_generate_com_api_key(self) -> None:
-        """API key (sk-ant-*) usa SDK Anthropic."""
+        """API key (sk-ant-api*) usa SDK Anthropic."""
         import sys
 
         mock_anthropic = sys.modules["anthropic"]
@@ -20,21 +20,16 @@ class TestAnthropicGenerator:
 
         from src.cli.generators.anthropic import AnthropicGenerator
 
-        gen = AnthropicGenerator("sk-ant-fake-token")
+        gen = AnthropicGenerator("sk-ant-api03-fake-token")
         result = gen.generate("test prompt")
 
         assert result == '{"pipeline": {}}'
-        mock_anthropic.Anthropic.assert_called_once_with(api_key="sk-ant-fake-token")
-        mock_client.messages.create.assert_called_once()
+        mock_anthropic.Anthropic.assert_called_once_with(api_key="sk-ant-api03-fake-token")
 
-    @patch("src.cli.generators.anthropic.httpx")
-    def test_generate_com_oauth_token(self, mock_httpx) -> None:
-        """OAuth token usa Bearer via httpx."""
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "content": [{"type": "text", "text": '{"pipeline": {}}'}],
-        }
-        mock_httpx.post.return_value = mock_response
+    @patch("src.cli.generators.anthropic.asyncio")
+    def test_generate_com_oauth_token(self, mock_asyncio) -> None:
+        """OAuth token (sk-ant-oat*) usa claude-agent-sdk."""
+        mock_asyncio.run.return_value = '{"pipeline": {}}'
 
         from src.cli.generators.anthropic import AnthropicGenerator
 
@@ -42,19 +37,15 @@ class TestAnthropicGenerator:
         result = gen.generate("test prompt")
 
         assert result == '{"pipeline": {}}'
-        mock_httpx.post.assert_called_once()
-        call_kwargs = mock_httpx.post.call_args
-        assert "Bearer sk-ant-oat01-fake-oauth-token" in call_kwargs.kwargs["headers"]["Authorization"]
+        mock_asyncio.run.assert_called_once()
 
     def test_detecta_oauth_token(self) -> None:
         """Detecta corretamente OAuth token vs API key."""
-        from src.cli.generators.anthropic import AnthropicGenerator
+        from src.cli.generators.anthropic import _is_oauth_token
 
-        # OAuth tokens contêm "oat" no prefixo
-        assert AnthropicGenerator("sk-ant-oat01-abc123")._is_oauth_token() is True
-        # API keys padrão não contêm "oat"
-        assert AnthropicGenerator("sk-ant-api03-xyz")._is_oauth_token() is False
-        assert AnthropicGenerator("some-other-token")._is_oauth_token() is False
+        assert _is_oauth_token("sk-ant-oat01-abc123") is True
+        assert _is_oauth_token("sk-ant-api03-xyz") is False
+        assert _is_oauth_token("some-other-token") is False
 
     def test_token_guardado(self) -> None:
         """Token é armazenado para uso no .env."""

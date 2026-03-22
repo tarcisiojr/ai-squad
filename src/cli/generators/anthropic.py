@@ -1,40 +1,34 @@
-"""Provider de geração via API Anthropic (SDK ou OAuth)."""
+"""Provider de geração via API Anthropic.
 
-import httpx
+Suporta dois modos:
+- API key (sk-ant-api...) → SDK anthropic direto
+- OAuth token (sk-ant-oat...) → claude-agent-sdk (requer Claude Code CLI)
+"""
+
+import asyncio
 
 from src.cli.generators.interface import GeneratorProvider
 
-# Configuração compartilhada
-_MODEL = "claude-haiku-4-5-20251001"
-_MAX_TOKENS = 8192
-_API_URL = "https://api.anthropic.com/v1/messages"
-_API_VERSION = "2023-06-01"
-_TIMEOUT = 120
+
+def _is_oauth_token(token: str) -> bool:
+    """Detecta se o token é OAuth do Claude Code (sk-ant-oatXX-)."""
+    return "oat" in token[:20]
 
 
 class AnthropicGenerator(GeneratorProvider):
-    """Gera presets usando a API Anthropic diretamente.
-
-    Suporta dois tipos de token:
-    - API key (sk-ant-...) → autenticação via x-api-key
-    - OAuth token do Claude Code → autenticação via Bearer
-    """
+    """Gera presets usando API Anthropic ou Claude Code SDK."""
 
     def __init__(self, token: str) -> None:
         self._token = token
 
-    def _is_oauth_token(self) -> bool:
-        """Detecta se o token é OAuth do Claude Code (sk-ant-oatXX-)."""
-        return "oat" in self._token[:20]
-
     def generate(self, prompt: str) -> str:
         """Envia prompt para o Claude e retorna a resposta."""
-        if self._is_oauth_token():
-            return self._generate_with_oauth(prompt)
+        if _is_oauth_token(self._token):
+            return self._generate_with_claude_sdk(prompt)
         return self._generate_with_api_key(prompt)
 
     def _generate_with_api_key(self, prompt: str) -> str:
-        """Autenticação com API key padrão via SDK."""
+        """Autenticação com API key padrão via SDK anthropic."""
         try:
             import anthropic
         except ImportError:
@@ -45,8 +39,8 @@ class AnthropicGenerator(GeneratorProvider):
 
         client = anthropic.Anthropic(api_key=self._token)
         message = client.messages.create(
-            model=_MODEL,
-            max_tokens=_MAX_TOKENS,
+            model="claude-haiku-4-5-20251001",
+            max_tokens=8192,
             messages=[{"role": "user", "content": prompt}],
         )
 
@@ -54,25 +48,36 @@ class AnthropicGenerator(GeneratorProvider):
             block.text for block in message.content if block.type == "text"
         )
 
-    def _generate_with_oauth(self, prompt: str) -> str:
-        """Autenticação com OAuth token do Claude Code via Bearer."""
-        response = httpx.post(
-            _API_URL,
-            headers={
-                "Authorization": f"Bearer {self._token}",
-                "anthropic-version": _API_VERSION,
-                "content-type": "application/json",
-            },
-            json={
-                "model": _MODEL,
-                "max_tokens": _MAX_TOKENS,
-                "messages": [{"role": "user", "content": prompt}],
-            },
-            timeout=_TIMEOUT,
-        )
-        response.raise_for_status()
-        data = response.json()
+    def _generate_with_claude_sdk(self, prompt: str) -> str:
+        """Autenticação via OAuth token usando claude-agent-sdk."""
+        return asyncio.run(self._query_claude_sdk(prompt))
 
-        return "\n".join(
-            block["text"] for block in data["content"] if block["type"] == "text"
-        )
+    async def _query_claude_sdk(self, prompt: str) -> str:
+        """Execução assíncrona via claude-agent-sdk."""
+        import os
+
+        from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query
+
+        # Injeta o token OAuth como variável de ambiente
+        env_backup = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
+        os.environ["CLAUDE_CODE_OAUTH_TOKEN"] = self._token
+
+        try:
+            options = ClaudeAgentOptions(
+                permission_mode="bypassPermissions",
+                max_turns=1,
+                model="claude-haiku-4-5-20251001",
+            )
+
+            parts: list[str] = []
+            async for message in query(prompt=prompt, options=options):
+                if isinstance(message, ResultMessage):
+                    parts.append(message.result)
+
+            return "\n".join(parts)
+        finally:
+            # Restaura estado do ambiente
+            if env_backup is not None:
+                os.environ["CLAUDE_CODE_OAUTH_TOKEN"] = env_backup
+            else:
+                os.environ.pop("CLAUDE_CODE_OAUTH_TOKEN", None)

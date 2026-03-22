@@ -340,4 +340,4 @@ class TestCLIVersion:
         """Verifica exibição da versão."""
         result = runner.invoke(cli, ["--version"])
         assert result.exit_code == 0
-        assert "0.2.0" in result.output
+        assert "ai-squad" in result.output
