@@ -38,20 +38,23 @@ class TestAnthropicGenerator:
 
         from src.cli.generators.anthropic import AnthropicGenerator
 
-        gen = AnthropicGenerator("oauth-token-from-claude-code")
+        gen = AnthropicGenerator("sk-ant-oat01-fake-oauth-token")
         result = gen.generate("test prompt")
 
         assert result == '{"pipeline": {}}'
         mock_httpx.post.assert_called_once()
         call_kwargs = mock_httpx.post.call_args
-        assert "Bearer oauth-token-from-claude-code" in call_kwargs.kwargs["headers"]["Authorization"]
+        assert "Bearer sk-ant-oat01-fake-oauth-token" in call_kwargs.kwargs["headers"]["Authorization"]
 
-    def test_detecta_api_key(self) -> None:
-        """Detecta corretamente API key vs OAuth token."""
+    def test_detecta_oauth_token(self) -> None:
+        """Detecta corretamente OAuth token vs API key."""
         from src.cli.generators.anthropic import AnthropicGenerator
 
-        assert AnthropicGenerator("sk-ant-abc123")._is_api_key() is True
-        assert AnthropicGenerator("oauth-token")._is_api_key() is False
+        # OAuth tokens contêm "oat" no prefixo
+        assert AnthropicGenerator("sk-ant-oat01-abc123")._is_oauth_token() is True
+        # API keys padrão não contêm "oat"
+        assert AnthropicGenerator("sk-ant-api03-xyz")._is_oauth_token() is False
+        assert AnthropicGenerator("some-other-token")._is_oauth_token() is False
 
     def test_token_guardado(self) -> None:
         """Token é armazenado para uso no .env."""

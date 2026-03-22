@@ -23,15 +23,15 @@ class AnthropicGenerator(GeneratorProvider):
     def __init__(self, token: str) -> None:
         self._token = token
 
-    def _is_api_key(self) -> bool:
-        """Detecta se o token é uma API key padrão."""
-        return self._token.startswith("sk-ant-")
+    def _is_oauth_token(self) -> bool:
+        """Detecta se o token é OAuth do Claude Code (sk-ant-oatXX-)."""
+        return "oat" in self._token[:20]
 
     def generate(self, prompt: str) -> str:
         """Envia prompt para o Claude e retorna a resposta."""
-        if self._is_api_key():
-            return self._generate_with_api_key(prompt)
-        return self._generate_with_oauth(prompt)
+        if self._is_oauth_token():
+            return self._generate_with_oauth(prompt)
+        return self._generate_with_api_key(prompt)
 
     def _generate_with_api_key(self, prompt: str) -> str:
         """Autenticação com API key padrão via SDK."""

@@ -175,7 +175,7 @@ def _get_container_status(team_name: str) -> str:
 
 
 @click.group()
-@click.version_option(version="0.2.0", prog_name="ai-squad")
+@click.version_option(version="0.2.3", prog_name="ai-squad")
 def cli() -> None:
     """ai-squad — Time completo de desenvolvimento autônomo por IA."""
     pass
