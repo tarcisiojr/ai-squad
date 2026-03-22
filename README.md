@@ -24,7 +24,7 @@
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.11+"></a>
   <img src="https://img.shields.io/badge/tests-446_passed-brightgreen?style=flat-square&logo=pytest&logoColor=white" alt="446 Tests Passed">
   <img src="https://img.shields.io/badge/coverage-75%25+-yellow?style=flat-square" alt="Coverage 75%+">
-  <img src="https://img.shields.io/badge/version-0.2.0-blue?style=flat-square" alt="Version 0.2.0">
+  <a href="https://pypi.org/project/ai-squad/"><img src="https://img.shields.io/pypi/v/ai-squad?style=flat-square&color=blue" alt="PyPI Version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/code_style-ruff-000000?style=flat-square&logo=ruff&logoColor=white" alt="Ruff">
 </p>
@@ -96,37 +96,65 @@ flowchart TD
 |-------------|---------|
 | **Python 3.11+** | Runtime |
 | **[uv](https://docs.astral.sh/uv/)** (recommended) or pip | Package manager |
+| **Node.js 18+** | Required for `claude-agent-sdk` provider |
+| **[Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code)** | Required for `claude-agent-sdk` provider |
 | **AI Provider** | One of: Claude Code OAuth, GitHub Copilot subscription, or Google API key |
 | **Telegram Bot Token** | Messaging (optional — [create a bot](https://core.telegram.org/bots#how-do-i-create-a-new-bot)) |
 
 ### Installation
 
 ```bash
-# Clone the repository
+# Option 1: Install from PyPI (recommended for servers/production)
+uv tool install ai-squad
+
+# Option 2: Install from source (for development)
 git clone https://github.com/tarcisiojr/ai-squad.git
 cd ai-squad
-
-# Option 1: Install globally with uv (recommended)
 uv tool install --editable .
 
-# Option 2: With Copilot SDK support
-uv tool install --editable ".[copilot]"
-
-# Option 3: With Agno (Google Gemini) support
-uv tool install --editable ".[agno]"
-
-# Option 4: Install with pip in a virtualenv
-python3.11 -m venv .venv
-source .venv/bin/activate
-pip install -e .
+# Optional extras
+uv tool install ai-squad --with anthropic   # for 'generate' with API keys
+pip install -e ".[copilot]"                  # GitHub Copilot SDK support
+pip install -e ".[agno]"                     # Agno (Google Gemini) support
 ```
 
-> **Note:** Editable mode (`-e`) means code changes take effect immediately — no need to reinstall unless you modify `pyproject.toml` dependencies.
+If using the `claude-agent-sdk` provider (default), install Node.js and Claude Code CLI:
+
+```bash
+# Ubuntu/Debian
+apt install nodejs npm
+npm install -g @anthropic-ai/claude-code
+
+# macOS
+brew install node
+npm install -g @anthropic-ai/claude-code
+```
 
 ### Create Your First Team
 
+There are two ways to create a team:
+
+#### Option A: AI-generated (recommended)
+
+The `generate` command creates a complete team from a natural language description:
+
 ```bash
-# Navigate to your project directory
+cd ~/my-project
+ai-squad generate
+# Follow the interactive wizard:
+#   - Describe what you want the team to do
+#   - Choose an AI provider (anthropic, agno, openai)
+#   - Enter your token (Claude Code OAuth token or API key)
+#   - Choose messaging channel (telegram, gchat, cli)
+#   - Enter channel credentials
+#   - Name your team
+```
+
+> **Note:** When using `anthropic` provider with a Claude Code OAuth token (`sk-ant-oat...`), the Claude Code CLI must be installed. For API keys (`sk-ant-api...`), only the `anthropic` Python package is needed.
+
+#### Option B: From a preset
+
+```bash
 cd ~/my-project
 
 # Create a team (uses 'dev-openspec' preset by default)
@@ -134,8 +162,8 @@ ai-squad create MyTeam
 
 # Configure environment variables
 cat > .ai-squad/.env << 'EOF'
-ANTHROPIC_API_KEY=sk-ant-...
-TELEGRAM_BOT_TOKEN=123456:ABC-...
+CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...
+TELEGRAM_TOKEN=123456:ABC-...
 TELEGRAM_CHAT_ID=your-chat-id
 EOF
 
@@ -583,19 +611,25 @@ AI Squad é uma **plataforma de orquestração multi-agente autônoma** que coor
 ### Início Rápido
 
 ```bash
-# Clonar e instalar
-git clone https://github.com/tarcisiojr/ai-squad.git
-cd ai-squad
-uv tool install --editable .
+# Instalar via PyPI
+uv tool install ai-squad
 
-# Criar time no seu projeto
+# Pré-requisitos para provider claude-agent-sdk (default)
+apt install nodejs npm                          # Ubuntu/Debian
+npm install -g @anthropic-ai/claude-code        # Claude Code CLI
+
+# Criar time via IA (recomendado)
 cd ~/meu-projeto
+ai-squad generate
+# Siga o wizard interativo para criar o time completo
+
+# Ou criar time a partir de preset
 ai-squad create MeuTime
 
 # Configurar variáveis de ambiente
 cat > .ai-squad/.env << 'EOF'
-ANTHROPIC_API_KEY=sk-ant-...
-TELEGRAM_BOT_TOKEN=123456:ABC-...
+CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...
+TELEGRAM_TOKEN=123456:ABC-...
 TELEGRAM_CHAT_ID=seu-chat-id
 EOF
 
