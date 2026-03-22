@@ -1,17 +1,22 @@
 """Testes para providers de geração (mock de SDK)."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 
 class TestAnthropicGenerator:
-    """Testes do AnthropicGenerator com mock do claude-agent-sdk."""
+    """Testes do AnthropicGenerator com mock do SDK Anthropic."""
 
-    @patch("src.cli.generators.anthropic.asyncio")
-    def test_generate_chama_query(self, mock_asyncio) -> None:
-        """Verifica que generate usa asyncio.run internamente."""
-        mock_asyncio.run.return_value = '{"pipeline": {}}'
+    @patch.dict("sys.modules", {"anthropic": MagicMock()})
+    def test_generate_chama_api(self) -> None:
+        """Verifica chamada correta à API Anthropic."""
+        import sys
+
+        mock_anthropic = sys.modules["anthropic"]
+        mock_client = MagicMock()
+        mock_block = MagicMock(type="text", text='{"pipeline": {}}')
+        mock_response = MagicMock(content=[mock_block])
+        mock_client.messages.create.return_value = mock_response
+        mock_anthropic.Anthropic.return_value = mock_client
 
         from src.cli.generators.anthropic import AnthropicGenerator
 
@@ -19,7 +24,8 @@ class TestAnthropicGenerator:
         result = gen.generate("test prompt")
 
         assert result == '{"pipeline": {}}'
-        mock_asyncio.run.assert_called_once()
+        mock_anthropic.Anthropic.assert_called_once_with(api_key="fake-token")
+        mock_client.messages.create.assert_called_once()
 
     def test_token_guardado(self) -> None:
         """Token é armazenado para uso no .env."""
