@@ -1,5 +1,6 @@
 """Testes para providers de geração (mock de SDK)."""
 
+import pytest
 from unittest.mock import MagicMock, patch
 
 
@@ -77,3 +78,55 @@ class TestOpenAIGenerator:
 
         assert result == '{"pipeline": {}}'
         mock_client.chat.completions.create.assert_called_once()
+
+
+class TestCopilotGenerator:
+    """Testes do CopilotGenerator com mock do SDK."""
+
+    def test_sdk_nao_instalado_exibe_mensagem(self) -> None:
+        """Sem copilot-sdk instalado, exibe mensagem de instalação."""
+        with patch.dict("sys.modules", {"copilot": None}):
+            with pytest.raises(SystemExit):
+                from importlib import reload
+                import src.cli.generators.copilot as mod
+                reload(mod)
+                mod.CopilotGenerator()
+
+    @patch.dict("sys.modules", {"copilot": MagicMock()})
+    def test_token_armazenado(self) -> None:
+        """Token é armazenado para uso na autenticação."""
+        from src.cli.generators.copilot import CopilotGenerator
+
+        gen = CopilotGenerator("meu-github-token")
+        assert gen._token == "meu-github-token"
+
+    @patch.dict("sys.modules", {"copilot": MagicMock()})
+    def test_token_vazio_aceito(self) -> None:
+        """Token vazio é aceito (auth via CLI)."""
+        from src.cli.generators.copilot import CopilotGenerator
+
+        gen = CopilotGenerator("")
+        assert gen._token == ""
+
+    @patch("src.cli.generators.copilot.asyncio")
+    @patch.dict("sys.modules", {"copilot": MagicMock()})
+    def test_generate_chama_asyncio_run(self, mock_asyncio) -> None:
+        """Generate delega para asyncio.run."""
+        mock_asyncio.run.return_value = '{"pipeline": {}}'
+
+        from src.cli.generators.copilot import CopilotGenerator
+
+        gen = CopilotGenerator()
+        result = gen.generate("test prompt")
+
+        assert result == '{"pipeline": {}}'
+        mock_asyncio.run.assert_called_once()
+
+    @patch.dict("sys.modules", {"copilot": MagicMock()})
+    def test_get_provider_retorna_copilot_generator(self) -> None:
+        """get_provider('copilot') retorna CopilotGenerator."""
+        from src.cli.generators.copilot import CopilotGenerator
+        from src.cli.generators.interface import get_provider
+
+        provider = get_provider("copilot", "")
+        assert isinstance(provider, CopilotGenerator)

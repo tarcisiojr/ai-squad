@@ -33,6 +33,11 @@ PROVIDER_CONFIGS: dict[str, ProviderConfig] = {
         env_var="GOOGLE_API_KEY",
         default_model="gemini-2.0-flash",
     ),
+    "copilot": ProviderConfig(
+        ai_provider="copilot",
+        env_var="",
+        default_model="",
+    ),
 }
 
 
@@ -57,6 +62,10 @@ def get_provider(provider_name: str, token: str) -> "GeneratorProvider":
         from src.cli.generators.agno import AgnoGenerator
 
         return AgnoGenerator(token)
+    elif provider_name == "copilot":
+        from src.cli.generators.copilot import CopilotGenerator
+
+        return CopilotGenerator(token)
     else:
         raise ValueError(f"Provider desconhecido: {provider_name}")
 

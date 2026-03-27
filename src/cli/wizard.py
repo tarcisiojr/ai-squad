@@ -76,12 +76,26 @@ class GenerateWizard:
         """Seleção de provider de IA."""
         return click.prompt(
             "🔧 Provider de IA",
-            type=click.Choice(["anthropic", "agno", "openai"], case_sensitive=False),
+            type=click.Choice(["anthropic", "agno", "copilot", "openai"], case_sensitive=False),
             default="anthropic",
         )
 
     def _ask_token(self, provider: str) -> str:
         """Coleta token do provider sem exibir no terminal."""
+        # Copilot: token opcional (auth via CLI)
+        if provider == "copilot":
+            click.echo(
+                "ℹ️  Copilot usa autenticação via CLI (copilot auth login).\n"
+                "   Opcionalmente, informe um GITHUB_TOKEN abaixo (Enter para pular)."
+            )
+            token = click.prompt(
+                "🔑 GITHUB_TOKEN (opcional)",
+                default="",
+                hide_input=True,
+                show_default=False,
+            )
+            return token.strip()
+
         provider_labels = {
             "anthropic": "Anthropic",
             "agno": "Agno (Google API Key)",
