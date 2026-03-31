@@ -20,19 +20,31 @@ MAX_MESSAGE_LENGTH = 4096
 class GChatMessageBus(MessageBus):
     """Barramento de mensageria via Google Chat.
 
-    Usa Service Account para autenticação e polling para receber mensagens.
-    Suporta threads em Spaces via threadKey.
+    Suporta dois modos de autenticação:
+    - Service Account (GCHAT_CREDENTIALS_PATH aponta para JSON de service account)
+    - OAuth Client (GCHAT_CREDENTIALS_PATH aponta para JSON de OAuth client)
+
+    No modo OAuth, o token é salvo em GCHAT_TOKEN_PATH (default: token_gchat.json
+    no mesmo diretório do credentials). Na primeira execução, abre o navegador
+    para autorização.
     """
 
     def __init__(self, **kwargs) -> None:
         self._credentials_path = os.environ.get("GCHAT_CREDENTIALS_PATH", "")
         self._space_id = os.environ.get("GCHAT_SPACE_ID", "")
+        self._token_path = os.environ.get("GCHAT_TOKEN_PATH", "")
         self._poll_interval = int(os.environ.get("GCHAT_POLL_INTERVAL", str(DEFAULT_POLL_INTERVAL)))
         self._persona_name = kwargs.get("persona_name", "Agent")
         self._persona_avatar = kwargs.get("persona_avatar", "")
         self._activation_mode = kwargs.get("activation_mode", "mention")
         self._service = None
         self._bot_id: str = ""
+        # Indica se autenticação é OAuth (usuário) ou Service Account (bot)
+        self._is_oauth: bool = False
+        # ID do usuário autenticado (para ignorar próprias mensagens no modo OAuth)
+        self._authenticated_user_id: str = ""
+        # Prefixos de persona para filtrar mensagens do próprio bot (modo same-account)
+        self._own_prefixes: list[str] = []
         self._message_callback: Callable | None = None
         self._voice_callback: Callable | None = None
         self._poll_task: asyncio.Task | None = None
@@ -77,11 +89,20 @@ class GChatMessageBus(MessageBus):
     def env_template(cls) -> str:
         """Template de .env para Google Chat."""
         return (
-            "# Google Chat — Service Account (JSON credentials)\n"
+            "# Google Chat — Credenciais (Service Account OU OAuth Client JSON)\n"
+            "# Service Account: JSON com 'type: service_account'\n"
+            "# OAuth Client: JSON baixado de 'OAuth 2.0 Client IDs' no Google Cloud\n"
             "GCHAT_CREDENTIALS_PATH=PREENCHA_AQUI_caminho_credentials_json\n"
             "\n"
             "# Space ID do Google Chat (ex: spaces/AAAAxxxxxx)\n"
             "GCHAT_SPACE_ID=PREENCHA_AQUI_space_id\n"
+            "\n"
+            "# (OAuth Client) Caminho para salvar token — opcional, default: token_gchat.json\n"
+            "# GCHAT_TOKEN_PATH=\n"
+            "\n"
+            "# (OAuth Client) Email do usuário autenticado — para ignorar próprias mensagens\n"
+            "# Detectado automaticamente, mas pode ser definido manualmente\n"
+            "# GCHAT_USER_ID=seu-email@empresa.com\n"
             "\n"
             "# Intervalo de polling em segundos (opcional, default: 3)\n"
             "# GCHAT_POLL_INTERVAL=3\n"
@@ -95,13 +116,26 @@ class GChatMessageBus(MessageBus):
         return self._bot_id
 
     def is_mention(self, message_data: dict) -> bool:
-        """Verifica se a mensagem menciona o bot via annotations do GChat."""
+        """Verifica se a mensagem menciona o bot via annotations do GChat.
+
+        No modo Service Account: procura menções do tipo BOT.
+        No modo OAuth: procura menção ao usuário autenticado (por email ou user ID).
+        """
         annotations = message_data.get("annotations", [])
         for ann in annotations:
             if ann.get("type") == "USER_MENTION":
                 user_mention = ann.get("userMention", {})
+                # Modo Service Account — menção ao bot
                 if user_mention.get("type") == "BOT":
                     return True
+                # Modo OAuth — menção ao usuário autenticado
+                if self._is_oauth and self._authenticated_user_id:
+                    mentioned_user = user_mention.get("user", {})
+                    if (
+                        mentioned_user.get("email") == self._authenticated_user_id
+                        or mentioned_user.get("name") == self._authenticated_user_id
+                    ):
+                        return True
         return False
 
     def is_dm(self, message_data: dict) -> bool:
@@ -130,6 +164,31 @@ class GChatMessageBus(MessageBus):
         # Modo mention (default) — verifica annotations
         return self.is_mention(msg)
 
+    # --- Registro de personas ---
+
+    def register_personas(self, personas: dict) -> None:
+        """Registra prefixos de persona para filtrar mensagens do próprio bot.
+
+        No modo OAuth com mesma conta, o bot envia mensagens como o usuário.
+        Os prefixos (ex: '👨‍💼 Squad Lead', '⚙️ Dev Backend') permitem distinguir
+        mensagens do bot das mensagens reais do usuário.
+        """
+        prefixes = []
+        for persona in personas.values():
+            avatar = getattr(persona, "avatar", "")
+            name = getattr(persona, "name", "")
+            if avatar and name:
+                prefixes.append(f"{avatar} {name}")
+            elif name:
+                prefixes.append(name)
+        # Inclui o prefixo do próprio bus (persona_name/avatar do construtor)
+        if self._persona_name:
+            bus_prefix = f"{self._persona_avatar} {self._persona_name}".strip()
+            if bus_prefix not in prefixes:
+                prefixes.append(bus_prefix)
+        self._own_prefixes = prefixes
+        logger.info("Prefixos de persona registrados: %s", prefixes)
+
     # --- Capacidades ---
 
     @property
@@ -145,26 +204,47 @@ class GChatMessageBus(MessageBus):
     # --- Internals ---
 
     def _build_service(self) -> None:
-        """Cria o client da Google Chat API via Service Account."""
+        """Cria o client da Google Chat API.
+
+        Detecta automaticamente o tipo de credencial:
+        - Service Account: campo "type": "service_account" no JSON
+        - OAuth Client: campo "installed" ou "web" no JSON
+        """
         if self._service is not None:
             return
 
         try:
             import googleapiclient.discovery
-            from google.oauth2 import service_account
         except ImportError:
             raise ImportError(
-                "google-auth e google-api-python-client são necessários. "
-                "Instale com: pip install google-auth google-api-python-client"
+                "google-api-python-client é necessário. "
+                "Instale com: pip install google-api-python-client"
             )
 
-        scopes = ["https://www.googleapis.com/auth/chat.bot"]
-        credentials = service_account.Credentials.from_service_account_file(
-            self._credentials_path, scopes=scopes
-        )
+        import json
+
+        with open(self._credentials_path) as f:
+            creds_data = json.load(f)
+
+        if creds_data.get("type") == "service_account":
+            credentials = self._auth_service_account(creds_data)
+            self._is_oauth = False
+        elif "installed" in creds_data or "web" in creds_data:
+            credentials = self._auth_oauth_client()
+            self._is_oauth = True
+        else:
+            raise ValueError(
+                "Formato de credencial não reconhecido. "
+                "Use Service Account JSON ou OAuth Client JSON do Google Cloud Console."
+            )
+
         self._service = googleapiclient.discovery.build(
             "chat", "v1", credentials=credentials, cache_discovery=False
         )
+
+        # No modo OAuth, descobre o ID do usuário autenticado para filtrar mensagens
+        if self._is_oauth:
+            self._discover_authenticated_user(credentials)
 
         # Valida conexão com um request inicial
         try:
@@ -174,7 +254,99 @@ class GChatMessageBus(MessageBus):
         except Exception:
             pass
 
-        logger.info("Google Chat API client inicializado")
+        auth_mode = "OAuth Client" if self._is_oauth else "Service Account"
+        logger.info("Google Chat API client inicializado (modo: %s)", auth_mode)
+
+    def _discover_authenticated_user(self, credentials) -> None:
+        """Descobre o ID do usuário autenticado via People API ou token info.
+
+        Necessário no modo OAuth para ignorar mensagens enviadas pelo próprio agente.
+        """
+        # Tenta via variável de ambiente (override manual)
+        env_user = os.environ.get("GCHAT_USER_ID", "")
+        if env_user:
+            self._authenticated_user_id = env_user
+            logger.info("Usuário autenticado (env): %s", self._authenticated_user_id)
+            return
+
+        # Tenta obter via token info (email do usuário)
+        try:
+            if hasattr(credentials, "service_account_email"):
+                self._authenticated_user_id = credentials.service_account_email
+            elif hasattr(credentials, "token"):
+                import googleapiclient.discovery
+
+                oauth2 = googleapiclient.discovery.build(
+                    "oauth2", "v2", credentials=credentials, cache_discovery=False
+                )
+                user_info = oauth2.userinfo().get().execute()
+                self._authenticated_user_id = user_info.get("email", "")
+            logger.info("Usuário autenticado: %s", self._authenticated_user_id)
+        except Exception as e:
+            logger.warning(
+                "Não foi possível descobrir usuário autenticado: %s. "
+                "Defina GCHAT_USER_ID no .env para evitar loop de mensagens.",
+                e,
+            )
+
+    def _auth_service_account(self, creds_data: dict):  # noqa: ANN201
+        """Autenticação via Service Account."""
+        from google.oauth2 import service_account
+
+        scopes = ["https://www.googleapis.com/auth/chat.bot"]
+        return service_account.Credentials.from_service_account_info(creds_data, scopes=scopes)
+
+    def _auth_oauth_client(self):  # noqa: ANN201
+        """Autenticação via OAuth Client com fluxo de autorização do usuário.
+
+        Na primeira execução, abre o navegador para consentimento.
+        O token é salvo em disco para reutilização.
+        """
+        try:
+            from google.auth.transport.requests import Request
+            from google.oauth2.credentials import Credentials
+            from google_auth_oauthlib.flow import InstalledAppFlow
+        except ImportError:
+            raise ImportError(
+                "google-auth-oauthlib é necessário para OAuth Client. "
+                "Instale com: pip install google-auth-oauthlib"
+            )
+
+        # Scopes para leitura e escrita no Google Chat como usuário
+        scopes = [
+            "https://www.googleapis.com/auth/chat.spaces.readonly",
+            "https://www.googleapis.com/auth/chat.messages",
+            "https://www.googleapis.com/auth/chat.messages.readonly",
+        ]
+
+        # Caminho do token persistido
+        token_path = self._token_path
+        if not token_path:
+            from pathlib import Path
+
+            token_path = str(Path(self._credentials_path).parent / "token_gchat.json")
+
+        credentials = None
+
+        # Tenta carregar token salvo
+        if os.path.exists(token_path):
+            credentials = Credentials.from_authorized_user_file(token_path, scopes)
+
+        # Renova ou solicita novo token
+        if credentials and credentials.expired and credentials.refresh_token:
+            logger.info("Renovando token OAuth do Google Chat...")
+            credentials.refresh(Request())
+        elif not credentials or not credentials.valid:
+            logger.info("Iniciando fluxo de autorização OAuth — abrindo navegador...")
+            flow = InstalledAppFlow.from_client_secrets_file(self._credentials_path, scopes)
+            credentials = flow.run_local_server(port=0)
+            logger.info("Autorização OAuth concluída com sucesso")
+
+        # Salva token para reutilização
+        with open(token_path, "w") as f:
+            f.write(credentials.to_json())
+
+        return credentials
 
     def _format_space(self) -> str:
         """Retorna space_id no formato correto (spaces/XXX)."""
@@ -234,6 +406,12 @@ class GChatMessageBus(MessageBus):
             return
 
         text = msg.get("text", "").strip()
+
+        # No modo OAuth (mesma conta), ignora mensagens que começam com prefixo de persona
+        if self._is_oauth and self._own_prefixes:
+            for prefix in self._own_prefixes:
+                if text.startswith(prefix):
+                    return
         if not text:
             return
 

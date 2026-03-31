@@ -246,16 +246,38 @@ def _detect_mode(name: str) -> str:
     sys.exit(1)
 
 
-def _start_local(name: str) -> None:
+def _start_local(name: str, *, use_tui: bool = False) -> None:
     """Inicia time em modo local (foreground)."""
     import asyncio
+    import logging as _logging
 
     from dotenv import load_dotenv
 
-    from src.daemon import Daemon
     from src.path_resolver import PathResolver
 
     paths = PathResolver("local", Path.cwd())
+
+    # TUI: redireciona logging para arquivo ANTES de importar o daemon
+    if use_tui:
+        import os
+
+        log_path = paths.state_dir / "tui.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+
+        os.environ["NO_COLOR"] = "1"
+        os.environ["MESSAGING_PROVIDER"] = "tui"
+
+        # Configura logging para arquivo ANTES do daemon importar
+        _logging.basicConfig(
+            level=_logging.INFO,
+            format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+            filename=str(log_path),
+            filemode="w",
+            force=True,
+        )
+
+    from src.daemon import Daemon
 
     # Carrega .env
     if paths.env_path.exists():
@@ -312,13 +334,15 @@ def _start_local(name: str) -> None:
 
     os.environ.setdefault("TEAM_NAME", name)
 
-    click.echo(f"Iniciando squad '{name}' (local, Ctrl+C para parar)...")
+    if not use_tui:
+        click.echo(f"Iniciando squad '{name}' (local, Ctrl+C para parar)...")
     daemon = Daemon(path_resolver=paths)
 
     try:
         asyncio.run(daemon.run())
     except KeyboardInterrupt:
-        click.echo("\nSquad encerrada.")
+        if not use_tui:
+            click.echo("\nSquad encerrada.")
 
 
 @cli.command()
@@ -326,7 +350,10 @@ def _start_local(name: str) -> None:
 @click.option("--all", "start_all", is_flag=True, help="Inicia todos os times.")
 @click.option("--local", "force_local", is_flag=True, help="Força modo local.")
 @click.option("--docker", "force_docker", is_flag=True, help="Força modo Docker.")
-def start(name: str | None, start_all: bool, force_local: bool, force_docker: bool) -> None:
+@click.option("--tui", "use_tui", is_flag=True, help="Usa interface TUI no terminal.")
+def start(
+    name: str | None, start_all: bool, force_local: bool, force_docker: bool, use_tui: bool
+) -> None:
     """Inicia um time. Detecta automaticamente modo local ou Docker."""
     if force_local and force_docker:
         click.echo("Erro: Flags --local e --docker são mutuamente exclusivas.", err=True)
@@ -356,7 +383,7 @@ def start(name: str | None, start_all: bool, force_local: bool, force_docker: bo
         mode = _detect_mode(name)
 
     if mode == "local":
-        _start_local(name)
+        _start_local(name, use_tui=use_tui)
     else:
         _start_team(manager, name)
 

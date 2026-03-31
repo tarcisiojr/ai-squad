@@ -177,9 +177,17 @@ def _write_env(squad_dir: Path, result: WizardResult) -> None:
 
     lines = ["# === Tokens obrigatórios ===\n"]
 
-    # Token do provider de IA
-    lines.append(f"# Token do provider de IA ({result.provider})")
-    lines.append(f"{provider_config.env_var}={result.token}\n")
+    # Token do provider de IA (pula se env_var vazio, ex: copilot)
+    if provider_config.env_var:
+        lines.append(f"# Token do provider de IA ({result.provider})")
+        lines.append(f"{provider_config.env_var}={result.token}\n")
+    elif result.token:
+        # Copilot com GITHUB_TOKEN informado opcionalmente
+        lines.append("# Token GitHub (opcional para Copilot)")
+        lines.append(f"GITHUB_TOKEN={result.token}\n")
+    else:
+        lines.append("# Copilot: autenticação via 'copilot auth login'")
+        lines.append("# GITHUB_TOKEN=\n")
 
     # Credenciais do canal
     if result.channel_credentials:

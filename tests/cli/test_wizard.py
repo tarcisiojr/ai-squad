@@ -54,3 +54,63 @@ class TestWizardResult:
             channel_credentials={"TELEGRAM_TOKEN": "bot123"},
         )
         assert result.channel_credentials["TELEGRAM_TOKEN"] == "bot123"
+
+    def test_token_vazio_aceito_para_copilot(self) -> None:
+        """WizardResult aceita token vazio (copilot sem token)."""
+        from src.cli.wizard import WizardResult
+
+        result = WizardResult(
+            description="teste",
+            provider="copilot",
+            token="",
+            messaging="cli",
+        )
+        assert result.token == ""
+        assert result.provider == "copilot"
+
+    def test_token_github_aceito_para_copilot(self) -> None:
+        """WizardResult aceita GITHUB_TOKEN opcional para copilot."""
+        from src.cli.wizard import WizardResult
+
+        result = WizardResult(
+            description="teste",
+            provider="copilot",
+            token="ghp_abc123",
+            messaging="cli",
+        )
+        assert result.token == "ghp_abc123"
+
+
+class TestWizardCopilotProvider:
+    """Testes do wizard com provider copilot."""
+
+    def test_copilot_na_lista_de_providers(self) -> None:
+        """Copilot aparece como opção de provider no wizard."""
+        from src.cli.wizard import GenerateWizard
+
+        wizard = GenerateWizard()
+        # _ask_provider usa click.Choice — verificamos indiretamente
+        # que copilot está como opção lendo o código fonte
+        import inspect
+        source = inspect.getsource(wizard._ask_provider)
+        assert "copilot" in source
+
+    def test_ask_token_copilot_aceita_vazio(self) -> None:
+        """Token é opcional para copilot (Enter pula)."""
+        from src.cli.wizard import GenerateWizard
+
+        wizard = GenerateWizard()
+        with patch("click.prompt", return_value=""):
+            with patch("click.echo"):
+                token = wizard._ask_token("copilot")
+        assert token == ""
+
+    def test_ask_token_copilot_aceita_github_token(self) -> None:
+        """Copilot aceita GITHUB_TOKEN quando informado."""
+        from src.cli.wizard import GenerateWizard
+
+        wizard = GenerateWizard()
+        with patch("click.prompt", return_value="ghp_test123"):
+            with patch("click.echo"):
+                token = wizard._ask_token("copilot")
+        assert token == "ghp_test123"

@@ -38,12 +38,17 @@ class TestProviderConfig:
         with pytest.raises(ValueError, match="desconhecido"):
             get_provider_config("inexistente")
 
-    def test_todos_providers_tem_config(self) -> None:
-        """Todos os providers registrados possuem configuração completa."""
+    def test_copilot_config(self) -> None:
+        """Configuração do provider Copilot (sem token, sem modelo fixo)."""
+        config = get_provider_config("copilot")
+        assert config.ai_provider == "copilot"
+        assert config.env_var == ""
+        assert config.default_model == ""
+
+    def test_todos_providers_tem_ai_provider(self) -> None:
+        """Todos os providers registrados possuem ai_provider definido."""
         for name, config in PROVIDER_CONFIGS.items():
             assert config.ai_provider, f"{name} sem ai_provider"
-            assert config.env_var, f"{name} sem env_var"
-            assert config.default_model, f"{name} sem default_model"
 
 
 class TestGetProvider:
