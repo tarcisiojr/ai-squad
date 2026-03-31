@@ -70,6 +70,8 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
         self._agent_definitions: dict[str, AgentDefinition] | None = None
         # Nome do agente atual (para report_progress saber quem chamou)
         self._current_agent_name: str = ""
+        # Se True, redireciona stderr do subprocess para log (modo TUI)
+        self._stderr_to_log: bool = False
 
         # Callbacks do engine (registrados via set_*_callback)
         self._progress_callback: Callable | None = None
@@ -562,6 +564,10 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
             "max_turns": max_turns,
             "permission_mode": "bypassPermissions",
         }
+
+        # Captura stderr do subprocess via callback (evita poluir o terminal no modo TUI)
+        if self._stderr_to_log:
+            kwargs["stderr"] = lambda line: logger.debug("[claude-cli] %s", line.rstrip())
 
         if self._working_dir:
             kwargs["cwd"] = Path(self._working_dir)

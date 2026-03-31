@@ -53,3 +53,9 @@ def load_builtin_providers() -> None:
         import src.messaging.gchat  # noqa: F401
     except ImportError:
         pass
+
+    # TUI — dependência opcional: textual
+    try:
+        import src.messaging.tui  # noqa: F401
+    except ImportError:
+        pass

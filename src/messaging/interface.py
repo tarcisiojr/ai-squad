@@ -124,6 +124,27 @@ class MessageBus(ABC):
     async def send_typing(self, user_id: str, *, thread_id: str | None = None) -> None:
         """Envia indicador de digitação. Opcional — implementações sem suporte ignoram."""
 
+    async def run_forever(self) -> None:
+        """Loop principal bloqueante do provider.
+
+        Quando implementado, o daemon usa este método em vez de shutdown_event.wait().
+        Útil para providers que precisam controlar o terminal (ex: TUI).
+        Retorna None por default (daemon usa shutdown_event.wait()).
+
+        Providers com controle de terminal SHALL restaurar o estado do terminal
+        (termios, fds, escape sequences) em qualquer cenário de saída — erro,
+        timeout, crash ou SIGINT. Usar TerminalGuard ou equivalente.
+        """
+        return None
+
+    def register_personas(self, personas: dict) -> None:
+        """Registra personas dos agentes para filtragem de mensagens próprias.
+
+        Usado no modo OAuth (mesma conta) para distinguir mensagens enviadas
+        pelo bot das mensagens do usuário humano.
+        Cada persona tem avatar e name — o prefixo '{avatar} {name}' identifica o bot.
+        """
+
     async def create_thread(self, chat_id: str, title: str) -> str | None:
         """Cria tópico/thread no canal. Retorna thread_id ou None se não suportado."""
         return None

@@ -26,11 +26,13 @@ from src.orchestrator.thread_map import ThreadDemandMap
 from src.orchestrator.thread_tracker import ThreadAction, ThreadTracker
 
 # Configuração de logging estruturado
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
+# No modo TUI, o logging já foi configurado para arquivo antes do import
+if not logging.getLogger().handlers:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
 logger = logging.getLogger("ai-squad.daemon")
 
 
@@ -136,6 +138,10 @@ class Daemon:
         """Cria adapter Claude Agent SDK."""
         logger.info("Usando adapter: Claude Agent SDK (model: %s)", self.config.ai_model)
         adapter = ClaudeAgentSDKAdapter(**kwargs)
+
+        # No modo TUI, redireciona stderr do subprocess para log
+        if os.environ.get("MESSAGING_PROVIDER") == "tui":
+            adapter._stderr_to_log = True
 
         # Configura subagentes nativos do SDK a partir dos AGENTS.md
         agent_defs = self._build_agent_definitions()
@@ -253,6 +259,9 @@ class Daemon:
         )
         if self.config.squad_lead:
             personas["squad-lead"] = self.config.squad_lead
+
+        # Registra personas no bus para filtragem de mensagens próprias (OAuth)
+        self._bus.register_personas(personas)
 
         # Monta o engine de orquestracao
         self._engine = OrchestrationEngine(
@@ -911,8 +920,11 @@ class Daemon:
         standby_task = asyncio.create_task(self._standby_timeout_loop())
 
         try:
-            # Aguarda sinal de shutdown
-            await self._shutdown_event.wait()
+            # Se o bus implementa run_forever (ex: TUI), usa como loop principal
+            run_forever_result = await self.bus.run_forever()
+            if run_forever_result is None:
+                # Bus padrão (Telegram, GChat) — aguarda sinal de shutdown
+                await self._shutdown_event.wait()
         finally:
             health_task.cancel()
             heartbeat_task.cancel()
