@@ -97,19 +97,18 @@ class CopilotAdapter(AIAgentAdapter):
             return
 
         from copilot import CopilotClient
+        from copilot.types import SubprocessConfig
 
         # Auth: GITHUB_TOKEN do ambiente ou credenciais do CLI
-        client_opts: dict[str, Any] = {}
         github_token = os.environ.get("GITHUB_TOKEN", "")
         if github_token and not github_token.startswith("PREENCHA_AQUI"):
-            client_opts["github_token"] = github_token
-            client_opts["use_logged_in_user"] = False
+            client_config = SubprocessConfig(github_token=github_token, use_logged_in_user=False)
             logger.info("Copilot auth: usando GITHUB_TOKEN do ambiente")
         else:
-            client_opts["use_logged_in_user"] = True
+            client_config = SubprocessConfig(use_logged_in_user=True)
             logger.info("Copilot auth: usando credenciais do copilot CLI")
 
-        self._client = CopilotClient(client_opts)
+        self._client = CopilotClient(client_config)
         await self._client.start()
         self._client_started = True
         logger.info("CopilotClient iniciado")
@@ -278,7 +277,14 @@ class CopilotAdapter(AIAgentAdapter):
         from copilot import PermissionHandler
 
         tools = self._build_tools()
-        session_opts: dict[str, Any] = {
+
+        # System message do AGENTS.md (SystemMessageAppendConfig é TypedDict)
+        system_msg_obj: dict[str, Any] | None = None
+        system_msg = self._build_system_message(agent_name)
+        if system_msg:
+            system_msg_obj = {"mode": "append", "content": system_msg}
+
+        create_kwargs: dict[str, Any] = {
             "model": model,
             "tools": tools,
             "on_permission_request": PermissionHandler.approve_all,
@@ -286,14 +292,12 @@ class CopilotAdapter(AIAgentAdapter):
 
         # Session ID único por agente+demanda
         if session_key:
-            session_opts["session_id"] = session_key
+            create_kwargs["session_id"] = session_key
 
-        # System message do AGENTS.md
-        system_msg = self._build_system_message(agent_name)
-        if system_msg:
-            session_opts["system_message"] = {"content": system_msg}
+        if system_msg_obj:
+            create_kwargs["system_message"] = system_msg_obj
 
-        session = await self._client.create_session(session_opts)
+        session = await self._client.create_session(**create_kwargs)
 
         if session_key:
             self._sessions[session_key] = session
@@ -388,14 +392,26 @@ class CopilotAdapter(AIAgentAdapter):
                 )
                 logger.info("[%s] Session OK, enviando prompt (%d chars)...", agent_name, len(prompt))
 
-                response = await session.send_and_wait(
-                    {"prompt": prompt}, timeout=effective_timeout
-                )
+                # Coleta texto da resposta via eventos assistant.message
+                collected_parts: list[str] = []
 
-                logger.info("[%s] Resposta SDK recebida", agent_name)
+                def _on_event(event: Any) -> None:
+                    event_type = getattr(getattr(event, "type", None), "value", None)
+                    if event_type == "assistant.message" and event.data:
+                        if event.data.content:
+                            collected_parts.append(event.data.content)
 
-                if response and response.data and response.data.content:
-                    return response.data.content
+                unsubscribe = session.on(_on_event)
+                try:
+                    await session.send_and_wait(prompt, timeout=effective_timeout)
+                finally:
+                    unsubscribe()
+
+                result = "".join(collected_parts).strip()
+                logger.info("[%s] Resposta SDK recebida (%d chars)", agent_name, len(result))
+
+                if result:
+                    return result
 
                 logger.warning("[%s] Resposta vazia do SDK", agent_name)
                 return ""
