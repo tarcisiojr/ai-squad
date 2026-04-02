@@ -1,10 +1,15 @@
 """Persistência de estado de demandas em JSON com escrita atômica."""
 
 import json
+import logging
 import re
+import shutil
+from datetime import datetime, timezone
 from pathlib import Path
 
 from src.orchestrator.atomic_write import write_json_atomic
+
+logger = logging.getLogger("ai-squad.state")
 
 # Padrão seguro para demand_id: apenas alfanuméricos, hífens e underscores
 _SAFE_ID = re.compile(r"^[a-zA-Z0-9_\-]+$")
@@ -71,6 +76,12 @@ class StateManager:
             "state": state,
             "checkpoint": checkpoint or existing.get("checkpoint", {}),
         }
+
+        # Registra timestamp de conclusão ao entrar em "done"
+        if state == "done" and "done_at" not in existing:
+            data["done_at"] = datetime.now(timezone.utc).isoformat()
+        elif "done_at" in existing:
+            data["done_at"] = existing["done_at"]
 
         # Preserva campos extras (user_id, description, etc.)
         for key in ("user_id", "description"):
@@ -148,3 +159,62 @@ class StateManager:
         path = self._state_path(demand_id)
         if path.exists():
             path.unlink()
+
+    def cleanup_expired(self, ttl_days: int = 7) -> int:
+        """Remove demandas concluídas há mais de ttl_days dias.
+
+        Remove o arquivo .json de estado e a subpasta associada
+        (conversation, journal, pipeline-state). Preserva artefatos
+        duráveis (lessons.db, graph.db, daily/, etc.).
+
+        Retorna quantidade de demandas removidas.
+        """
+        if ttl_days <= 0:
+            raise ValueError(f"ttl_days deve ser positivo, recebeu: {ttl_days}")
+
+        now = datetime.now(timezone.utc)
+        removed = 0
+
+        for path in list(self._state_dir.glob("*.json")):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+
+                if data.get("state") != "done":
+                    continue
+
+                done_at_str = data.get("done_at")
+                if not done_at_str:
+                    logger.warning(
+                        "Demanda %s em estado done sem done_at (legado), ignorando",
+                        path.stem,
+                    )
+                    continue
+
+                done_at = datetime.fromisoformat(done_at_str)
+                age_days = (now - done_at).days
+                if age_days < ttl_days:
+                    continue
+
+                # Remove arquivo de estado
+                demand_id = path.stem
+                path.unlink()
+
+                # Remove subpasta associada (conversation, journal, pipeline-state)
+                subdir = self._state_dir / demand_id
+                if subdir.is_dir():
+                    shutil.rmtree(subdir)
+
+                logger.info(
+                    "Demanda %s removida (concluída há %d dias)", demand_id, age_days
+                )
+                removed += 1
+
+            except (json.JSONDecodeError, OSError, KeyError, ValueError) as e:
+                logger.warning("Erro ao processar %s no cleanup: %s", path.name, e)
+                continue
+
+        if removed:
+            logger.info("Cleanup: %d demanda(s) expirada(s) removida(s)", removed)
+
+        return removed

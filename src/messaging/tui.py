@@ -516,10 +516,14 @@ class SquadTUIApp:
 
         bus = self._bus
 
+        # Frames do spinner braille dots
+        _SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+
         class _InnerTUIApp(App):
             """App Textual interno — design minimalista."""
 
             ENABLE_COMMAND_PALETTE = False
+            _spinner_tick: int = 0
 
             CSS = """
             Screen {
@@ -573,21 +577,21 @@ class SquadTUIApp:
                     yield Input(id="input-box", placeholder="Digite sua mensagem...")
 
             def _build_status_line(self) -> str:
-                """Monta status line com agentes e quem está trabalhando."""
+                """Monta status line com agentes e spinner animado para quem está trabalhando."""
                 personas = bus._personas
                 if not personas:
                     return ""
+                frame = _SPINNER_FRAMES[self._spinner_tick % len(_SPINNER_FRAMES)]
                 parts = []
                 for key, persona in personas.items():
                     if key == "squad-lead":
                         continue
-                    avatar = getattr(persona, "avatar", "")
                     name = getattr(persona, "name", key)
                     status = bus._agent_working.get(key, "")
                     if status:
-                        parts.append(f"{avatar}{name} [italic]⏳[/italic]")
+                        parts.append(f"[bold cyan]{name}[/bold cyan] [cyan]{frame}[/cyan]")
                     else:
-                        parts.append(f"[dim]{avatar}{name}[/dim]")
+                        parts.append(f"[dim]{name}[/dim]")
                 return " · ".join(parts)
 
             def on_mount(self) -> None:
@@ -596,6 +600,20 @@ class SquadTUIApp:
                 team = bus._team_name
                 chat.write(f"[bold]ai-squad[/bold] [dim]({team})[/dim]")
                 chat.write("[dim]PageUp/Down para rolar · /quit para sair[/dim]\n")
+                # Anima spinner da status line a cada 100ms
+                self.set_interval(0.1, self._advance_spinner)
+
+            def _advance_spinner(self) -> None:
+                """Avança frame do spinner e atualiza status line se há agente trabalhando."""
+                has_working = any(v for v in bus._agent_working.values())
+                if not has_working:
+                    return
+                self._spinner_tick += 1
+                try:
+                    status = self.query_one("#status-line", Static)
+                    status.update(self._build_status_line())
+                except Exception:
+                    pass
 
             async def on_input_submitted(self, event: Input.Submitted) -> None:
                 text = event.value.strip()

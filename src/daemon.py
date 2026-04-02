@@ -188,6 +188,14 @@ class Daemon:
 
         self._state_manager = state_mgr
 
+        # Expurga demandas concluídas há mais de 7 dias
+        try:
+            removed = state_mgr.cleanup_expired()
+            if removed:
+                logger.info("Boot: %d demanda(s) expirada(s) removida(s)", removed)
+        except Exception as e:
+            logger.warning("Erro no cleanup de boot: %s", e)
+
         # Inicializa mapeamento thread ↔ demand para threads/tópicos
         self._thread_map = ThreadDemandMap(state_dir=str(self._paths.state_dir))
 

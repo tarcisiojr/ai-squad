@@ -254,12 +254,12 @@ class TestResolveSkills:
 class TestGenerateTools:
     """Testes para geração dinâmica de tools."""
 
-    def test_gera_11_tools(self):
+    def test_gera_12_tools(self):
         from src.adapters.agno_adapter import AgnoAdapter
 
         adapter = AgnoAdapter()
         tools = adapter._generate_tools()
-        assert len(tools) == 11
+        assert len(tools) == 12
 
     def test_nomes_corretos(self):
         from src.adapters.agno_adapter import AgnoAdapter
@@ -471,11 +471,12 @@ class TestMCPToolsServer:
 
     def test_get_tool_definitions(self, server):
         defs = server.get_tool_definitions()
-        assert len(defs) == 11
+        assert len(defs) == 12
         names = {d["name"] for d in defs}
         assert "report_progress" in names
         assert "start_agent" in names
         assert "learn_lesson" in names
+        assert "query_knowledge_graph" in names
 
     @pytest.mark.asyncio
     async def test_skip_step(self, server):

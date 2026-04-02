@@ -213,15 +213,26 @@ class ConversationStore:
         return prefix + recentes
 
     def format_history_for_prompt(self, demand_id: str) -> str:
-        """Formata histórico como texto para incluir no prompt."""
+        """Formata histórico como texto para incluir no prompt.
+
+        Mensagens com role 'internal' são marcadas como não vistas pelo usuário,
+        para que o Squad Lead saiba que precisa comunicar o conteúdo.
+        """
         messages = self.get_context_messages(demand_id)
         if not messages:
             return ""
 
         partes = ["## Histórico da conversa\n"]
         for msg in messages:
-            role_label = msg.get("agent_name", msg["role"]) or msg["role"]
-            partes.append(f"**{role_label}**: {msg['content']}\n")
+            role = msg.get("role", "")
+            role_label = msg.get("agent_name", role) or role
+            content = msg.get("content", "")
+
+            if role == "internal":
+                # Marca como canal interno — usuário não viu este conteúdo
+                partes.append(f"**{role_label}** _(interno, usuario nao viu)_: {content}\n")
+            else:
+                partes.append(f"**{role_label}**: {content}\n")
 
         return "\n".join(partes)
 

@@ -310,8 +310,8 @@ class TestInvokeAgent:
         assert any("finalizada" in msg for _, msg in bus.notificacoes)
 
     @pytest.mark.asyncio
-    async def test_handle_progress_envia_ao_bus(self, tmp_path):
-        """Verifica que _handle_progress envia mensagem ao bus."""
+    async def test_handle_progress_armazena_no_progress_log(self, tmp_path):
+        """Verifica que _handle_progress armazena no progress_log e envia status leve."""
         adapter = CycleAdapter()
         bus = CycleBus()
         state_mgr = StateManager(state_dir=str(tmp_path / "state"))
@@ -324,9 +324,21 @@ class TestInvokeAgent:
         )
         engine._default_user_id = "user1"
 
+        # Cria RunningAgent para que o progress_log funcione
+        from src.orchestrator.tools import RunningAgent
+
+        engine._running_agents["po"] = RunningAgent(
+            agent_name="po", demand_id="d1", user_id="user1"
+        )
+
         await engine._handle_progress("po", "Gerando proposal.md")
 
-        assert any("Gerando proposal.md" in msg for _, msg in bus.mensagens)
+        # Progresso armazenado no canal interno
+        assert "Gerando proposal.md" in engine._running_agents["po"].progress_log
+        # Status leve enviado ao usuário (não o conteúdo detalhado)
+        assert any("trabalhando..." in msg for _, msg in bus.mensagens)
+        # Conteúdo detalhado NÃO enviado direto
+        assert not any("Gerando proposal.md" in msg for _, msg in bus.mensagens)
 
     @pytest.mark.asyncio
     async def test_handle_progress_sem_user_id(self, tmp_path):
@@ -510,7 +522,9 @@ class TestAsyncAgentDelegation:
         await engine._on_agent_done("po", task)
 
         assert engine._running_agents["po"].status == "done"
-        assert any("Concluido" in msg for _, msg in bus.mensagens)
+        # Canal interno: resultado NÃO é enviado direto ao usuário via bus
+        # O Squad Lead é quem comunica (via _on_squad_lead_trigger)
+        assert not any("Concluido" in msg for _, msg in bus.mensagens)
 
     @pytest.mark.asyncio
     async def test_on_agent_done_com_erro(self, tmp_path):
@@ -537,7 +551,9 @@ class TestAsyncAgentDelegation:
         await engine._on_agent_done("dev", task)
 
         assert engine._running_agents["dev"].status == "error"
-        assert any("Erro" in msg for _, msg in bus.mensagens)
+        # Canal interno: erro NÃO é enviado direto ao usuário
+        # O Squad Lead é quem comunica o erro (via _on_squad_lead_trigger)
+        assert not any("Erro" in msg for _, msg in bus.mensagens)
 
     @pytest.mark.asyncio
     async def test_run_squad_lead_retorna_resposta(self, tmp_path):

@@ -19,6 +19,7 @@ from src.messaging.interface import MessageBus
 from src.orchestrator.context import WorkspaceContextCollector
 from src.orchestrator.conversation import ConversationStore
 from src.orchestrator.daily_notes import DailyNotes
+from src.orchestrator.graph import GraphStore
 from src.orchestrator.journal import JournalStore
 from src.orchestrator.lessons import LessonsStore
 from src.orchestrator.model_router import resolve_model_for_tier
@@ -50,6 +51,7 @@ class RunnerContext:
     lessons: LessonsStore
     daily_notes: DailyNotes
     state_manager: StateManager
+    graph: GraphStore
 
 
 class AgentRunner:
@@ -209,6 +211,11 @@ class AgentRunner:
         if lessons:
             agents_md = f"{agents_md}\n\n{lessons}"
 
+        # Injeta contexto relacional do grafo de conhecimento
+        graph_context = self._ctx.graph.format_for_prompt(prompt)
+        if graph_context:
+            agents_md = f"{agents_md}\n\n{graph_context}"
+
         context: dict[str, Any] = {
             "demand_id": demand_id,
             "agent_name": agent_name,
@@ -268,7 +275,13 @@ class AgentRunner:
             return
 
         label = self.get_agent_label(agent_name)
-        user_id = running.user_id
+
+        # Limpa indicador de atividade do agente no bus (TUI spinner)
+        bus = self._ctx.message_bus
+        if hasattr(bus, "_agent_working"):
+            agent_key = getattr(bus, "_find_agent_key", lambda _: None)(label)
+            if agent_key:
+                bus._agent_working[agent_key] = ""  # type: ignore[union-attr]
 
         try:
             resultado = task.result()
@@ -294,26 +307,31 @@ class AgentRunner:
             if len(preview) > 2000:
                 preview = preview[:2000] + "..."
 
-            # Salva resultado do agente no historico de conversa
+            # Salva resultado do agente no historico (canal interno — usuário ainda não viu)
             if running.demand_id:
                 self._ctx.conversation.save_message(
                     running.demand_id,
-                    "assistant",
+                    "internal",
                     f"{agent_name} concluiu: {preview[:500]}",
                     agent_name=agent_name,
                 )
 
-            await self._ctx.message_bus.send_message(
-                user_id,
-                f"Concluido!\n\n{preview}",
-                sender=label,  # type: ignore[call-arg]
-                thread_id=running.thread_id,
-            )
+            # Dispara Squad Lead com resultado como contexto — ele decide o que comunicar
+            progress_summary = ""
+            if running.progress_log:
+                recent = running.progress_log[-5:]
+                progress_summary = "\nProgresso reportado pelo agente:\n" + "\n".join(
+                    f"- {p}" for p in recent
+                )
 
-            # Dispara Squad Lead com contexto completo
             await self._on_squad_lead_trigger(
                 running,
-                f"O agente {label} concluiu com sucesso. Decida o proximo passo.",
+                (
+                    f"O agente {label} concluiu com sucesso.\n\n"
+                    f"RESULTADO (apresente de forma concisa ao usuario, sem repetir literalmente):\n"
+                    f"{preview}{progress_summary}\n\n"
+                    f"Decida o proximo passo."
+                ),
             )
 
         except Exception as e:
@@ -336,16 +354,13 @@ class AgentRunner:
                 demand_id=running.demand_id,
             )
 
-            await self._ctx.message_bus.send_message(
-                user_id,
-                f"Erro: {e}",
-                sender=label,  # type: ignore[call-arg]
-                thread_id=running.thread_id,
-            )
-
+            # Dispara Squad Lead com erro — ele comunica ao usuário
             await self._on_squad_lead_trigger(
                 running,
-                f"O agente {label} falhou com erro: {e}. Decida o que fazer.",
+                (
+                    f"O agente {label} falhou com erro: {e}.\n"
+                    f"Decida o que fazer (retentar, escalar, ou informar o usuario)."
+                ),
             )
 
     def get_status(self) -> str:

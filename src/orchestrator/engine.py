@@ -10,6 +10,7 @@ from src.orchestrator.agent_runner import AgentRunner, RunnerContext
 from src.orchestrator.context import WorkspaceContextCollector
 from src.orchestrator.conversation import ConversationStore
 from src.orchestrator.daily_notes import DailyNotes
+from src.orchestrator.graph import GraphStore
 from src.orchestrator.journal import JournalStore
 from src.orchestrator.knowledge import KnowledgeStore
 from src.orchestrator.lessons import LessonsStore
@@ -19,6 +20,7 @@ from src.orchestrator.pipeline import PipelineLoader
 from src.orchestrator.pipeline_state import PipelineExecutor
 from src.orchestrator.prompt_builder import (
     get_agents_summary,
+    get_graph_context,
     get_knowledge_context,
     read_agents_md,
 )
@@ -76,6 +78,7 @@ class OrchestrationEngine:
         self._journal = JournalStore(state_dir=state_manager._state_dir)
         self._lessons = LessonsStore(state_dir=state_manager._state_dir)
         self._daily_notes = DailyNotes(state_dir=state_manager._state_dir)
+        self._graph = GraphStore(state_dir=state_manager._state_dir)
 
         # Knowledge base e reaction tracker (usados pelo preset helpdesk)
         self._knowledge: KnowledgeStore | None = None
@@ -110,6 +113,7 @@ class OrchestrationEngine:
             lessons=self._lessons,
             daily_notes=self._daily_notes,
             state_manager=self._state_manager,
+            graph=self._graph,
         )
         self._agent_runner = AgentRunner(
             ctx=runner_ctx,
@@ -152,9 +156,13 @@ class OrchestrationEngine:
         self._adapter.set_advance_step_callback(self._handle_advance_step)
         self._adapter.set_skip_step_callback(self._handle_skip_step)
         self._adapter.set_rerun_step_callback(self._handle_rerun_step)
+        self._adapter.set_query_graph_callback(self._handle_query_graph)
 
         # Registra callback de sumarização no conversation store
         self._conversation.set_summarize_callback(self._summarize_via_llm)
+
+        # Registra callback de extração no grafo de conhecimento
+        self._graph.set_extract_callback(self._summarize_via_llm)
 
     # --- Knowledge Base (helpdesk) ---
 
@@ -235,24 +243,37 @@ class OrchestrationEngine:
         return self._default_thread_id
 
     async def _handle_progress(self, agent_name: str, message: str) -> None:
-        """Recebe progresso do agente (via report_progress) e envia ao usuario.
+        """Recebe progresso do agente (via report_progress) e armazena internamente.
+
+        O progresso vai para o progress_log do RunningAgent (canal interno).
+        Na primeira chamada, envia um status leve ao usuário indicando que
+        o agente está trabalhando. Chamadas subsequentes apenas acumulam no log.
 
         Tolerante a falha — nunca propaga excecao para nao matar o agente.
         """
+        # Armazena progresso no canal interno (RunningAgent.progress_log)
+        running = self._running_agents.get(agent_name)
+        if running:
+            running.progress_log.append(message)
+
         user_id = self._resolve_user_id(agent_name)
         if not user_id:
             return
+
         try:
-            label = self._get_agent_label(agent_name)
-            thread_id = self._resolve_thread_id(agent_name)
-            await self._message_bus.send_message(
-                user_id,
-                message,
-                sender=label,  # type: ignore[call-arg]
-                thread_id=thread_id,
-            )
+            # Envia status leve apenas na primeira chamada
+            if running and not running.status_sent:
+                running.status_sent = True
+                label = self._get_agent_label(agent_name)
+                thread_id = self._resolve_thread_id(agent_name)
+                await self._message_bus.send_message(
+                    user_id,
+                    f"⚙️ {label} trabalhando...",
+                    sender=label,  # type: ignore[call-arg]
+                    thread_id=thread_id,
+                )
         except Exception as e:
-            logger.warning("[%s] Falha ao enviar progresso: %s", agent_name, e)
+            logger.warning("[%s] Falha ao enviar status: %s", agent_name, e)
 
     async def _handle_start_agent(self, agent_name: str, task_description: str) -> str:
         """Callback da MCP tool start_agent — inicia agente em background."""
@@ -363,8 +384,21 @@ class OrchestrationEngine:
                 demand_id=self._default_demand_id,
             )
             logger.info("Licao registrada: [%s] %s", category, problem[:60])
+
+            # Alimenta grafo de conhecimento com a lição
+            lesson_text = f"Licao [{category}]: {problem} → Solucao: {solution}"
+            await self._graph.ingest(lesson_text, self._default_demand_id)
         except Exception as e:
             logger.warning("Falha ao registrar licao: %s", e)
+
+    async def _handle_query_graph(self, query: str) -> str:
+        """Callback da MCP tool query_knowledge_graph — consulta grafo de conhecimento."""
+        if not query:
+            return "Informe um termo para buscar no grafo."
+        result = self._graph.format_for_prompt(query)
+        if not result:
+            return f"Nenhum conhecimento encontrado no grafo para: {query}"
+        return result
 
     async def _handle_send_image(self, image_path: str, caption: str = "") -> None:
         """Callback da MCP tool send_image — envia imagem ao usuario via mensageria.
@@ -422,6 +456,17 @@ class OrchestrationEngine:
         next_step = self._pipeline_executor.complete_step(demand_id, current.id)
         if next_step:
             return f"Avancado para step: {next_step.name} ({next_step.id})"
+
+        # Pipeline concluído — alimenta grafo com resumo do journal
+        journal_data = self._journal.read(demand_id)
+        if journal_data:
+            demand_text = journal_data.get("demand_text", "")
+            decisions = journal_data.get("decisions", [])
+            decisions_text = "; ".join(d.get("description", "") for d in decisions[-5:])
+            await self._graph.ingest(
+                f"Demanda {demand_id} concluida: {demand_text}. Decisoes: {decisions_text}",
+                demand_id,
+            )
         return "Pipeline concluido."
 
     async def _handle_skip_step(self, step_id: str) -> str:
@@ -485,6 +530,12 @@ class OrchestrationEngine:
             thread_id = self._thread_map.get_thread(demand_id)
         if not user_id or not demand_id:
             return
+
+        # Alimenta grafo com resultado do agente
+        if event_context and demand_id:
+            agent_text = f"Agente {running.agent_name} concluiu: {event_context[:1000]}"
+            await self._graph.ingest(agent_text, demand_id)
+
         try:
             await self.run_squad_lead(demand_id, user_id, event_context, thread_id=thread_id)
         except Exception as e:
@@ -554,6 +605,11 @@ class OrchestrationEngine:
         if kb_context:
             prompt_parts.append(kb_context)
 
+        # Injeta contexto do grafo de conhecimento (relações entre conceitos)
+        graph_context = get_graph_context(self._graph, demand_text)
+        if graph_context:
+            prompt_parts.append(graph_context)
+
         # Injeta notas diárias (continuidade entre sessões)
         daily_notes = self._daily_notes.load_recent()
         if daily_notes:
@@ -569,6 +625,18 @@ class OrchestrationEngine:
         workspace_context = self._context_collector.collect()
         if workspace_context:
             prompt_parts.append(f"## Contexto do Projeto\n\n{workspace_context}")
+
+        # Regra de comunicação: evitar repetição de conteúdo
+        prompt_parts.append(
+            "## Regra de comunicação\n\n"
+            "Você é o porta-voz do time. Ao comunicar resultados de agentes:\n"
+            "- Apresente de forma CONCISA (1-3 frases), sem repetir literalmente o output do agente.\n"
+            "- Separe RESULTADO (o que foi feito) de DECISÃO (próximo passo).\n"
+            "- Se o resultado for curto e autoexplicativo, repasse direto.\n"
+            "- Se for longo ou técnico, resuma o essencial.\n"
+            '- Formato ideal: "[O que aconteceu]. [Próximo passo]."\n'
+            "- NUNCA repita conteúdo que o usuário já viu na conversa."
+        )
 
         # Mensagem do usuário (sempre por último)
         prompt_parts.append(
@@ -590,6 +658,12 @@ class OrchestrationEngine:
         Retorna a resposta do Squad Lead. Nao bloqueia — se o Squad Lead
         delegar via start_agent, o agente roda em background.
         """
+        # Expurga demandas concluídas expiradas (fire-and-forget)
+        try:
+            self._state_manager.cleanup_expired()
+        except Exception:
+            pass
+
         self._default_user_id = user_id
         self._default_demand_id = demand_id
         self._default_thread_id = thread_id

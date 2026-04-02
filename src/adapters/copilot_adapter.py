@@ -89,6 +89,9 @@ class CopilotAdapter(AIAgentAdapter):
     def set_rerun_step_callback(self, callback: Callable) -> None:
         self._mcp_server.set_rerun_step_callback(callback)
 
+    def set_query_graph_callback(self, callback: Callable) -> None:
+        self._mcp_server.set_query_graph_callback(callback)
+
     # --- Client lifecycle ---
 
     async def _ensure_client_started(self) -> None:
@@ -161,6 +164,9 @@ class CopilotAdapter(AIAgentAdapter):
             image_path: str = Field(description="Caminho da imagem")
             caption: str = Field(description="Legenda da imagem")
 
+        class QueryGraphParams(BaseModel):
+            query: str = Field(description="Termo ou conceito para buscar no grafo")
+
         class LearnLessonParams(BaseModel):
             category: str = Field(
                 description="Categoria: bug, retrabalho, timeout, padrao, processo"
@@ -230,6 +236,17 @@ class CopilotAdapter(AIAgentAdapter):
                 },
             )
 
+        @define_tool(
+            "query_knowledge_graph",
+            "Consulta o grafo de conhecimento relacional. "
+            "Use para descobrir relacoes entre conceitos, padroes, bugs e decisoes.",
+        )
+        async def query_knowledge_graph(params: QueryGraphParams) -> str:
+            return await server.handle_tool_call(
+                "query_knowledge_graph",
+                {"query": params.query},
+            )
+
         self._tools = [
             start_agent,
             report_progress,
@@ -242,6 +259,7 @@ class CopilotAdapter(AIAgentAdapter):
             read_journal,
             send_image,
             learn_lesson,
+            query_knowledge_graph,
         ]
         logger.info("Tools in-process construidas: %d tools", len(self._tools))
         return self._tools

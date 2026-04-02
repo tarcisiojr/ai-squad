@@ -70,3 +70,6 @@ class AIAgentAdapter(ABC):
 
     def set_rerun_step_callback(self, callback: Callable) -> None:
         pass
+
+    def set_query_graph_callback(self, callback: Callable) -> None:
+        pass

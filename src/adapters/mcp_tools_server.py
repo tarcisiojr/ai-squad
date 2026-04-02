@@ -34,6 +34,7 @@ class SquadMCPToolsServer:
         self._advance_step_callback: Callable | None = None
         self._skip_step_callback: Callable | None = None
         self._rerun_step_callback: Callable | None = None
+        self._query_graph_callback: Callable | None = None
 
         # Nome do agente atual (para report_progress)
         self.current_agent_name: str = ""
@@ -73,6 +74,9 @@ class SquadMCPToolsServer:
     def set_rerun_step_callback(self, callback: Callable) -> None:
         self._rerun_step_callback = callback
 
+    def set_query_graph_callback(self, callback: Callable) -> None:
+        self._query_graph_callback = callback
+
     # --- Execução das tools ---
 
     async def handle_tool_call(self, tool_name: str, args: dict) -> str:
@@ -100,6 +104,7 @@ class SquadMCPToolsServer:
             "read_journal": self._read_journal,
             "send_image": self._send_image,
             "learn_lesson": self._learn_lesson,
+            "query_knowledge_graph": self._query_knowledge_graph,
         }
         return handlers.get(tool_name)
 
@@ -109,7 +114,9 @@ class SquadMCPToolsServer:
             {
                 "name": "report_progress",
                 "description": (
-                    "Reporta progresso ao usuario. Use para informar o que esta fazendo agora."
+                    "Reporta progresso internamente ao Squad Lead. "
+                    "Use para registrar etapas importantes do seu trabalho. "
+                    "O Squad Lead recebe seu progresso e decide o que comunicar ao usuario."
                 ),
                 "inputSchema": {
                     "type": "object",
@@ -200,6 +207,24 @@ class SquadMCPToolsServer:
                     "required": ["category", "problem", "solution"],
                 },
             },
+            {
+                "name": "query_knowledge_graph",
+                "description": (
+                    "Consulta o grafo de conhecimento relacional. "
+                    "Use para descobrir relacoes entre conceitos, padroes, "
+                    "bugs e decisoes de demandas anteriores."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Termo ou conceito para buscar no grafo",
+                        },
+                    },
+                    "required": ["query"],
+                },
+            },
         ]
 
     # --- Handlers individuais ---
@@ -261,6 +286,12 @@ class SquadMCPToolsServer:
             return "Erro: callback nao configurado"
         await self._send_image_callback(image_path, caption)
         return "Imagem enviada ao usuario."
+
+    async def _query_knowledge_graph(self, args: dict) -> str:
+        query = args.get("query", "")
+        if not self._query_graph_callback:
+            return "Grafo de conhecimento nao configurado."
+        return await self._query_graph_callback(query)
 
     async def _learn_lesson(self, args: dict) -> str:
         category = args.get("category", "")

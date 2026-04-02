@@ -46,4 +46,4 @@
 - [x] 8.1 Bump versão para 1.0.0 no pyproject.toml
 - [x] 8.2 Atualizar badges no README.md (versão, Docker image)
 - [x] 8.3 Preencher CHANGELOG.md com todas as mudanças da v1.0.0
-- [ ] 8.4 Criar tag v1.0.0 e release no GitHub
+- [x] 8.4 Criar tag v1.0.0 e release no GitHub

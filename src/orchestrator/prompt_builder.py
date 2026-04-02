@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from src.orchestrator.graph import GraphStore
 from src.orchestrator.journal import JournalStore
 from src.orchestrator.knowledge import KnowledgeStore
 from src.orchestrator.state import StateManager
@@ -91,14 +92,16 @@ def get_running_agents_status(running_agents: dict, personas: dict) -> str:
             elapsed = ra.elapsed_str()
 
             if ra.status == "running":
-                lines.append(f"  - {label}: rodando ({elapsed})")
+                # Mostra último progresso se disponível
+                last_progress = ""
+                if hasattr(ra, "progress_log") and ra.progress_log:
+                    last_progress = f" — {ra.progress_log[-1][:80]}"
+                lines.append(f"  - ⚙️ {label}: rodando ({elapsed}){last_progress}")
             elif ra.status == "done":
-                preview = (ra.result or "")[:300]
-                if preview:
-                    preview = f" — {preview}"
-                lines.append(f"  - {label}: concluido ({elapsed}){preview}")
+                lines.append(f"  - ✅ {label}: concluido ({elapsed})")
             elif ra.status == "error":
-                lines.append(f"  - {label}: erro ({elapsed}) — {ra.error}")
+                erro_curto = (ra.error or "")[:80]
+                lines.append(f"  - ❌ {label}: erro ({elapsed}) — {erro_curto}")
 
     return "\n".join(lines)
 
@@ -114,6 +117,16 @@ def get_knowledge_context(
     if not knowledge_store or not query:
         return ""
     return knowledge_store.format_for_prompt(query)
+
+
+def get_graph_context(
+    graph_store: GraphStore | None,
+    query: str,
+) -> str:
+    """Busca contexto relacional no grafo de conhecimento para injetar no prompt."""
+    if not graph_store or not query:
+        return ""
+    return graph_store.format_for_prompt(query)
 
 
 def get_demand_state_summary(
