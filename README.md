@@ -35,27 +35,75 @@
 
 ## What is AI Squad?
 
-AI Squad is an **autonomous multi-agent orchestration platform** that coordinates specialized AI agents through **declarative YAML pipelines**. Define your workflow once — with steps, quality gates, and human checkpoints — and let the **Squad Lead** agent orchestrate everything.
+AI Squad is an **autonomous multi-agent orchestration platform** where you design your own team of AI agents and the workflow they follow. Everything is defined in YAML — the agents, the pipeline steps, quality gates, and human checkpoints. You're not locked into a fixed flow: **you design the squad, you design the pipeline**.
 
-```mermaid
-flowchart TD
-    User[You - Telegram or CLI] -->|Build auth API| SL[Squad Lead]
-    SL -->|delegates| PO[Step 1 - PO]
-    PO -->|Approve?| User
-    User -->|Approved| Dev
-    subgraph Parallel
-        Dev[Step 2 - Dev Backend]
-        DevFE[Step 2 - Dev Frontend]
-    end
-    Dev --> Review[Step 3 - Code Review]
-    DevFE --> Review
-    Review -->|reject| Dev
-    Review -->|Approve?| User
-    User -->|Approved| QA[Step 4 - QA]
-    QA -->|Done| User
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                        HOW AI SQUAD WORKS                                │
+│                                                                          │
+│   You define:                        The platform runs:                  │
+│                                                                          │
+│   config.yaml                        ┌─────────────────────┐            │
+│   ┌──────────────┐                   │    Squad Lead        │            │
+│   │ agents:      │                   │    (orchestrator)    │            │
+│   │   analyst    │──────────────────▶│         │            │            │
+│   │   writer     │   registers       │    ┌────┴────┐       │            │
+│   │   reviewer   │   agents &        │    ▼         ▼       │            │
+│   └──────────────┘   pipeline        │ agent A   agent B    │            │
+│                                      │    │         │       │            │
+│   pipeline.yaml                      │    ▼         ▼       │            │
+│   ┌──────────────┐                   │ agent C ◄─reject─┐  │            │
+│   │ steps:       │                   │    │              │  │            │
+│   │  1. research │──────────────────▶│    ▼              │  │            │
+│   │  2. write    │   defines flow    │ checkpoint ──────►│  │            │
+│   │  3. review   │                   │    │              │  │            │
+│   └──────────────┘                   │    ▼              │  │            │
+│                                      │  done             │  │            │
+│   .env                               └─────────────────────┘            │
+│   ┌──────────────┐                          ▲                            │
+│   │ API tokens   │──────────────────────────┘                            │
+│   └──────────────┘   credentials                                         │
+│                                                                          │
+│   Messaging: Telegram, Google Chat, CLI, TUI                             │
+│   AI Providers: Claude, Copilot, Gemini                                  │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Think of it as CI/CD for AI agent workflows** — define your pipeline once, run it on any demand.
+**Think of it as CI/CD for AI agent workflows.** Just like CI/CD pipelines let you define build/test/deploy steps, AI Squad lets you define agent workflows — with any agents, any steps, any domain.
+
+### Example Pipelines
+
+The same platform powers completely different use cases:
+
+```
+  Software Development          Incident Response          Financial Analysis
+  ══════════════════            ═════════════════          ══════════════════
+
+  ┌──────────┐                  ┌──────────┐              ┌──────────────────┐
+  │ PO specs │                  │ Triager  │              │ Analyst ┐        │
+  └────┬─────┘                  └────┬─────┘              │ Quant   ├parallel│
+       │ checkpoint                  │ auto                │ Macro   ┘        │
+       ▼                             ▼                     └────────┬─────────┘
+  ┌─────────┐ ┌─────────┐      ┌──────────┐                       │ auto
+  │ Backend │ │Frontend │      │   SRE    │                        ▼
+  │  Dev    │ │  Dev    │      │ remediate│              ┌──────────────────┐
+  └────┬────┘ └────┬────┘      └────┬─────┘              │   Strategist     │
+       │ parallel  │                │ auto                │   write thesis   │
+       ▼           ▼                ▼                     └────────┬─────────┘
+  ┌──────────────────┐         ┌──────────┐                       │ auto
+  │   Code Review    │◄reject  │Validator │                        ▼
+  └────────┬─────────┘         └──────────┘              ┌──────────────────┐
+           │ checkpoint                                   │  Risk Reviewer   │◄reject
+           ▼                                              └──────────────────┘
+  ┌──────────────────┐                                        checkpoint
+  │       QA         │
+  └──────────────────┘
+
+  5 agents, 4 steps             3 agents, 3 steps         5 agents, 3 steps
+  preset: dev-openspec          preset: infra-monitor      preset: investment-analysis
+```
+
+All three are just different YAML files — same engine, same platform, completely different workflows.
 
 ## Features
 
@@ -418,7 +466,7 @@ ai-squad/
 │   │   └── investment-analysis/ #   Financial analysis
 │   ├── cli/                     # Click-based CLI
 │   └── whisper/                 # Audio transcription (Docker only)
-├── tests/                       # 446 tests (75%+ coverage)
+├── tests/                       # 763 tests (68%+ coverage)
 └── pyproject.toml               # Project metadata & tool config
 ```
 
@@ -478,7 +526,7 @@ uv pip install -e ".[dev]"
 ### Running Tests
 
 ```bash
-# Run full test suite (446 tests)
+# Run full test suite (763 tests)
 python -m pytest tests/ -v
 
 # Run with coverage report
@@ -513,9 +561,9 @@ pyright src/
 ### Project Conventions
 
 - **Code style**: enforced by [Ruff](https://docs.astral.sh/ruff/) (line length 100, Python 3.11 target)
-- **Type checking**: [Pyright](https://github.com/microsoft/pyright) in basic mode
+- **Type checking**: [Pyright](https://github.com/microsoft/pyright) in strict mode (gradual migration)
 - **Test framework**: [pytest](https://docs.pytest.org/) with async support via `pytest-asyncio`
-- **Coverage threshold**: 75% minimum (enforced in CI)
+- **Coverage threshold**: 68% minimum (enforced in CI)
 - **Imports**: sorted by Ruff isort with `src` as first-party
 
 ## Extending AI Squad
@@ -606,9 +654,9 @@ This project is licensed under the MIT License — see the [LICENSE](LICENSE) fi
 
 ### O que é o AI Squad?
 
-AI Squad é uma **plataforma de orquestração multi-agente autônoma** que coordena agentes de IA especializados através de **pipelines declarativos em YAML**. Defina seu workflow uma vez — com steps, quality gates e checkpoints humanos — e deixe o **Squad Lead** orquestrar tudo automaticamente.
+AI Squad é uma **plataforma de orquestração multi-agente** onde **você desenha o time e o fluxo de trabalho**. Tudo é definido em YAML — os agentes, os steps do pipeline, quality gates e checkpoints humanos. Você não está preso a um fluxo fixo: crie squads para desenvolvimento de software, análise financeira, resposta a incidentes, ou qualquer domínio.
 
-**Pense como CI/CD para workflows de agentes IA** — defina o pipeline uma vez, execute em qualquer demanda.
+**Pense como CI/CD para workflows de agentes IA** — assim como pipelines CI/CD definem build/test/deploy, o AI Squad define workflows de agentes com qualquer time, qualquer fluxo, qualquer domínio.
 
 ### Início Rápido
 
