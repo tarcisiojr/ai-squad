@@ -308,8 +308,10 @@ class TUIMessageBus(MessageBus):
         agent_key = self._find_agent_key(sender)
 
         if self._app:
-            # Feedback de "Trabalhando..." atualiza status line sem poluir chat
-            if agent_key and text.startswith("Trabalhando..."):
+            # Feedback de atividade atualiza status line sem poluir chat
+            if agent_key and (
+                text.startswith("Trabalhando...") or "trabalhando..." in text.lower()
+            ):
                 self._agent_working[agent_key] = text
                 self._app.set_typing(None)
                 return
