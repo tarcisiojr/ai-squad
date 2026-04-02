@@ -19,9 +19,7 @@ class RunningAgent:
     result: str | None = None
     error: str | None = None
     retries: int = 0
-    progress_log: list[str] = field(default_factory=lambda: list[str]())
-    # Indica se o status leve já foi enviado ao usuário
-    status_sent: bool = False
+    progress_log: list[str] = field(default_factory=list)
 
     @property
     def elapsed(self) -> float:

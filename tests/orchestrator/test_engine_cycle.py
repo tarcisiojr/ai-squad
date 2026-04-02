@@ -311,7 +311,7 @@ class TestInvokeAgent:
 
     @pytest.mark.asyncio
     async def test_handle_progress_armazena_no_progress_log(self, tmp_path):
-        """Verifica que _handle_progress armazena no progress_log e envia status leve."""
+        """Verifica que _handle_progress armazena no progress_log (canal interno)."""
         adapter = CycleAdapter()
         bus = CycleBus()
         state_mgr = StateManager(state_dir=str(tmp_path / "state"))
@@ -335,10 +335,8 @@ class TestInvokeAgent:
 
         # Progresso armazenado no canal interno
         assert "Gerando proposal.md" in engine._running_agents["po"].progress_log
-        # Status leve enviado ao usuário (não o conteúdo detalhado)
-        assert any("trabalhando..." in msg for _, msg in bus.mensagens)
-        # Conteúdo detalhado NÃO enviado direto
-        assert not any("Gerando proposal.md" in msg for _, msg in bus.mensagens)
+        # Nenhuma mensagem enviada ao usuário (canal interno apenas)
+        assert len(bus.mensagens) == 0
 
     @pytest.mark.asyncio
     async def test_handle_progress_sem_user_id(self, tmp_path):

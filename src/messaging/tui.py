@@ -308,22 +308,14 @@ class TUIMessageBus(MessageBus):
         agent_key = self._find_agent_key(sender)
 
         if self._app:
-            # Feedback de atividade atualiza status line sem poluir chat
-            if agent_key and (
-                text.startswith("Trabalhando...") or "trabalhando..." in text.lower()
-            ):
-                self._agent_working[agent_key] = text
+            # Feedback periódico ("Trabalhando...") não polui o chat
+            if agent_key and text.startswith("Trabalhando..."):
                 self._app.set_typing(None)
                 return
 
             self._app.set_typing(None)
             self._app.append_chat(label, text)
             self._app.refocus_input()
-
-            # Marca agente como idle ao entregar resultado
-            if agent_key:
-                self._agent_working[agent_key] = ""
-                self._app.set_typing(None)
 
     async def send_approval_request(
         self,
@@ -391,6 +383,20 @@ class TUIMessageBus(MessageBus):
             if avatar in sender and name in sender:
                 return key
         return None
+
+    # --- Controle de status de agentes ---
+
+    def mark_agent_active(self, agent_label: str) -> None:
+        """Ativa spinner do agente na barra de status."""
+        agent_key = self._find_agent_key(agent_label)
+        if agent_key:
+            self._agent_working[agent_key] = "Trabalhando..."
+
+    def mark_agent_idle(self, agent_label: str) -> None:
+        """Desativa spinner do agente na barra de status."""
+        agent_key = self._find_agent_key(agent_label)
+        if agent_key:
+            self._agent_working[agent_key] = ""
 
     # --- Internals ---
 

@@ -162,3 +162,17 @@ class MessageBus(ABC):
         Opcional — implementações sem suporte ignoram.
         Callback recebe: (chat_id, message_id, emoji, user_id).
         """
+
+    # --- Controle de status de agentes ---
+
+    def mark_agent_active(self, agent_label: str) -> None:
+        """Marca agente como ativo (ex: spinner na TUI).
+
+        Opcional — implementações sem suporte ignoram.
+        """
+
+    def mark_agent_idle(self, agent_label: str) -> None:
+        """Marca agente como idle (ex: para spinner na TUI).
+
+        Opcional — implementações sem suporte ignoram.
+        """

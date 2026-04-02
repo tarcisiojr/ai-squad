@@ -193,6 +193,10 @@ class AgentRunner:
         # Callback quando conclui
         task.add_done_callback(lambda t: asyncio.create_task(self.on_agent_done(agent_name, t)))
 
+        # Ativa indicador de atividade do agente (spinner na TUI)
+        label = self.get_agent_label(agent_name)
+        self._ctx.message_bus.mark_agent_active(label)
+
         logger.info("[%s] Agente iniciado em background (demand: %s)", agent_name, demand_id)
 
     async def run_agent_work(
@@ -276,12 +280,8 @@ class AgentRunner:
 
         label = self.get_agent_label(agent_name)
 
-        # Limpa indicador de atividade do agente no bus (TUI spinner)
-        bus = self._ctx.message_bus
-        if hasattr(bus, "_agent_working"):
-            agent_key = getattr(bus, "_find_agent_key", lambda _: None)(label)
-            if agent_key:
-                bus._agent_working[agent_key] = ""  # type: ignore[union-attr]
+        # Desativa indicador de atividade do agente (spinner na TUI)
+        self._ctx.message_bus.mark_agent_idle(label)
 
         try:
             resultado = task.result()

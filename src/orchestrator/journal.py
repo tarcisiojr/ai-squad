@@ -109,10 +109,16 @@ class JournalStore:
         return self._update(demand_id, updater)
 
     def set_phase(self, demand_id: str, phase: str) -> dict | None:
-        """Atualiza fase atual da demanda."""
+        """Atualiza fase atual da demanda.
+
+        Ao marcar como 'done', limpa next_expected para evitar que
+        a demanda apareça como ativa em retomadas futuras.
+        """
 
         def updater(j: dict) -> None:
             j["current_phase"] = phase
+            if phase == "done":
+                j["next_expected"] = None
 
         return self._update(demand_id, updater)
 
@@ -136,12 +142,17 @@ class JournalStore:
         """Retorna journals de demandas ativas.
 
         Considera ativo se:
-        - current_phase nao e 'done'
-        - OU tem next_expected definido (trabalho pendente mesmo com phase idle)
+        - current_phase não é 'done' nem 'idle'
+        - OU phase='idle' com next_expected recente (< 1h) — indica
+          trabalho em andamento que pode ter sido interrompido
+        Demandas idle com next_expected stale (> 1h) são ignoradas
+        para evitar re-despacho após restart do daemon.
         """
         active = []
         if not self._state_dir.exists():
             return active
+
+        now = datetime.now(timezone.utc)
 
         for demand_dir in self._state_dir.iterdir():
             if not demand_dir.is_dir():
@@ -153,12 +164,33 @@ class JournalStore:
                 with open(journal_path, "r", encoding="utf-8") as f:
                     journal = json.load(f)
                 phase = journal.get("current_phase", "idle")
+
+                # Demandas concluídas nunca são ativas
+                if phase == "done":
+                    continue
+
+                # Demandas em andamento (não idle, não done) são sempre ativas
+                if phase != "idle":
+                    active.append(journal)
+                    continue
+
+                # Phase idle: só é ativa se foi atualizada recentemente (< 1h)
+                # Isso evita re-despacho de demandas stale após restart
+                updated_at_str = journal.get("updated_at", "")
+                if updated_at_str:
+                    try:
+                        updated_at = datetime.fromisoformat(updated_at_str)
+                        age_hours = (now - updated_at).total_seconds() / 3600
+                        if age_hours > 1:
+                            continue
+                    except (ValueError, TypeError):
+                        pass
+
                 has_next = bool(journal.get("next_expected"))
                 has_decisions = len(journal.get("decisions", [])) > 0
-
-                # Ativo se nao concluido E tem trabalho pendente ou decisoes
-                if phase != "done" and (phase != "idle" or has_next or has_decisions):
+                if has_next or has_decisions:
                     active.append(journal)
+
             except (json.JSONDecodeError, OSError):
                 continue
 

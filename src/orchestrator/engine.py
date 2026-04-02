@@ -2,7 +2,9 @@
 
 import asyncio
 import logging
+from collections.abc import Callable, Coroutine
 from pathlib import Path
+from typing import Any
 
 from src.adapters.interface import AIAgentAdapter
 from src.messaging.interface import MessageBus
@@ -135,9 +137,11 @@ class OrchestrationEngine:
         self._default_demand_id: str = ""
         self._default_thread_id: str | None = None
         # Mapeamento thread ↔ demand (injetado pelo daemon)
-        self._thread_map = None
+        self._thread_map: Any = None
         # Callback para criar tópico/thread (injetado pelo daemon)
-        self._create_topic_callback = None
+        self._create_topic_callback: (
+            Callable[..., Coroutine[Any, Any, str | None]] | None
+        ) = None
 
         # Monitor do Squad Lead: detecta respostas vazias consecutivas
         self._squad_lead_empty_count: int = 0
@@ -246,34 +250,13 @@ class OrchestrationEngine:
         """Recebe progresso do agente (via report_progress) e armazena internamente.
 
         O progresso vai para o progress_log do RunningAgent (canal interno).
-        Na primeira chamada, envia um status leve ao usuário indicando que
-        o agente está trabalhando. Chamadas subsequentes apenas acumulam no log.
+        O spinner já é ativado no start_background via mark_agent_active.
 
         Tolerante a falha — nunca propaga excecao para nao matar o agente.
         """
-        # Armazena progresso no canal interno (RunningAgent.progress_log)
         running = self._running_agents.get(agent_name)
         if running:
             running.progress_log.append(message)
-
-        user_id = self._resolve_user_id(agent_name)
-        if not user_id:
-            return
-
-        try:
-            # Envia status leve apenas na primeira chamada
-            if running and not running.status_sent:
-                running.status_sent = True
-                label = self._get_agent_label(agent_name)
-                thread_id = self._resolve_thread_id(agent_name)
-                await self._message_bus.send_message(
-                    user_id,
-                    f"⚙️ {label} trabalhando...",
-                    sender=label,  # type: ignore[call-arg]
-                    thread_id=thread_id,
-                )
-        except Exception as e:
-            logger.warning("[%s] Falha ao enviar status: %s", agent_name, e)
 
     async def _handle_start_agent(self, agent_name: str, task_description: str) -> str:
         """Callback da MCP tool start_agent — inicia agente em background."""

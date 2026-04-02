@@ -16,7 +16,6 @@ class TestRunningAgentProgressLog:
         """Verifica que progress_log começa vazio."""
         agent = RunningAgent(agent_name="dev", demand_id="d-001")
         assert agent.progress_log == []
-        assert agent.status_sent is False
 
     def test_progress_log_acumula_mensagens(self):
         """Verifica que progress_log acumula mensagens."""
@@ -24,13 +23,6 @@ class TestRunningAgentProgressLog:
         agent.progress_log.append("Analisando código...")
         agent.progress_log.append("Encontrei 3 issues")
         assert len(agent.progress_log) == 2
-
-    def test_status_sent_flag(self):
-        """Verifica controle de status leve enviado."""
-        agent = RunningAgent(agent_name="dev", demand_id="d-001")
-        assert agent.status_sent is False
-        agent.status_sent = True
-        assert agent.status_sent is True
 
     def test_progress_log_isolado_entre_agentes(self):
         """Verifica que cada agente tem seu próprio progress_log."""
