@@ -13,12 +13,15 @@ class RunningAgent:
     demand_id: str
     user_id: str = ""
     thread_id: str | None = None
-    task: asyncio.Task | None = None
+    task: asyncio.Task[object] | None = None
     started_at: float = field(default_factory=time.time)
     status: str = "running"  # running, done, error, incomplete
     result: str | None = None
     error: str | None = None
     retries: int = 0
+    progress_log: list[str] = field(default_factory=lambda: list[str]())
+    # Indica se o status leve já foi enviado ao usuário
+    status_sent: bool = False
 
     @property
     def elapsed(self) -> float:

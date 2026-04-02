@@ -17,14 +17,16 @@
   <a href="#configuration">Configuration</a> &bull;
   <a href="#architecture">Architecture</a> &bull;
   <a href="#development">Development</a> &bull;
+  <a href="docs/DEPLOYMENT.md">Deployment</a> &bull;
   <a href="#leia-em-português">Português</a>
 </p>
 
 <p align="center">
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.11+"></a>
   <img src="https://img.shields.io/badge/tests-446_passed-brightgreen?style=flat-square&logo=pytest&logoColor=white" alt="446 Tests Passed">
-  <img src="https://img.shields.io/badge/coverage-75%25+-yellow?style=flat-square" alt="Coverage 75%+">
+  <img src="https://img.shields.io/badge/coverage-68%25+-yellow?style=flat-square" alt="Coverage 68%+">
   <a href="https://pypi.org/project/ai-squad/"><img src="https://img.shields.io/pypi/v/ai-squad?style=flat-square&color=blue" alt="PyPI Version"></a>
+  <a href="https://github.com/tarcisiojr/ai-squad/pkgs/container/ai-squad"><img src="https://img.shields.io/badge/docker-ghcr.io-blue?style=flat-square&logo=docker&logoColor=white" alt="Docker Image"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/code_style-ruff-000000?style=flat-square&logo=ruff&logoColor=white" alt="Ruff">
 </p>

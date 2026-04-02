@@ -1,4 +1,4 @@
-name: Publish to PyPI
+name: CI/CD — Test, Publish PyPI & Docker
 
 on:
   push:
@@ -8,10 +8,42 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 jobs:
-  build-and-publish:
-    name: Build and Publish
+  test:
+    name: Test & Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -e ".[dev]"
+          pip install ruff pyright
+
+      - name: Lint (ruff check)
+        run: ruff check src/
+
+      - name: Type check (pyright)
+        run: pyright src/
+
+      - name: Tests (pytest + coverage)
+        run: pytest --cov=src --cov-report=term-missing --cov-fail-under=68
+
+      - name: Validate Docker build
+        run: docker build -f src/docker/Dockerfile -t ai-squad:test .
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: [test]
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -53,3 +85,41 @@ jobs:
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+
+  publish-docker:
+    name: Publish Docker Image (GHCR)
+    needs: [publish-pypi]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version metadata
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            VERSION="${{ github.event.release.tag_name }}"
+            VERSION="${VERSION#v}"
+            echo "tags=ghcr.io/${{ github.repository }}:${VERSION},ghcr.io/${{ github.repository }}:latest" >> "$GITHUB_OUTPUT"
+          else
+            echo "tags=ghcr.io/${{ github.repository }}:dev" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: src/docker/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
