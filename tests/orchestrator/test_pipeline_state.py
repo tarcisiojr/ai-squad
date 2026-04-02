@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from src.orchestrator.pipeline import PipelineConfig, StepConfig
-from src.orchestrator.pipeline_state import PipelineExecutor, PipelineState, StepState
+from ai_squad.orchestrator.pipeline import PipelineConfig, StepConfig
+from ai_squad.orchestrator.pipeline_state import PipelineExecutor, PipelineState, StepState
 
 # --- Fixtures ---
 

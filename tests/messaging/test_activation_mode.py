@@ -8,7 +8,7 @@ class TestTelegramMention:
 
     def _make_bus(self, activation_mode="mention"):
         """Cria TelegramMessageBus com mocks."""
-        from src.messaging.telegram import TelegramMessageBus
+        from ai_squad.messaging.telegram import TelegramMessageBus
 
         bus = TelegramMessageBus(
             token="fake-token",
@@ -81,7 +81,7 @@ class TestGChatMention:
 
     def _make_bus(self, activation_mode="mention"):
         """Cria GChatMessageBus com mock."""
-        from src.messaging.gchat import GChatMessageBus
+        from ai_squad.messaging.gchat import GChatMessageBus
 
         bus = GChatMessageBus(activation_mode=activation_mode)
         bus._space_id = "spaces/test"

@@ -2,8 +2,8 @@
 
 import pytest
 
-from src.messaging import registry
-from src.messaging.interface import MessageBus
+from ai_squad.messaging import registry
+from ai_squad.messaging.interface import MessageBus
 
 
 class FakeProvider(MessageBus):

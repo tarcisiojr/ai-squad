@@ -1,6 +1,6 @@
 """Testes para o coletor de contexto do workspace."""
 
-from src.orchestrator.context import WorkspaceContextCollector
+from ai_squad.orchestrator.context import WorkspaceContextCollector
 
 
 class TestWorkspaceContextCollector:

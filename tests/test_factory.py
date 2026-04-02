@@ -3,10 +3,10 @@
 import pytest
 import yaml
 
-from src.adapters.interface import AIAgentAdapter
-from src.factory import PlatformConfig, PlatformFactory
-from src.messaging.interface import MessageBus
-from src.models import AgentStatus
+from ai_squad.adapters.interface import AIAgentAdapter
+from ai_squad.factory import PlatformConfig, PlatformFactory
+from ai_squad.messaging.interface import MessageBus
+from ai_squad.models import AgentStatus
 
 
 # Implementação fake para testes

@@ -5,8 +5,8 @@ on_agent_done não envia direto ao usuário, e o histórico
 marca mensagens internas corretamente.
 """
 
-from src.orchestrator.conversation import ConversationStore
-from src.orchestrator.tools import RunningAgent
+from ai_squad.orchestrator.conversation import ConversationStore
+from ai_squad.orchestrator.tools import RunningAgent
 
 
 class TestRunningAgentProgressLog:

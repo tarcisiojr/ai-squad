@@ -3,7 +3,7 @@
 import os
 import stat
 
-from src.orchestrator.atomic_write import write_json_atomic, write_text_atomic
+from ai_squad.orchestrator.atomic_write import write_json_atomic, write_text_atomic
 
 
 def test_write_json_atomic_permissions(tmp_path):

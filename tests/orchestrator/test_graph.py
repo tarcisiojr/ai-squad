@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.orchestrator.graph import ENTITY_TYPES, RELATION_TYPES, GraphStore
+from ai_squad.orchestrator.graph import ENTITY_TYPES, RELATION_TYPES, GraphStore
 
 
 class TestGraphStoreEntities:

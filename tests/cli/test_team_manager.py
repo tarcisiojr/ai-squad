@@ -3,12 +3,12 @@
 import pytest
 import yaml
 
-from src.cli.team_manager import (
+from ai_squad.cli.team_manager import (
     TeamExistsError,
     TeamManager,
     TeamNotFoundError,
 )
-from src.cli.templates.config import COMMON_REQUIRED_ENV_VARS, PLACEHOLDER_PREFIX
+from ai_squad.cli.templates.config import COMMON_REQUIRED_ENV_VARS, PLACEHOLDER_PREFIX
 
 # Tokens esperados para o provider default (telegram)
 ALL_REQUIRED_VARS = list(COMMON_REQUIRED_ENV_VARS) + ["TELEGRAM_TOKEN", "TELEGRAM_CHAT_ID"]

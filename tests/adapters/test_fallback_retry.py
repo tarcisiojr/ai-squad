@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.adapters.claude_agent_sdk import ClaudeAgentSDKAdapter
+from ai_squad.adapters.claude_agent_sdk import ClaudeAgentSDKAdapter
 
 
 class TestRetryLogic:
@@ -34,13 +34,13 @@ class TestRetryLogic:
             yield mock_message
 
         with (
-            patch("src.adapters.claude_agent_sdk.query", side_effect=mock_query),
+            patch("ai_squad.adapters.claude_agent_sdk.query", side_effect=mock_query),
             patch(
-                "src.adapters.claude_agent_sdk.AssistantMessage",
+                "ai_squad.adapters.claude_agent_sdk.AssistantMessage",
                 type(mock_message),
             ),
             patch(
-                "src.adapters.claude_agent_sdk.TextBlock",
+                "ai_squad.adapters.claude_agent_sdk.TextBlock",
                 type(mock_text_block),
             ),
             patch("asyncio.sleep", new_callable=AsyncMock),
@@ -62,7 +62,7 @@ class TestRetryLogic:
             yield  # pragma: no cover
 
         with (
-            patch("src.adapters.claude_agent_sdk.query", side_effect=mock_query),
+            patch("ai_squad.adapters.claude_agent_sdk.query", side_effect=mock_query),
             patch("asyncio.sleep", new_callable=AsyncMock),
         ):
             with pytest.raises(RuntimeError, match="Erro persistente"):
@@ -84,7 +84,7 @@ class TestRetryLogic:
 
         adapter._timeout = 1
 
-        with patch("src.adapters.claude_agent_sdk.query", side_effect=mock_query):
+        with patch("ai_squad.adapters.claude_agent_sdk.query", side_effect=mock_query):
             with pytest.raises(asyncio.TimeoutError):
                 await adapter._execute_sdk(
                     "teste",
@@ -112,13 +112,13 @@ class TestRetryLogic:
             yield mock_message
 
         with (
-            patch("src.adapters.claude_agent_sdk.query", side_effect=mock_query),
+            patch("ai_squad.adapters.claude_agent_sdk.query", side_effect=mock_query),
             patch(
-                "src.adapters.claude_agent_sdk.AssistantMessage",
+                "ai_squad.adapters.claude_agent_sdk.AssistantMessage",
                 type(mock_message),
             ),
             patch(
-                "src.adapters.claude_agent_sdk.TextBlock",
+                "ai_squad.adapters.claude_agent_sdk.TextBlock",
                 type(mock_text_block),
             ),
         ):
@@ -181,13 +181,13 @@ class TestModelOverride:
             yield mock_message
 
         with (
-            patch("src.adapters.claude_agent_sdk.query", side_effect=mock_query),
+            patch("ai_squad.adapters.claude_agent_sdk.query", side_effect=mock_query),
             patch(
-                "src.adapters.claude_agent_sdk.AssistantMessage",
+                "ai_squad.adapters.claude_agent_sdk.AssistantMessage",
                 type(mock_message),
             ),
             patch(
-                "src.adapters.claude_agent_sdk.TextBlock",
+                "ai_squad.adapters.claude_agent_sdk.TextBlock",
                 type(mock_text_block),
             ),
         ):
@@ -208,7 +208,7 @@ class TestModelOverride:
             yield  # pragma: no cover
 
         with (
-            patch("src.adapters.claude_agent_sdk.query", side_effect=mock_query_erro),
+            patch("ai_squad.adapters.claude_agent_sdk.query", side_effect=mock_query_erro),
             patch("asyncio.sleep", new_callable=AsyncMock),
         ):
             with pytest.raises(RuntimeError):

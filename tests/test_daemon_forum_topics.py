@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, PropertyMock
 
 import pytest
 
-from src.daemon import Daemon
+from ai_squad.daemon import Daemon
 
 
 class TestDaemonForumRouting:
@@ -28,7 +28,7 @@ class TestDaemonForumRouting:
     @pytest.mark.asyncio
     async def test_mensagem_topico_mapeado_roteia_para_demand(self, daemon):
         """Mensagem em tópico mapeado usa demand_id correspondente."""
-        from src.orchestrator.thread_map import ThreadDemandMap
+        from ai_squad.orchestrator.thread_map import ThreadDemandMap
 
         daemon._thread_map = ThreadDemandMap(state_dir="/tmp/test-state-forum")
         daemon._thread_map.add("123", "login-oauth-a1b2")
@@ -47,7 +47,7 @@ class TestDaemonForumRouting:
     @pytest.mark.asyncio
     async def test_mensagem_topico_geral_usa_sessao_geral(self, daemon):
         """Mensagem sem thread_id vai para Squad Lead sessão geral."""
-        from src.orchestrator.thread_map import ThreadDemandMap
+        from ai_squad.orchestrator.thread_map import ThreadDemandMap
 
         daemon._thread_map = ThreadDemandMap(state_dir="/tmp/test-state-forum2")
 
@@ -64,7 +64,7 @@ class TestDaemonForumRouting:
     @pytest.mark.asyncio
     async def test_mensagem_topico_desconhecido_mapeia_automaticamente(self, daemon):
         """Mensagem em tópico sem mapeamento cria demand_id e mapeia."""
-        from src.orchestrator.thread_map import ThreadDemandMap
+        from ai_squad.orchestrator.thread_map import ThreadDemandMap
 
         daemon._thread_map = ThreadDemandMap(state_dir="/tmp/test-state-forum3")
 

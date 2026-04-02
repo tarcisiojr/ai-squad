@@ -2,8 +2,8 @@
 
 import pytest
 
-from src.messaging.cli import CLIMessageBus
-from src.messaging.interface import MessageBus
+from ai_squad.messaging.cli import CLIMessageBus
+from ai_squad.messaging.interface import MessageBus
 
 
 class TestCLIMessageBus:

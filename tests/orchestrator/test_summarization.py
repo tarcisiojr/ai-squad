@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.orchestrator.conversation import ConversationStore
+from ai_squad.orchestrator.conversation import ConversationStore
 
 
 class TestSummarization:

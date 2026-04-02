@@ -30,16 +30,16 @@ jobs:
           pip install ruff pyright
 
       - name: Lint (ruff check)
-        run: ruff check src/
+        run: ruff check ai_squad/
 
       - name: Type check (pyright)
-        run: pyright src/
+        run: pyright ai_squad/
 
       - name: Tests (pytest + coverage)
-        run: pytest --cov=src --cov-report=term-missing --cov-fail-under=68
+        run: pytest --cov=ai_squad --cov-report=term-missing --cov-fail-under=68
 
       - name: Validate Docker build
-        run: docker build -f src/docker/Dockerfile -t ai-squad:test .
+        run: docker build -f ai_squad/docker/Dockerfile -t ai-squad:test .
 
   publish-pypi:
     name: Publish to PyPI
@@ -120,6 +120,6 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: src/docker/Dockerfile
+          file: ai_squad/docker/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}

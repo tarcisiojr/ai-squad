@@ -1,6 +1,6 @@
 """Testes para roteamento de modelo por complexidade."""
 
-from src.orchestrator.model_router import classify_complexity, select_model
+from ai_squad.orchestrator.model_router import classify_complexity, select_model
 
 
 class TestClassifyComplexity:

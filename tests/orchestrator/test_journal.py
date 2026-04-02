@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from src.orchestrator.journal import JournalStore
+from ai_squad.orchestrator.journal import JournalStore
 
 
 class TestJournalCRUD:

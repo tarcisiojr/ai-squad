@@ -5,8 +5,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from src.factory import HeartbeatConfig
-from src.orchestrator.journal import JournalStore
+from ai_squad.factory import HeartbeatConfig
+from ai_squad.orchestrator.journal import JournalStore
 
 
 class TestHeartbeatDetection:
@@ -124,7 +124,7 @@ class TestHeartbeatConfig:
         """Verifica carregamento de heartbeat do YAML."""
         import yaml
 
-        from src.factory import PlatformConfig
+        from ai_squad.factory import PlatformConfig
 
         config_file = tmp_path / "platform.yaml"
         config_file.write_text(

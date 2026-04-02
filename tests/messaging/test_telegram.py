@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.messaging.interface import MessageBus
-from src.messaging.telegram import TelegramMessageBus
+from ai_squad.messaging.interface import MessageBus
+from ai_squad.messaging.telegram import TelegramMessageBus
 
 
 class TestTelegramMessageBus:

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from src.path_resolver import PathResolver
+from ai_squad.path_resolver import PathResolver
 
 
 class TestPathResolverLocal:

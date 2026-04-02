@@ -2,7 +2,7 @@
 
 from datetime import date, timedelta
 
-from src.orchestrator.daily_notes import DailyNotes
+from ai_squad.orchestrator.daily_notes import DailyNotes
 
 
 class TestDailyNotes:

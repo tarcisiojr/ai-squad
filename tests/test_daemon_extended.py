@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 import pytest
 import yaml
 
-from src.daemon import Daemon
-from src.path_resolver import PathResolver
+from ai_squad.daemon import Daemon
+from ai_squad.path_resolver import PathResolver
 
 
 def _local_daemon(base_dir: Path) -> Daemon:
@@ -89,7 +89,7 @@ class TestDaemonConfig:
         monkeypatch.setenv("AGENT_TIMEOUT", "777")
 
         daemon = _local_daemon(tmp_path)
-        with patch("src.daemon.load_dotenv"):
+        with patch("ai_squad.daemon.load_dotenv"):
             config = daemon._load_config()
 
         assert config.agent_timeout == 777

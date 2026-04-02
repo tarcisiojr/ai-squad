@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from src.orchestrator.lessons import LessonsStore
+from ai_squad.orchestrator.lessons import LessonsStore
 
 
 class TestLessonsStore:

@@ -5,9 +5,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.adapters.claude_agent_sdk import ClaudeAgentSDKAdapter
-from src.adapters.interface import AIAgentAdapter
-from src.models import AgentStatus
+from ai_squad.adapters.claude_agent_sdk import ClaudeAgentSDKAdapter
+from ai_squad.adapters.interface import AIAgentAdapter
+from ai_squad.models import AgentStatus
 
 
 class TestClaudeAgentSDKAdapter:
@@ -39,13 +39,13 @@ class TestClaudeAgentSDKAdapter:
             yield mock_message
 
         with (
-            patch("src.adapters.claude_agent_sdk.query", side_effect=mock_query),
+            patch("ai_squad.adapters.claude_agent_sdk.query", side_effect=mock_query),
             patch(
-                "src.adapters.claude_agent_sdk.AssistantMessage",
+                "ai_squad.adapters.claude_agent_sdk.AssistantMessage",
                 type(mock_message),
             ),
             patch(
-                "src.adapters.claude_agent_sdk.TextBlock",
+                "ai_squad.adapters.claude_agent_sdk.TextBlock",
                 type(mock_text_block),
             ),
         ):
@@ -64,7 +64,7 @@ class TestClaudeAgentSDKAdapter:
 
         adapter._timeout = 0.01
 
-        with patch("src.adapters.claude_agent_sdk.query", side_effect=mock_query_lento):
+        with patch("ai_squad.adapters.claude_agent_sdk.query", side_effect=mock_query_lento):
             with pytest.raises(TimeoutError, match="excedeu timeout"):
                 await adapter.run("prompt longo", {})
 
@@ -78,7 +78,7 @@ class TestClaudeAgentSDKAdapter:
             raise RuntimeError("Erro interno do SDK")
             yield  # pragma: no cover
 
-        with patch("src.adapters.claude_agent_sdk.query", side_effect=mock_query_erro):
+        with patch("ai_squad.adapters.claude_agent_sdk.query", side_effect=mock_query_erro):
             with pytest.raises(RuntimeError, match="Erro no Claude Agent SDK"):
                 await adapter.run("prompt", {})
 
@@ -97,13 +97,13 @@ class TestClaudeAgentSDKAdapter:
             yield mock_message
 
         with (
-            patch("src.adapters.claude_agent_sdk.query", side_effect=mock_query),
+            patch("ai_squad.adapters.claude_agent_sdk.query", side_effect=mock_query),
             patch(
-                "src.adapters.claude_agent_sdk.AssistantMessage",
+                "ai_squad.adapters.claude_agent_sdk.AssistantMessage",
                 type(mock_message),
             ),
             patch(
-                "src.adapters.claude_agent_sdk.TextBlock",
+                "ai_squad.adapters.claude_agent_sdk.TextBlock",
                 type(mock_text_block),
             ),
         ):
@@ -185,7 +185,7 @@ class TestClaudeAgentSDKAdapter:
             model="claude-sonnet-4-20250514",
             working_dir="/tmp/projeto",
         )
-        with patch("src.adapters.claude_agent_sdk.ClaudeAgentOptions") as mock_opts:
+        with patch("ai_squad.adapters.claude_agent_sdk.ClaudeAgentOptions") as mock_opts:
             adapter._build_options()
             mock_opts.assert_called_once()
             kwargs = mock_opts.call_args[1]
@@ -195,7 +195,7 @@ class TestClaudeAgentSDKAdapter:
     def test_build_options_sem_model(self):
         """Verifica que opções omitem model quando não configurado."""
         adapter = ClaudeAgentSDKAdapter()
-        with patch("src.adapters.claude_agent_sdk.ClaudeAgentOptions") as mock_opts:
+        with patch("ai_squad.adapters.claude_agent_sdk.ClaudeAgentOptions") as mock_opts:
             adapter._build_options()
             mock_opts.assert_called_once()
             kwargs = mock_opts.call_args[1]
@@ -210,14 +210,14 @@ class TestClaudeAgentSDKAdapter:
 
     def test_build_options_inclui_report_progress(self, adapter):
         """Verifica que report_progress esta nos allowed_tools."""
-        with patch("src.adapters.claude_agent_sdk.ClaudeAgentOptions") as mock_opts:
+        with patch("ai_squad.adapters.claude_agent_sdk.ClaudeAgentOptions") as mock_opts:
             adapter._build_options()
             kwargs = mock_opts.call_args[1]
             assert "report_progress" in kwargs["allowed_tools"]
 
     def test_build_options_inclui_mcp_server(self, adapter):
         """Verifica que MCP server esta configurado."""
-        with patch("src.adapters.claude_agent_sdk.ClaudeAgentOptions") as mock_opts:
+        with patch("ai_squad.adapters.claude_agent_sdk.ClaudeAgentOptions") as mock_opts:
             adapter._build_options()
             kwargs = mock_opts.call_args[1]
             assert "ai-squad-tools" in kwargs["mcp_servers"]
@@ -225,7 +225,7 @@ class TestClaudeAgentSDKAdapter:
     def test_build_options_nao_duplica_report_progress(self):
         """Verifica que report_progress nao e duplicado se ja estiver na lista."""
         adapter = ClaudeAgentSDKAdapter(allowed_tools=["Bash", "report_progress"])
-        with patch("src.adapters.claude_agent_sdk.ClaudeAgentOptions") as mock_opts:
+        with patch("ai_squad.adapters.claude_agent_sdk.ClaudeAgentOptions") as mock_opts:
             adapter._build_options()
             kwargs = mock_opts.call_args[1]
             count = kwargs["allowed_tools"].count("report_progress")
@@ -243,13 +243,13 @@ class TestClaudeAgentSDKAdapter:
             yield mock_message
 
         with (
-            patch("src.adapters.claude_agent_sdk.query", side_effect=mock_query),
+            patch("ai_squad.adapters.claude_agent_sdk.query", side_effect=mock_query),
             patch(
-                "src.adapters.claude_agent_sdk.AssistantMessage",
+                "ai_squad.adapters.claude_agent_sdk.AssistantMessage",
                 type(mock_message),
             ),
             patch(
-                "src.adapters.claude_agent_sdk.TextBlock",
+                "ai_squad.adapters.claude_agent_sdk.TextBlock",
                 type(mock_text_block),
             ),
         ):

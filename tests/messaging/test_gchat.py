@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.messaging.gchat import GChatMessageBus
-from src.messaging.interface import MessageBus
+from ai_squad.messaging.gchat import GChatMessageBus
+from ai_squad.messaging.interface import MessageBus
 
 
 @pytest.fixture
@@ -254,7 +254,7 @@ class TestGChatRegistry:
 
     def test_gchat_registrado(self):
         """Verifica que gchat está registrado no registry."""
-        from src.messaging.registry import get, load_builtin_providers
+        from ai_squad.messaging.registry import get, load_builtin_providers
 
         load_builtin_providers()
         cls = get("gchat")

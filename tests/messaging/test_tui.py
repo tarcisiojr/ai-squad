@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.messaging.interface import MessageBus
-from src.messaging.tui import LOCAL_USER, TerminalGuard, TUIMessageBus
+from ai_squad.messaging.interface import MessageBus
+from ai_squad.messaging.tui import LOCAL_USER, TerminalGuard, TUIMessageBus
 
 
 def _run(coro):
@@ -136,7 +136,7 @@ class TestTUIRegistry:
 
     def test_tui_registrado(self):
         """Verifica que tui está registrado no registry."""
-        from src.messaging.registry import get, load_builtin_providers
+        from ai_squad.messaging.registry import get, load_builtin_providers
 
         load_builtin_providers()
         cls = get("tui")

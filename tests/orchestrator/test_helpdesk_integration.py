@@ -6,9 +6,9 @@ ingestão de documentos e integração entre componentes.
 
 import pytest
 
-from src.orchestrator.ingest import DocumentIngest
-from src.orchestrator.knowledge import KnowledgeStore, parse_frontmatter
-from src.orchestrator.reaction_tracker import ReactionTracker
+from ai_squad.orchestrator.ingest import DocumentIngest
+from ai_squad.orchestrator.knowledge import KnowledgeStore, parse_frontmatter
+from ai_squad.orchestrator.reaction_tracker import ReactionTracker
 
 
 class TestHelpdeskFluxoCompleto:
@@ -163,7 +163,7 @@ class TestHelpdeskPresetStructure:
         """Verifica que pipeline.yaml do helpdesk existe."""
         from pathlib import Path
 
-        pipeline = Path("src/presets/helpdesk/pipeline/pipeline.yaml")
+        pipeline = Path("ai_squad/presets/helpdesk/pipeline/pipeline.yaml")
         assert pipeline.exists()
 
     def test_pipeline_yaml_valido(self):
@@ -172,7 +172,7 @@ class TestHelpdeskPresetStructure:
 
         import yaml
 
-        pipeline = Path("src/presets/helpdesk/pipeline/pipeline.yaml")
+        pipeline = Path("ai_squad/presets/helpdesk/pipeline/pipeline.yaml")
         data = yaml.safe_load(pipeline.read_text(encoding="utf-8"))
         assert data["name"] == "Helpdesk"
         assert "pipeline" in data
@@ -189,7 +189,7 @@ class TestHelpdeskPresetStructure:
 
         agents = ["squad-lead", "atendente", "base-conhecimento"]
         for agent in agents:
-            path = Path(f"src/presets/helpdesk/agents/{agent}/AGENTS.md")
+            path = Path(f"ai_squad/presets/helpdesk/agents/{agent}/AGENTS.md")
             assert path.exists(), f"AGENTS.md não encontrado: {agent}"
 
     def test_steps_md_existem(self):
@@ -202,7 +202,7 @@ class TestHelpdeskPresetStructure:
             "steps/step-03-registro.md",
         ]
         for step in steps:
-            path = Path(f"src/presets/helpdesk/pipeline/{step}")
+            path = Path(f"ai_squad/presets/helpdesk/pipeline/{step}")
             assert path.exists(), f"Step não encontrado: {step}"
 
     def test_knowledge_dirs_existem(self):
@@ -216,7 +216,7 @@ class TestHelpdeskPresetStructure:
             "knowledge/documentacao/faq",
         ]
         for d in dirs:
-            path = Path(f"src/presets/helpdesk/{d}")
+            path = Path(f"ai_squad/presets/helpdesk/{d}")
             assert path.exists(), f"Diretório não encontrado: {d}"
 
 
@@ -225,7 +225,7 @@ class TestTeamManagerHelpdeskPreset:
 
     def test_create_local_com_preset_helpdesk(self, tmp_path):
         """Verifica que create_local copia agents, pipeline e knowledge."""
-        from src.cli.team_manager import TeamManager
+        from ai_squad.cli.team_manager import TeamManager
 
         manager = TeamManager(base_dir=tmp_path / ".ai-squad")
         squad_dir = manager.create_local("test", project_dir=tmp_path, preset="helpdesk")

@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from click.testing import CliRunner
 
-from src.adapters.interface import AIAgentAdapter
-from src.models import AgentStatus
+from ai_squad.adapters.interface import AIAgentAdapter
+from ai_squad.models import AgentStatus
 
 
 class MockAdapter(AIAgentAdapter):

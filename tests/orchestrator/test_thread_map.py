@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from src.orchestrator.thread_map import ThreadDemandMap
+from ai_squad.orchestrator.thread_map import ThreadDemandMap
 
 
 class TestThreadDemandMap:

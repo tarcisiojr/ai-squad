@@ -1,6 +1,6 @@
 """Testes para checkpoint e retomada de demandas no StateManager."""
 
-from src.orchestrator.state import StateManager
+from ai_squad.orchestrator.state import StateManager
 
 
 class TestCheckpoint:

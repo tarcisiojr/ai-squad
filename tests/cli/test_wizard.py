@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from click.testing import CliRunner
 
-from src.cli.main import cli
+from ai_squad.cli.main import cli
 
 
 class TestGenerateWizard:
@@ -30,7 +30,7 @@ class TestWizardResult:
 
     def test_valores_default(self) -> None:
         """Valores default do WizardResult."""
-        from src.cli.wizard import WizardResult
+        from ai_squad.cli.wizard import WizardResult
 
         result = WizardResult(
             description="teste",
@@ -44,7 +44,7 @@ class TestWizardResult:
 
     def test_channel_credentials_preenchido(self) -> None:
         """Channel credentials aceita dict."""
-        from src.cli.wizard import WizardResult
+        from ai_squad.cli.wizard import WizardResult
 
         result = WizardResult(
             description="teste",
@@ -57,7 +57,7 @@ class TestWizardResult:
 
     def test_token_vazio_aceito_para_copilot(self) -> None:
         """WizardResult aceita token vazio (copilot sem token)."""
-        from src.cli.wizard import WizardResult
+        from ai_squad.cli.wizard import WizardResult
 
         result = WizardResult(
             description="teste",
@@ -70,7 +70,7 @@ class TestWizardResult:
 
     def test_token_github_aceito_para_copilot(self) -> None:
         """WizardResult aceita GITHUB_TOKEN opcional para copilot."""
-        from src.cli.wizard import WizardResult
+        from ai_squad.cli.wizard import WizardResult
 
         result = WizardResult(
             description="teste",
@@ -86,7 +86,7 @@ class TestWizardCopilotProvider:
 
     def test_copilot_na_lista_de_providers(self) -> None:
         """Copilot aparece como opção de provider no wizard."""
-        from src.cli.wizard import GenerateWizard
+        from ai_squad.cli.wizard import GenerateWizard
 
         wizard = GenerateWizard()
         # _ask_provider usa click.Choice — verificamos indiretamente
@@ -97,7 +97,7 @@ class TestWizardCopilotProvider:
 
     def test_ask_token_copilot_aceita_vazio(self) -> None:
         """Token é opcional para copilot (Enter pula)."""
-        from src.cli.wizard import GenerateWizard
+        from ai_squad.cli.wizard import GenerateWizard
 
         wizard = GenerateWizard()
         with patch("click.prompt", return_value=""):
@@ -107,7 +107,7 @@ class TestWizardCopilotProvider:
 
     def test_ask_token_copilot_aceita_github_token(self) -> None:
         """Copilot aceita GITHUB_TOKEN quando informado."""
-        from src.cli.wizard import GenerateWizard
+        from ai_squad.cli.wizard import GenerateWizard
 
         wizard = GenerateWizard()
         with patch("click.prompt", return_value="ghp_test123"):

@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.cli.generators.interface import (
+from ai_squad.cli.generators.interface import (
     PROVIDER_CONFIGS,
     GeneratorProvider,
     get_provider,

@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.orchestrator.knowledge import (
+from ai_squad.orchestrator.knowledge import (
     FTS5Backend,
     KnowledgeStore,
     _extract_title,

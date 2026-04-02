@@ -1,6 +1,6 @@
 """Testes para persistência de histórico de conversa."""
 
-from src.orchestrator.conversation import ConversationStore
+from ai_squad.orchestrator.conversation import ConversationStore
 
 
 class TestConversationStore:

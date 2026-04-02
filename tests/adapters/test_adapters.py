@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.adapters.claude_agent_sdk import ClaudeAgentSDKAdapter
+from ai_squad.adapters.claude_agent_sdk import ClaudeAgentSDKAdapter
 
 
 class TestClaudeAgentSDKAdapterExtras:

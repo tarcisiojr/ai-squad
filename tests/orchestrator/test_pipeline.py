@@ -3,7 +3,7 @@
 import pytest
 import yaml
 
-from src.orchestrator.pipeline import (
+from ai_squad.orchestrator.pipeline import (
     PipelineConfig,
     PipelineLoader,
     StepConfig,

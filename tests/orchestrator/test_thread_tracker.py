@@ -5,7 +5,7 @@ import time
 
 import pytest
 
-from src.orchestrator.thread_tracker import (
+from ai_squad.orchestrator.thread_tracker import (
     ThreadAction,
     ThreadInfo,
     ThreadState,

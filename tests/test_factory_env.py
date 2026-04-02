@@ -4,7 +4,7 @@ import os
 
 import yaml
 
-from src.factory import PlatformConfig
+from ai_squad.factory import PlatformConfig
 
 
 class TestPlatformConfigEnvOverrides:

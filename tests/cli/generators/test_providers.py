@@ -19,7 +19,7 @@ class TestAnthropicGenerator:
         mock_client.messages.create.return_value = mock_response
         mock_anthropic.Anthropic.return_value = mock_client
 
-        from src.cli.generators.anthropic import AnthropicGenerator
+        from ai_squad.cli.generators.anthropic import AnthropicGenerator
 
         gen = AnthropicGenerator("sk-ant-api03-fake-token")
         result = gen.generate("test prompt")
@@ -27,12 +27,12 @@ class TestAnthropicGenerator:
         assert result == '{"pipeline": {}}'
         mock_anthropic.Anthropic.assert_called_once_with(api_key="sk-ant-api03-fake-token")
 
-    @patch("src.cli.generators.anthropic.asyncio")
+    @patch("ai_squad.cli.generators.anthropic.asyncio")
     def test_generate_com_oauth_token(self, mock_asyncio) -> None:
         """OAuth token (sk-ant-oat*) usa claude-agent-sdk."""
         mock_asyncio.run.return_value = '{"pipeline": {}}'
 
-        from src.cli.generators.anthropic import AnthropicGenerator
+        from ai_squad.cli.generators.anthropic import AnthropicGenerator
 
         gen = AnthropicGenerator("sk-ant-oat01-fake-oauth-token")
         result = gen.generate("test prompt")
@@ -42,7 +42,7 @@ class TestAnthropicGenerator:
 
     def test_detecta_oauth_token(self) -> None:
         """Detecta corretamente OAuth token vs API key."""
-        from src.cli.generators.anthropic import _is_oauth_token
+        from ai_squad.cli.generators.anthropic import _is_oauth_token
 
         assert _is_oauth_token("sk-ant-oat01-abc123") is True
         assert _is_oauth_token("sk-ant-api03-xyz") is False
@@ -50,7 +50,7 @@ class TestAnthropicGenerator:
 
     def test_token_guardado(self) -> None:
         """Token é armazenado para uso no .env."""
-        from src.cli.generators.anthropic import AnthropicGenerator
+        from ai_squad.cli.generators.anthropic import AnthropicGenerator
 
         gen = AnthropicGenerator("meu-token-123")
         assert gen._token == "meu-token-123"
@@ -71,7 +71,7 @@ class TestOpenAIGenerator:
         mock_client.chat.completions.create.return_value = mock_response
         mock_openai.OpenAI.return_value = mock_client
 
-        from src.cli.generators.openai import OpenAIGenerator
+        from ai_squad.cli.generators.openai import OpenAIGenerator
 
         gen = OpenAIGenerator("fake-token")
         result = gen.generate("test prompt")
@@ -88,14 +88,14 @@ class TestCopilotGenerator:
         with patch.dict("sys.modules", {"copilot": None}):
             with pytest.raises(SystemExit):
                 from importlib import reload
-                import src.cli.generators.copilot as mod
+                import ai_squad.cli.generators.copilot as mod
                 reload(mod)
                 mod.CopilotGenerator()
 
     @patch.dict("sys.modules", {"copilot": MagicMock()})
     def test_token_armazenado(self) -> None:
         """Token é armazenado para uso na autenticação."""
-        from src.cli.generators.copilot import CopilotGenerator
+        from ai_squad.cli.generators.copilot import CopilotGenerator
 
         gen = CopilotGenerator("meu-github-token")
         assert gen._token == "meu-github-token"
@@ -103,18 +103,18 @@ class TestCopilotGenerator:
     @patch.dict("sys.modules", {"copilot": MagicMock()})
     def test_token_vazio_aceito(self) -> None:
         """Token vazio é aceito (auth via CLI)."""
-        from src.cli.generators.copilot import CopilotGenerator
+        from ai_squad.cli.generators.copilot import CopilotGenerator
 
         gen = CopilotGenerator("")
         assert gen._token == ""
 
-    @patch("src.cli.generators.copilot.asyncio")
+    @patch("ai_squad.cli.generators.copilot.asyncio")
     @patch.dict("sys.modules", {"copilot": MagicMock()})
     def test_generate_chama_asyncio_run(self, mock_asyncio) -> None:
         """Generate delega para asyncio.run."""
         mock_asyncio.run.return_value = '{"pipeline": {}}'
 
-        from src.cli.generators.copilot import CopilotGenerator
+        from ai_squad.cli.generators.copilot import CopilotGenerator
 
         gen = CopilotGenerator()
         result = gen.generate("test prompt")
@@ -125,8 +125,8 @@ class TestCopilotGenerator:
     @patch.dict("sys.modules", {"copilot": MagicMock()})
     def test_get_provider_retorna_copilot_generator(self) -> None:
         """get_provider('copilot') retorna CopilotGenerator."""
-        from src.cli.generators.copilot import CopilotGenerator
-        from src.cli.generators.interface import get_provider
+        from ai_squad.cli.generators.copilot import CopilotGenerator
+        from ai_squad.cli.generators.interface import get_provider
 
         provider = get_provider("copilot", "")
         assert isinstance(provider, CopilotGenerator)

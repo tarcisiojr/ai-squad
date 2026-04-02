@@ -5,13 +5,13 @@ import inspect
 
 import pytest
 
-from src.adapters.interface import AIAgentAdapter
-from src.factory import PlatformConfig, PlatformFactory
-from src.messaging.cli import CLIMessageBus
-from src.messaging.interface import MessageBus
-from src.models import AgentStatus
-from src.orchestrator.engine import OrchestrationEngine
-from src.orchestrator.state import StateManager
+from ai_squad.adapters.interface import AIAgentAdapter
+from ai_squad.factory import PlatformConfig, PlatformFactory
+from ai_squad.messaging.cli import CLIMessageBus
+from ai_squad.messaging.interface import MessageBus
+from ai_squad.models import AgentStatus
+from ai_squad.orchestrator.engine import OrchestrationEngine
+from ai_squad.orchestrator.state import StateManager
 
 
 # Mock adapter para testes de integração
@@ -144,13 +144,13 @@ class TestDesacoplamento:
 
     def test_orchestrator_nao_importa_implementacao_concreta(self):
         """Verifica que o orquestrador não importa implementações concretas."""
-        modulo = importlib.import_module("src.orchestrator.engine")
+        modulo = importlib.import_module("ai_squad.orchestrator.engine")
         source = inspect.getsource(modulo)
 
         # Não deve importar implementações concretas
-        assert "from src.messaging.cli" not in source
-        assert "from src.messaging.telegram" not in source
-        assert "from src.adapters.claude_code" not in source
+        assert "from ai_squad.messaging.cli" not in source
+        assert "from ai_squad.messaging.telegram" not in source
+        assert "from ai_squad.adapters.claude_code" not in source
         assert "CLIMessageBus" not in source
         assert "TelegramMessageBus" not in source
         assert "ClaudeCodeAdapter" not in source
@@ -158,11 +158,11 @@ class TestDesacoplamento:
     def test_factory_eh_unico_ponto_de_conhecimento(self):
         """Verifica que apenas factory e testes conhecem implementações."""
         modulos_core = [
-            "src.orchestrator.engine",
-            "src.orchestrator.state",
-            "src.models",
-            "src.messaging.interface",
-            "src.adapters.interface",
+            "ai_squad.orchestrator.engine",
+            "ai_squad.orchestrator.state",
+            "ai_squad.models",
+            "ai_squad.messaging.interface",
+            "ai_squad.adapters.interface",
         ]
 
         for nome_modulo in modulos_core:

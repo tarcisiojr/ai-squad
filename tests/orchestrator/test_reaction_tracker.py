@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.orchestrator.reaction_tracker import (
+from ai_squad.orchestrator.reaction_tracker import (
     MAPPING_TTL,
     MAX_MAPPINGS,
     ReactionTracker,

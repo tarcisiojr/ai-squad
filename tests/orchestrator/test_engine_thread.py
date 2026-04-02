@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock
 
-from src.orchestrator.tools import RunningAgent
+from ai_squad.orchestrator.tools import RunningAgent
 
 
 class TestRunningAgentThreadId:
@@ -39,7 +39,7 @@ class TestEngineResolveThreadId:
 
     def test_resolve_thread_id_de_running_agent(self):
         """Resolve thread_id direto do RunningAgent."""
-        from src.orchestrator.engine import OrchestrationEngine
+        from ai_squad.orchestrator.engine import OrchestrationEngine
 
         engine = MagicMock(spec=OrchestrationEngine)
         engine._running_agents = {
@@ -58,7 +58,7 @@ class TestEngineResolveThreadId:
 
     def test_resolve_thread_id_fallback_default(self):
         """Sem agente, usa default_thread_id."""
-        from src.orchestrator.engine import OrchestrationEngine
+        from ai_squad.orchestrator.engine import OrchestrationEngine
 
         engine = MagicMock(spec=OrchestrationEngine)
         engine._running_agents = {}
@@ -70,7 +70,7 @@ class TestEngineResolveThreadId:
 
     def test_resolve_thread_id_via_thread_map(self):
         """Resolve via thread_map quando RunningAgent não tem thread_id."""
-        from src.orchestrator.engine import OrchestrationEngine
+        from ai_squad.orchestrator.engine import OrchestrationEngine
 
         mock_map = MagicMock()
         mock_map.get_thread.return_value = 789

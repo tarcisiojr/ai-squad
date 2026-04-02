@@ -39,7 +39,7 @@ Repository = "https://github.com/tarcisiojr/ai-squad"
 Issues = "https://github.com/tarcisiojr/ai-squad/issues"
 
 [project.scripts]
-ai-squad = "src.cli.main:cli"
+ai-squad = "ai_squad.cli.main:cli"
 
 [project.optional-dependencies]
 gchat = [
@@ -67,14 +67,14 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-addopts = "--cov=src --cov-report=term-missing --cov-fail-under=68"
+addopts = "--cov=ai_squad --cov-report=term-missing --cov-fail-under=68"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["src*"]
+include = ["ai_squad*"]
 
 [tool.setuptools.package-data]
-src = [
+ai_squad = [
     "presets/**/*",
 ]
 
@@ -87,52 +87,53 @@ select = ["E", "F", "W", "I"]
 ignore = ["E501"]  # line length gerenciado pelo formatter
 
 [tool.ruff.lint.isort]
-known-first-party = ["src"]
+known-first-party = ["ai_squad"]
 
 [tool.pyright]
 pythonVersion = "3.11"
 typeCheckingMode = "strict"
-include = ["src"]
+extraPaths = ["."]
+include = ["ai_squad"]
 exclude = [
-    "src/whisper",
-    "src/daemon.py",
-    "src/factory.py",
-    "src/adapters/claude_agent_sdk.py",
-    "src/adapters/copilot_adapter.py",
-    "src/adapters/agno_adapter.py",
-    "src/adapters/mcp_tools_server.py",
-    "src/adapters/interface.py",
-    "src/adapters/prompt_builder.py",
-    "src/messaging/telegram.py",
-    "src/messaging/gchat.py",
-    "src/messaging/tui.py",
-    "src/messaging/interface.py",
-    "src/messaging/cli.py",
-    "src/messaging/registry.py",
-    "src/orchestrator/engine.py",
-    "src/orchestrator/graph.py",
-    "src/orchestrator/knowledge.py",
-    "src/orchestrator/journal.py",
-    "src/orchestrator/prompt_builder.py",
-    "src/orchestrator/pipeline_state.py",
-    "src/orchestrator/pipeline.py",
-    "src/orchestrator/conversation.py",
-    "src/orchestrator/ingest.py",
-    "src/orchestrator/agent_runner.py",
-    "src/orchestrator/state.py",
-    "src/orchestrator/lessons.py",
-    "src/orchestrator/context.py",
-    "src/cli/main.py",
-    "src/cli/generate.py",
-    "src/cli/team_manager.py",
-    "src/cli/generators/copilot.py",
-    "src/cli/generators/agno.py",
-    "src/cli/generators/anthropic.py",
-    "src/cli/wizard.py",
-    "src/orchestrator/reaction_tracker.py",
-    "src/orchestrator/thread_tracker.py",
-    "src/orchestrator/thread_map.py",
-    "src/orchestrator/daily_notes.py",
+    "ai_squad/whisper",
+    "ai_squad/daemon.py",
+    "ai_squad/factory.py",
+    "ai_squad/adapters/claude_agent_sdk.py",
+    "ai_squad/adapters/copilot_adapter.py",
+    "ai_squad/adapters/agno_adapter.py",
+    "ai_squad/adapters/mcp_tools_server.py",
+    "ai_squad/adapters/interface.py",
+    "ai_squad/adapters/prompt_builder.py",
+    "ai_squad/messaging/telegram.py",
+    "ai_squad/messaging/gchat.py",
+    "ai_squad/messaging/tui.py",
+    "ai_squad/messaging/interface.py",
+    "ai_squad/messaging/cli.py",
+    "ai_squad/messaging/registry.py",
+    "ai_squad/orchestrator/engine.py",
+    "ai_squad/orchestrator/graph.py",
+    "ai_squad/orchestrator/knowledge.py",
+    "ai_squad/orchestrator/journal.py",
+    "ai_squad/orchestrator/prompt_builder.py",
+    "ai_squad/orchestrator/pipeline_state.py",
+    "ai_squad/orchestrator/pipeline.py",
+    "ai_squad/orchestrator/conversation.py",
+    "ai_squad/orchestrator/ingest.py",
+    "ai_squad/orchestrator/agent_runner.py",
+    "ai_squad/orchestrator/state.py",
+    "ai_squad/orchestrator/lessons.py",
+    "ai_squad/orchestrator/context.py",
+    "ai_squad/cli/main.py",
+    "ai_squad/cli/generate.py",
+    "ai_squad/cli/team_manager.py",
+    "ai_squad/cli/generators/copilot.py",
+    "ai_squad/cli/generators/agno.py",
+    "ai_squad/cli/generators/anthropic.py",
+    "ai_squad/cli/wizard.py",
+    "ai_squad/orchestrator/reaction_tracker.py",
+    "ai_squad/orchestrator/thread_tracker.py",
+    "ai_squad/orchestrator/thread_map.py",
+    "ai_squad/orchestrator/daily_notes.py",
     "build",
     ".venv",
 ]

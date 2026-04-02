@@ -12,7 +12,7 @@ Monorepo Python 3.11+ com módulos desacoplados via interfaces ABC. Pipeline dec
 
 ```
 ai-squad/
-├── src/
+├── ai_squad/
 │   ├── models.py              # Enum: AgentStatus
 │   ├── factory.py             # PlatformConfig + AgentConfig (DI)
 │   ├── daemon.py              # Loop principal: Telegram polling + heartbeat
@@ -52,7 +52,7 @@ ai-squad/
 │   │   ├── team_manager.py
 │   │   └── templates/config.py
 │   └── whisper/               # Transcrição de áudio (Whisper, Docker only)
-├── tests/                     # Testes espelhando estrutura do src/
+├── tests/                     # Testes espelhando estrutura do ai_squad/
 └── openspec/                  # Artefatos OpenSpec do próprio projeto
 ```
 
@@ -109,7 +109,7 @@ Campos de configuração do step (no pipeline.yaml):
 
 ## Interfaces Principais
 
-### MessageBus (src/messaging/interface.py)
+### MessageBus (ai_squad/messaging/interface.py)
 - `send_message(user_id, text, **kwargs)` — envia texto
 - `send_photo(user_id, photo_path, caption)` — envia imagem
 - `send_approval_request(user_id, question, options) → str` — aprovação
@@ -117,7 +117,7 @@ Campos de configuração do step (no pipeline.yaml):
 - `send_typing(user_id)` — indicador de digitação
 - `notify(user_id, text)` — notificação
 
-### AIAgentAdapter (src/adapters/interface.py)
+### AIAgentAdapter (ai_squad/adapters/interface.py)
 - `run(prompt, context) → str` — executa agente
 - `ask(question) → str` — pergunta simples
 - `status() → AgentStatus` — status atual
@@ -180,11 +180,11 @@ agents:
 ## Extensibilidade
 
 ### Novo provider de IA
-1. Criar classe herdando `AIAgentAdapter` em `src/adapters/`
+1. Criar classe herdando `AIAgentAdapter` em `ai_squad/adapters/`
 2. Implementar métodos abstratos + sobrescrever callbacks desejados
 3. Registrar no `daemon.py` (`_create_<nome>_adapter`) e no mapeamento `creators`
 4. Adicionar token obrigatório em `_PROVIDER_AI_TOKENS` (factory.py) — vazio = sem token
-5. Adicionar template de `.env` em `src/cli/templates/config.py` se necessário
+5. Adicionar template de `.env` em `ai_squad/cli/templates/config.py` se necessário
 6. `config.yaml`: `ai_provider: nome`
 
 Providers disponíveis:
@@ -193,7 +193,7 @@ Providers disponíveis:
 - **agno** — Google Gemini via Agno SDK com toolkits (web_search, code_execution, shell). Requer `GOOGLE_API_KEY`
 
 ### Novo canal de mensageria
-1. Criar classe herdando `MessageBus` em `src/messaging/`
+1. Criar classe herdando `MessageBus` em `ai_squad/messaging/`
 2. `config.yaml`: `messaging_provider: nome`
 
 ### Novo agente
@@ -202,7 +202,7 @@ Providers disponíveis:
 3. Referenciar no `pipeline.yaml` do step correspondente
 
 ### Novo pipeline/preset
-1. Criar `src/presets/<nome>/` com `pipeline/` e `agents/`
+1. Criar `ai_squad/presets/<nome>/` com `pipeline/` e `agents/`
 2. Definir `pipeline.yaml` com steps (fonte única de configuração)
 3. Criar step files `.md` com quality gates (sem frontmatter)
 4. `ai-squad create MeuTime --preset <nome>`
@@ -239,8 +239,8 @@ source .venv/bin/activate
 python -m pytest tests/ -v
 
 # Lint + format
-ruff check src/ && ruff format src/
+ruff check ai_squad/ && ruff format ai_squad/
 
 # Type checking
-pyright src/
+pyright ai_squad/
 ```

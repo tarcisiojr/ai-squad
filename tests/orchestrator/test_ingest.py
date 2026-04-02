@@ -2,8 +2,8 @@
 
 import pytest
 
-from src.orchestrator.ingest import DocumentIngest, _slugify
-from src.orchestrator.knowledge import parse_frontmatter
+from ai_squad.orchestrator.ingest import DocumentIngest, _slugify
+from ai_squad.orchestrator.knowledge import parse_frontmatter
 
 
 class TestSlugify:

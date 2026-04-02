@@ -3,7 +3,7 @@
 import click
 import pytest
 
-from src.cli.team_manager import validate_team_name
+from ai_squad.cli.team_manager import validate_team_name
 
 
 class TestValidateTeamName:

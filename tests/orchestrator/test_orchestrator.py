@@ -4,11 +4,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.adapters.interface import AIAgentAdapter
-from src.messaging.interface import MessageBus
-from src.models import AgentStatus
-from src.orchestrator.engine import OrchestrationEngine
-from src.orchestrator.state import StateManager
+from ai_squad.adapters.interface import AIAgentAdapter
+from ai_squad.messaging.interface import MessageBus
+from ai_squad.models import AgentStatus
+from ai_squad.orchestrator.engine import OrchestrationEngine
+from ai_squad.orchestrator.state import StateManager
 
 
 # Fixtures para mocks

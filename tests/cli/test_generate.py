@@ -4,8 +4,8 @@ import json
 
 import pytest
 
-from src.cli.generate import _create_structure, _parse_response
-from src.cli.wizard import WizardResult
+from ai_squad.cli.generate import _create_structure, _parse_response
+from ai_squad.cli.wizard import WizardResult
 
 
 # Fixture: JSON de exemplo gerado pela IA

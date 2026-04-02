@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, PropertyMock
 
 import pytest
 
-from src.daemon import Daemon
+from ai_squad.daemon import Daemon
 
 
 def _mock_bus(chat_id: str = "12345") -> MagicMock:
@@ -50,7 +50,7 @@ class TestDaemon:
         monkeypatch.delenv("TELEGRAM_TOKEN", raising=False)
         monkeypatch.delenv("TELEGRAM_CHAT_ID", raising=False)
 
-        from src.factory import PlatformConfig
+        from ai_squad.factory import PlatformConfig
 
         daemon = Daemon()
         daemon._config = PlatformConfig(
@@ -68,7 +68,7 @@ class TestDaemon:
         monkeypatch.setenv("TELEGRAM_TOKEN", "real")
         monkeypatch.setenv("TELEGRAM_CHAT_ID", "123")
 
-        from src.factory import PlatformConfig
+        from ai_squad.factory import PlatformConfig
 
         daemon = Daemon()
         daemon._config = PlatformConfig(
@@ -86,7 +86,7 @@ class TestDaemon:
         monkeypatch.setenv("TELEGRAM_TOKEN", "bot-real")
         monkeypatch.setenv("TELEGRAM_CHAT_ID", "12345")
 
-        from src.factory import PlatformConfig
+        from ai_squad.factory import PlatformConfig
 
         daemon = Daemon()
         daemon._config = PlatformConfig(
@@ -199,7 +199,7 @@ class TestDaemon:
         daemon._bus = _mock_bus()
         daemon._engine = MagicMock()
 
-        from src.orchestrator.tools import RunningAgent
+        from ai_squad.orchestrator.tools import RunningAgent
 
         mock_task = MagicMock()
         daemon._engine._running_agents = {

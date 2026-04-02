@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from src.orchestrator.state import StateManager
+from ai_squad.orchestrator.state import StateManager
 
 
 class TestStateManager:
@@ -180,8 +180,8 @@ class TestCleanupExpired:
             json.dump(data, f)
 
     def test_demanda_expirada_removida(self, state_mgr, tmp_path):
-        """Demanda concluída há mais de 7 dias é removida."""
-        self._create_done_demand(state_mgr, "old-demand", days_ago=10)
+        """Demanda concluída há mais de 1 dia (default) é removida."""
+        self._create_done_demand(state_mgr, "old-demand", days_ago=3)
         # Cria subpasta simulando conversation/journal
         subdir = tmp_path / "state" / "old-demand"
         subdir.mkdir()
@@ -194,8 +194,8 @@ class TestCleanupExpired:
         assert not subdir.exists()
 
     def test_demanda_recente_preservada(self, state_mgr, tmp_path):
-        """Demanda concluída há menos de 7 dias é preservada."""
-        self._create_done_demand(state_mgr, "recent-demand", days_ago=3)
+        """Demanda concluída há menos de 1 dia (default) é preservada."""
+        self._create_done_demand(state_mgr, "recent-demand", days_ago=0)
 
         removed = state_mgr.cleanup_expired()
 

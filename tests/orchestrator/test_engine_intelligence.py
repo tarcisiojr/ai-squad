@@ -1,10 +1,10 @@
 """Testes para funcionalidades de inteligência do engine."""
 
-from src.adapters.interface import AIAgentAdapter
-from src.factory import AgentConfig
-from src.models import AgentStatus
-from src.orchestrator.engine import OrchestrationEngine
-from src.orchestrator.state import StateManager
+from ai_squad.adapters.interface import AIAgentAdapter
+from ai_squad.factory import AgentConfig
+from ai_squad.models import AgentStatus
+from ai_squad.orchestrator.engine import OrchestrationEngine
+from ai_squad.orchestrator.state import StateManager
 
 
 class MockAdapter(AIAgentAdapter):

@@ -6,12 +6,12 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.adapters.interface import AIAgentAdapter
-from src.factory import AgentConfig
-from src.messaging.interface import MessageBus
-from src.models import AgentStatus
-from src.orchestrator.engine import OrchestrationEngine
-from src.orchestrator.state import StateManager
+from ai_squad.adapters.interface import AIAgentAdapter
+from ai_squad.factory import AgentConfig
+from ai_squad.messaging.interface import MessageBus
+from ai_squad.models import AgentStatus
+from ai_squad.orchestrator.engine import OrchestrationEngine
+from ai_squad.orchestrator.state import StateManager
 
 TEST_PERSONAS = {
     "po": AgentConfig(name="PO", avatar="📋", command="/po", role="spec"),
@@ -325,7 +325,7 @@ class TestInvokeAgent:
         engine._default_user_id = "user1"
 
         # Cria RunningAgent para que o progress_log funcione
-        from src.orchestrator.tools import RunningAgent
+        from ai_squad.orchestrator.tools import RunningAgent
 
         engine._running_agents["po"] = RunningAgent(
             agent_name="po", demand_id="d1", user_id="user1"
@@ -464,7 +464,7 @@ class TestAsyncAgentDelegation:
     @pytest.mark.asyncio
     async def test_handle_get_agents_com_agente_rodando(self, tmp_path):
         """Verifica status com agente ativo."""
-        from src.orchestrator.tools import RunningAgent
+        from ai_squad.orchestrator.tools import RunningAgent
 
         engine, bus = self._make_engine(tmp_path)
         engine._running_agents["po"] = RunningAgent(
@@ -482,7 +482,7 @@ class TestAsyncAgentDelegation:
     @pytest.mark.asyncio
     async def test_handle_get_agents_com_agente_concluido(self, tmp_path):
         """Verifica status com agente concluido."""
-        from src.orchestrator.tools import RunningAgent
+        from ai_squad.orchestrator.tools import RunningAgent
 
         engine, bus = self._make_engine(tmp_path)
         engine._running_agents["dev"] = RunningAgent(
@@ -502,7 +502,7 @@ class TestAsyncAgentDelegation:
     async def test_on_agent_done_marca_concluido(self, tmp_path):
         """Verifica que _on_agent_done marca agente como concluido e notifica."""
         engine, bus = self._make_engine(tmp_path)
-        from src.orchestrator.tools import RunningAgent
+        from ai_squad.orchestrator.tools import RunningAgent
 
         engine._running_agents["po"] = RunningAgent(
             agent_name="po",
@@ -528,7 +528,7 @@ class TestAsyncAgentDelegation:
     async def test_on_agent_done_com_erro(self, tmp_path):
         """Verifica que _on_agent_done trata erro."""
         engine, bus = self._make_engine(tmp_path)
-        from src.orchestrator.tools import RunningAgent
+        from ai_squad.orchestrator.tools import RunningAgent
 
         engine._running_agents["dev"] = RunningAgent(
             agent_name="dev",
@@ -573,7 +573,7 @@ class TestRunningAgent:
     """Testes para dataclass RunningAgent."""
 
     def test_elapsed_str_segundos(self):
-        from src.orchestrator.tools import RunningAgent
+        from ai_squad.orchestrator.tools import RunningAgent
 
         ra = RunningAgent(
             agent_name="po",
@@ -584,7 +584,7 @@ class TestRunningAgent:
         assert "s" in elapsed
 
     def test_elapsed_str_minutos(self):
-        from src.orchestrator.tools import RunningAgent
+        from ai_squad.orchestrator.tools import RunningAgent
 
         ra = RunningAgent(
             agent_name="po",
@@ -595,7 +595,7 @@ class TestRunningAgent:
         assert "min" in elapsed
 
     def test_status_padrao(self):
-        from src.orchestrator.tools import RunningAgent
+        from ai_squad.orchestrator.tools import RunningAgent
 
         ra = RunningAgent(agent_name="po", demand_id="d1")
         assert ra.status == "running"

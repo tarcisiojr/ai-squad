@@ -1,6 +1,6 @@
 """Testes para MessageContext."""
 
-from src.messaging.context import MessageContext
+from ai_squad.messaging.context import MessageContext
 
 
 class TestMessageContext:

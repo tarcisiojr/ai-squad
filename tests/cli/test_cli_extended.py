@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from click.testing import CliRunner
 
-from src.cli.main import (
+from ai_squad.cli.main import (
     _build_image,
     _docker_compose_cmd,
     _find_source_dir,
@@ -69,9 +69,9 @@ class TestHelperFunctions:
     def test_build_image_falha(self, tmp_path):
         """Verifica tratamento de erro no build."""
         with (
-            patch("src.cli.main._find_source_dir", return_value=tmp_path),
-            patch("src.cli.main._generate_wheel", return_value=True),
-            patch("src.docker.get_docker_dir", return_value=tmp_path),
+            patch("ai_squad.cli.main._find_source_dir", return_value=tmp_path),
+            patch("ai_squad.cli.main._generate_wheel", return_value=True),
+            patch("ai_squad.docker.get_docker_dir", return_value=tmp_path),
             patch("subprocess.run") as mock_run,
         ):
             (tmp_path / "Dockerfile").touch()
@@ -85,8 +85,8 @@ class TestCLIStartExtended:
 
     def test_start_all_sem_times(self, runner, tmp_path):
         """Verifica start --all sem times."""
-        with patch("src.cli.main._get_manager") as mock:
-            from src.cli.team_manager import TeamManager
+        with patch("ai_squad.cli.main._get_manager") as mock:
+            from ai_squad.cli.team_manager import TeamManager
 
             manager = TeamManager(base_dir=tmp_path / ".ai-squad")
             mock.return_value = manager
@@ -101,17 +101,17 @@ class TestCLIStartExtended:
         repo.mkdir()
 
         with (
-            patch("src.cli.main._get_manager") as mock_mgr,
-            patch("src.cli.main._image_exists", return_value=True),
+            patch("ai_squad.cli.main._get_manager") as mock_mgr,
+            patch("ai_squad.cli.main._image_exists", return_value=True),
             patch("subprocess.run") as mock_run,
         ):
-            from src.cli.team_manager import TeamManager
+            from ai_squad.cli.team_manager import TeamManager
 
             manager = TeamManager(base_dir=tmp_path / ".ai-squad")
             team_dir = manager.create("ok", str(repo))
 
             # Preenche .env (comuns + tokens do Telegram, que é o default)
-            from src.cli.templates.config import COMMON_REQUIRED_ENV_VARS
+            from ai_squad.cli.templates.config import COMMON_REQUIRED_ENV_VARS
 
             all_vars = list(COMMON_REQUIRED_ENV_VARS) + ["TELEGRAM_TOKEN", "TELEGRAM_CHAT_ID"]
             env = "\n".join(f"{v}=valor_real" for v in all_vars)
@@ -130,16 +130,16 @@ class TestCLIStartExtended:
         repo.mkdir()
 
         with (
-            patch("src.cli.main._get_manager") as mock_mgr,
-            patch("src.cli.main._image_exists", return_value=True),
+            patch("ai_squad.cli.main._get_manager") as mock_mgr,
+            patch("ai_squad.cli.main._image_exists", return_value=True),
             patch("subprocess.run") as mock_run,
         ):
-            from src.cli.team_manager import TeamManager
+            from ai_squad.cli.team_manager import TeamManager
 
             manager = TeamManager(base_dir=tmp_path / ".ai-squad")
             team_dir = manager.create("fail", str(repo))
 
-            from src.cli.templates.config import COMMON_REQUIRED_ENV_VARS
+            from ai_squad.cli.templates.config import COMMON_REQUIRED_ENV_VARS
 
             all_vars = list(COMMON_REQUIRED_ENV_VARS) + ["TELEGRAM_TOKEN", "TELEGRAM_CHAT_ID"]
             env = "\n".join(f"{v}=valor" for v in all_vars)
@@ -161,8 +161,8 @@ class TestCLIStopExtended:
         repo = tmp_path / "repo"
         repo.mkdir()
 
-        with patch("src.cli.main._get_manager") as mock_mgr, patch("subprocess.run") as mock_run:
-            from src.cli.team_manager import TeamManager
+        with patch("ai_squad.cli.main._get_manager") as mock_mgr, patch("subprocess.run") as mock_run:
+            from ai_squad.cli.team_manager import TeamManager
 
             manager = TeamManager(base_dir=tmp_path / ".ai-squad")
             manager.create("t1", str(repo))
@@ -178,8 +178,8 @@ class TestCLIStopExtended:
         repo = tmp_path / "repo"
         repo.mkdir()
 
-        with patch("src.cli.main._get_manager") as mock_mgr, patch("subprocess.run") as mock_run:
-            from src.cli.team_manager import TeamManager
+        with patch("ai_squad.cli.main._get_manager") as mock_mgr, patch("subprocess.run") as mock_run:
+            from ai_squad.cli.team_manager import TeamManager
 
             manager = TeamManager(base_dir=tmp_path / ".ai-squad")
             manager.create("fail", str(repo))
@@ -200,10 +200,10 @@ class TestCLIStatusExtended:
         repo.mkdir()
 
         with (
-            patch("src.cli.main._get_manager") as mock_mgr,
-            patch("src.cli.main._get_container_status", return_value="running"),
+            patch("ai_squad.cli.main._get_manager") as mock_mgr,
+            patch("ai_squad.cli.main._get_container_status", return_value="running"),
         ):
-            from src.cli.team_manager import TeamManager
+            from ai_squad.cli.team_manager import TeamManager
 
             manager = TeamManager(base_dir=tmp_path / ".ai-squad")
             team_dir = manager.create("active", str(repo))
@@ -229,8 +229,8 @@ class TestCLILogs:
 
     def test_logs_time_inexistente(self, runner, tmp_path):
         """Verifica erro com time inexistente."""
-        with patch("src.cli.main._get_manager") as mock:
-            from src.cli.team_manager import TeamManager
+        with patch("ai_squad.cli.main._get_manager") as mock:
+            from ai_squad.cli.team_manager import TeamManager
 
             manager = TeamManager(base_dir=tmp_path / ".ai-squad")
             mock.return_value = manager
@@ -244,8 +244,8 @@ class TestCLILogs:
         repo = tmp_path / "repo"
         repo.mkdir()
 
-        with patch("src.cli.main._get_manager") as mock_mgr, patch("subprocess.run") as mock_run:
-            from src.cli.team_manager import TeamManager
+        with patch("ai_squad.cli.main._get_manager") as mock_mgr, patch("subprocess.run") as mock_run:
+            from ai_squad.cli.team_manager import TeamManager
 
             manager = TeamManager(base_dir=tmp_path / ".ai-squad")
             manager.create("logtest", str(repo))

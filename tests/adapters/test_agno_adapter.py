@@ -6,9 +6,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.adapters.interface import AIAgentAdapter
-from src.adapters.mcp_tools_server import SquadMCPToolsServer
-from src.models import AgentStatus
+from ai_squad.adapters.interface import AIAgentAdapter
+from ai_squad.adapters.mcp_tools_server import SquadMCPToolsServer
+from ai_squad.models import AgentStatus
 
 # Mock de módulos agno que não estão instalados no ambiente de teste
 _agno_mocks = {}
@@ -54,7 +54,7 @@ class TestAgnoAdapterInstanciation:
 
     @pytest.fixture
     def adapter(self):
-        from src.adapters.agno_adapter import AgnoAdapter
+        from ai_squad.adapters.agno_adapter import AgnoAdapter
 
         return AgnoAdapter(timeout=30, working_dir="/tmp/test")
 
@@ -65,25 +65,25 @@ class TestAgnoAdapterInstanciation:
         assert adapter.status() == AgentStatus.IDLE
 
     def test_timeout_configuravel(self):
-        from src.adapters.agno_adapter import AgnoAdapter
+        from ai_squad.adapters.agno_adapter import AgnoAdapter
 
         adapter = AgnoAdapter(timeout=600)
         assert adapter._timeout == 600
 
     def test_model_configuravel(self):
-        from src.adapters.agno_adapter import AgnoAdapter
+        from ai_squad.adapters.agno_adapter import AgnoAdapter
 
         adapter = AgnoAdapter(model="gemini-2.5-pro")
         assert adapter._model == "gemini-2.5-pro"
 
     def test_state_dir_cria_db(self, tmp_path):
-        from src.adapters.agno_adapter import AgnoAdapter
+        from ai_squad.adapters.agno_adapter import AgnoAdapter
 
         adapter = AgnoAdapter(state_dir=str(tmp_path))
         assert adapter._db is not None
 
     def test_sem_state_dir_sem_db(self):
-        from src.adapters.agno_adapter import AgnoAdapter
+        from ai_squad.adapters.agno_adapter import AgnoAdapter
 
         adapter = AgnoAdapter()
         assert adapter._db is None
@@ -98,39 +98,39 @@ class TestNormalizeModelId:
     """Testes para normalização de model_id."""
 
     def test_gemini_sem_prefixo(self):
-        from src.adapters.agno_adapter import _normalize_model_id
+        from ai_squad.adapters.agno_adapter import _normalize_model_id
 
         assert _normalize_model_id("gemini-2.0-flash") == "google:gemini-2.0-flash"
 
     def test_gpt_sem_prefixo(self):
-        from src.adapters.agno_adapter import _normalize_model_id
+        from ai_squad.adapters.agno_adapter import _normalize_model_id
 
         assert _normalize_model_id("gpt-4o") == "openai:gpt-4o"
 
     def test_claude_sem_prefixo(self):
-        from src.adapters.agno_adapter import _normalize_model_id
+        from ai_squad.adapters.agno_adapter import _normalize_model_id
 
         assert _normalize_model_id("claude-sonnet-4-20250514") == "anthropic:claude-sonnet-4-20250514"
 
     def test_o1_sem_prefixo(self):
-        from src.adapters.agno_adapter import _normalize_model_id
+        from ai_squad.adapters.agno_adapter import _normalize_model_id
 
         assert _normalize_model_id("o1-preview") == "openai:o1-preview"
 
     def test_o3_sem_prefixo(self):
-        from src.adapters.agno_adapter import _normalize_model_id
+        from ai_squad.adapters.agno_adapter import _normalize_model_id
 
         assert _normalize_model_id("o3-mini") == "openai:o3-mini"
 
     def test_com_prefixo_passthrough(self):
-        from src.adapters.agno_adapter import _normalize_model_id
+        from ai_squad.adapters.agno_adapter import _normalize_model_id
 
         assert _normalize_model_id("google:gemini-2.0-flash") == "google:gemini-2.0-flash"
         assert _normalize_model_id("openai:gpt-4o") == "openai:gpt-4o"
         assert _normalize_model_id("anthropic:claude-sonnet-4-20250514") == "anthropic:claude-sonnet-4-20250514"
 
     def test_desconhecido_fallback_google(self):
-        from src.adapters.agno_adapter import _normalize_model_id
+        from ai_squad.adapters.agno_adapter import _normalize_model_id
 
         assert _normalize_model_id("custom-model") == "google:custom-model"
 
@@ -139,43 +139,43 @@ class TestResolveTools:
     """Testes para resolução de toolkits."""
 
     def test_resolve_web_search_duckduckgo(self):
-        from src.adapters.agno_adapter import _resolve_tools
+        from ai_squad.adapters.agno_adapter import _resolve_tools
 
         tools = _resolve_tools(["web_search"])
         assert len(tools) == 1
 
     def test_resolve_web_search_tavily(self):
-        from src.adapters.agno_adapter import _resolve_tools
+        from ai_squad.adapters.agno_adapter import _resolve_tools
 
         tools = _resolve_tools(["web_search"], web_search_provider="tavily")
         assert len(tools) == 1
 
     def test_resolve_code_execution(self):
-        from src.adapters.agno_adapter import _resolve_tools
+        from ai_squad.adapters.agno_adapter import _resolve_tools
 
         tools = _resolve_tools(["code_execution"])
         assert len(tools) == 1
 
     def test_resolve_shell(self):
-        from src.adapters.agno_adapter import _resolve_tools
+        from ai_squad.adapters.agno_adapter import _resolve_tools
 
         tools = _resolve_tools(["shell"], working_dir="/workspace")
         assert len(tools) == 1
 
     def test_resolve_multiple_tools(self):
-        from src.adapters.agno_adapter import _resolve_tools
+        from ai_squad.adapters.agno_adapter import _resolve_tools
 
         tools = _resolve_tools(["web_search", "code_execution", "shell"])
         assert len(tools) == 3
 
     def test_resolve_unknown_toolkit(self):
-        from src.adapters.agno_adapter import _resolve_tools
+        from ai_squad.adapters.agno_adapter import _resolve_tools
 
         tools = _resolve_tools(["toolkit_inexistente"])
         assert len(tools) == 0
 
     def test_resolve_empty_list(self):
-        from src.adapters.agno_adapter import _resolve_tools
+        from ai_squad.adapters.agno_adapter import _resolve_tools
 
         tools = _resolve_tools([])
         assert len(tools) == 0
@@ -186,7 +186,7 @@ class TestResolveSkills:
 
     @pytest.fixture
     def adapter(self, tmp_path):
-        from src.adapters.agno_adapter import AgnoAdapter
+        from ai_squad.adapters.agno_adapter import AgnoAdapter
 
         agents_dir = tmp_path / "agents"
         agents_dir.mkdir()
@@ -255,14 +255,14 @@ class TestGenerateTools:
     """Testes para geração dinâmica de tools."""
 
     def test_gera_12_tools(self):
-        from src.adapters.agno_adapter import AgnoAdapter
+        from ai_squad.adapters.agno_adapter import AgnoAdapter
 
         adapter = AgnoAdapter()
         tools = adapter._generate_tools()
         assert len(tools) == 12
 
     def test_nomes_corretos(self):
-        from src.adapters.agno_adapter import AgnoAdapter
+        from ai_squad.adapters.agno_adapter import AgnoAdapter
 
         adapter = AgnoAdapter()
         tools = adapter._generate_tools()
@@ -274,7 +274,7 @@ class TestGenerateTools:
         assert "send_image" in names
 
     def test_cache_de_tools(self):
-        from src.adapters.agno_adapter import AgnoAdapter
+        from ai_squad.adapters.agno_adapter import AgnoAdapter
 
         adapter = AgnoAdapter()
         tools1 = adapter._generate_tools()
@@ -283,7 +283,7 @@ class TestGenerateTools:
 
     @pytest.mark.asyncio
     async def test_tool_delega_para_server(self):
-        from src.adapters.agno_adapter import AgnoAdapter
+        from ai_squad.adapters.agno_adapter import AgnoAdapter
 
         adapter = AgnoAdapter()
         callback = AsyncMock(return_value="Agente iniciado")
@@ -300,14 +300,14 @@ class TestAgentCache:
     """Testes para cache de agentes."""
 
     def test_cache_miss_cria_agente(self):
-        from src.adapters.agno_adapter import AgnoAdapter
+        from ai_squad.adapters.agno_adapter import AgnoAdapter
 
         adapter = AgnoAdapter()
         agent = adapter._get_or_create_agent("po", "google:gemini-2.0-flash")
         assert "po" in adapter._agents_cache
 
     def test_cache_hit_reutiliza(self):
-        from src.adapters.agno_adapter import AgnoAdapter
+        from ai_squad.adapters.agno_adapter import AgnoAdapter
 
         adapter = AgnoAdapter()
         agent1 = adapter._get_or_create_agent("po", "google:gemini-2.0-flash")
@@ -315,7 +315,7 @@ class TestAgentCache:
         assert agent1 is agent2
 
     def test_model_override_nao_cacheia(self):
-        from src.adapters.agno_adapter import AgnoAdapter
+        from ai_squad.adapters.agno_adapter import AgnoAdapter
 
         adapter = AgnoAdapter()
         # Cria e cacheia com modelo padrão
@@ -328,7 +328,7 @@ class TestAgentCache:
         assert adapter._agents_cache["po"][1] == "google:gemini-2.0-flash"
 
     def test_clear_cache(self):
-        from src.adapters.agno_adapter import AgnoAdapter
+        from ai_squad.adapters.agno_adapter import AgnoAdapter
 
         adapter = AgnoAdapter()
         adapter._get_or_create_agent("po", "google:gemini-2.0-flash")
@@ -343,7 +343,7 @@ class TestCallbacks:
     """Testes para registro de callbacks."""
 
     def test_all_callbacks_delegated(self):
-        from src.adapters.agno_adapter import AgnoAdapter
+        from ai_squad.adapters.agno_adapter import AgnoAdapter
 
         adapter = AgnoAdapter()
         callback = AsyncMock()
@@ -387,7 +387,7 @@ class TestModelOverride:
 
     @pytest.mark.asyncio
     async def test_model_override_via_context(self):
-        from src.adapters.agno_adapter import AgnoAdapter
+        from ai_squad.adapters.agno_adapter import AgnoAdapter
 
         adapter = AgnoAdapter(model="gemini-2.0-flash")
 
@@ -531,13 +531,13 @@ class TestPromptBuilder:
     """Testes para o prompt builder compartilhado."""
 
     def test_build_prompt_basico(self):
-        from src.adapters.prompt_builder import build_prompt
+        from ai_squad.adapters.prompt_builder import build_prompt
 
         result = build_prompt("Ola mundo", {})
         assert result == "Ola mundo"
 
     def test_build_prompt_com_workspace(self):
-        from src.adapters.prompt_builder import build_prompt
+        from ai_squad.adapters.prompt_builder import build_prompt
 
         context = {"workspace_context": "Projeto Python"}
         result = build_prompt("Implementar feature", context)
@@ -545,14 +545,14 @@ class TestPromptBuilder:
         assert "Projeto Python" in result
 
     def test_build_prompt_com_instructions(self):
-        from src.adapters.prompt_builder import build_prompt
+        from ai_squad.adapters.prompt_builder import build_prompt
 
         context = {"system_instructions": "Voce e o PO"}
         result = build_prompt("Especificar demanda", context)
         assert "Voce e o PO" in result
 
     def test_build_prompt_filtra_chaves_internas(self):
-        from src.adapters.prompt_builder import build_prompt
+        from ai_squad.adapters.prompt_builder import build_prompt
 
         context = {
             "demand_id": "test-1",
@@ -566,7 +566,7 @@ class TestPromptBuilder:
         assert "custom_key" in result
 
     def test_build_prompt_completo(self):
-        from src.adapters.prompt_builder import build_prompt
+        from ai_squad.adapters.prompt_builder import build_prompt
 
         context = {
             "workspace_context": "Projeto X",

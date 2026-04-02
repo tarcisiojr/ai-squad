@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.adapters.interface import AIAgentAdapter
-from src.models import AgentStatus
+from ai_squad.adapters.interface import AIAgentAdapter
+from ai_squad.models import AgentStatus
 
 # Pula todos os testes se o módulo copilot não está instalado
 _has_copilot = importlib.util.find_spec("copilot") is not None
@@ -63,7 +63,7 @@ def mock_copilot():
     """Fixture que mocka o módulo copilot."""
     with patch.dict("sys.modules", {"copilot": MagicMock()}):
         with patch(
-            "src.adapters.copilot_adapter.CopilotAdapter._ensure_client_started"
+            "ai_squad.adapters.copilot_adapter.CopilotAdapter._ensure_client_started"
         ) as mock_start:
             mock_start.return_value = None
             yield mock_start
@@ -71,7 +71,7 @@ def mock_copilot():
 
 def _create_adapter(**kwargs):
     """Cria CopilotAdapter com mocks."""
-    from src.adapters.copilot_adapter import CopilotAdapter
+    from ai_squad.adapters.copilot_adapter import CopilotAdapter
 
     adapter = CopilotAdapter(
         timeout=60,
@@ -93,7 +93,7 @@ class TestCopilotAdapterInit:
 
     def test_herda_interface(self):
         """Verifica que CopilotAdapter herda AIAgentAdapter."""
-        from src.adapters.copilot_adapter import CopilotAdapter
+        from ai_squad.adapters.copilot_adapter import CopilotAdapter
 
         assert issubclass(CopilotAdapter, AIAgentAdapter)
 
@@ -111,7 +111,7 @@ class TestCopilotAdapterInit:
 
     def test_client_lazy_init(self):
         """Verifica que client não é iniciado no construtor."""
-        from src.adapters.copilot_adapter import CopilotAdapter
+        from ai_squad.adapters.copilot_adapter import CopilotAdapter
 
         adapter = CopilotAdapter()
         assert adapter._client is None
@@ -199,7 +199,7 @@ class TestCopilotAdapterAuth:
         """Verifica que GITHUB_TOKEN é usado quando disponível."""
         monkeypatch.setenv("GITHUB_TOKEN", "ghp_test123")
 
-        from src.adapters.copilot_adapter import CopilotAdapter
+        from ai_squad.adapters.copilot_adapter import CopilotAdapter
 
         adapter = CopilotAdapter()
 
@@ -218,7 +218,7 @@ class TestCopilotAdapterAuth:
         """Verifica fallback para use_logged_in_user quando sem GITHUB_TOKEN."""
         monkeypatch.delenv("GITHUB_TOKEN", raising=False)
 
-        from src.adapters.copilot_adapter import CopilotAdapter
+        from ai_squad.adapters.copilot_adapter import CopilotAdapter
 
         adapter = CopilotAdapter()
 
@@ -385,7 +385,7 @@ class TestValidateTokensCopilot:
         monkeypatch.delenv("GITHUB_TOKEN", raising=False)
         monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
 
-        from src.factory import PlatformConfig
+        from ai_squad.factory import PlatformConfig
 
         config = PlatformConfig(ai_provider="copilot", messaging_provider="cli")
         missing = config.validate_required_tokens()
@@ -395,7 +395,7 @@ class TestValidateTokensCopilot:
         """Verifica que com GITHUB_TOKEN não reporta ausente."""
         monkeypatch.setenv("GITHUB_TOKEN", "ghp_test123")
 
-        from src.factory import PlatformConfig
+        from ai_squad.factory import PlatformConfig
 
         config = PlatformConfig(ai_provider="copilot", messaging_provider="cli")
         missing = config.validate_required_tokens()
@@ -405,7 +405,7 @@ class TestValidateTokensCopilot:
         """Verifica que placeholder é tratado como ausente."""
         monkeypatch.setenv("GITHUB_TOKEN", "PREENCHA_AQUI_token")
 
-        from src.factory import PlatformConfig
+        from ai_squad.factory import PlatformConfig
 
         config = PlatformConfig(ai_provider="copilot", messaging_provider="cli")
         missing = config.validate_required_tokens()
@@ -439,7 +439,7 @@ class TestCopilotAdapterShutdown:
     @pytest.mark.asyncio
     async def test_shutdown_sem_client(self):
         """Verifica que shutdown sem client não falha."""
-        from src.adapters.copilot_adapter import CopilotAdapter
+        from ai_squad.adapters.copilot_adapter import CopilotAdapter
 
         adapter = CopilotAdapter()
         await adapter.shutdown()  # Não deve lançar exceção
@@ -453,9 +453,9 @@ class TestDaemonCopilotAdapter:
 
     def test_create_copilot_adapter_sem_dependencia(self):
         """Verifica erro claro quando github-copilot-sdk não está instalado."""
-        from src.factory import PlatformFactory
+        from ai_squad.factory import PlatformFactory
 
         # Simula ImportError
-        with patch.dict("sys.modules", {"src.adapters.copilot_adapter": None}):
+        with patch.dict("sys.modules", {"ai_squad.adapters.copilot_adapter": None}):
             with pytest.raises(RuntimeError, match="Copilot SDK"):
                 PlatformFactory._create_copilot_adapter({})
