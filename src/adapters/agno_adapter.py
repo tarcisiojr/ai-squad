@@ -2,8 +2,10 @@
 
 import asyncio
 import logging
+import tempfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from src.adapters.interface import AIAgentAdapter
 from src.adapters.mcp_tools_server import SquadMCPToolsServer
@@ -58,9 +60,15 @@ def _resolve_tools(
         elif toolkit_name == "code_execution":
             from agno.tools.python import PythonTools
 
+            # Usa working_dir se disponível, senão cria diretório temporário seguro
+            if working_dir:
+                sandbox_dir = Path(working_dir) / ".ai-squad-sandbox"
+                sandbox_dir.mkdir(parents=True, exist_ok=True)
+            else:
+                sandbox_dir = Path(tempfile.mkdtemp(prefix="ai-squad-sandbox-"))
             tools.append(
                 PythonTools(
-                    base_dir=Path("/tmp/ai-squad-sandbox"),
+                    base_dir=sandbox_dir,
                     run_code=True,
                     pip_install=False,
                 )

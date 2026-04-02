@@ -11,6 +11,7 @@ import click
 from src.cli.team_manager import (
     TeamExistsError,
     TeamManager,
+    validate_team_name,
 )
 
 
@@ -196,6 +197,7 @@ def cli() -> None:
 )
 def create(name: str, repo: str | None, preset: str, messaging: str) -> None:
     """Cria um novo time. Sem --repo cria local, com --repo cria para Docker."""
+    validate_team_name(name)
     manager = _get_manager()
     try:
         if repo:
@@ -374,6 +376,8 @@ def start(
         click.echo("Informe o nome do time ou use --all.", err=True)
         sys.exit(1)
 
+    validate_team_name(name)
+
     # Determina modo
     if force_local:
         mode = "local"
@@ -447,6 +451,7 @@ def stop(name: str | None, stop_all: bool) -> None:
         click.echo("Informe o nome do time ou use --all.", err=True)
         sys.exit(1)
 
+    validate_team_name(name)
     _stop_team(manager, name)
 
 
@@ -479,6 +484,7 @@ def _stop_team(manager: TeamManager, team_name: str) -> None:
 )
 def remove(name: str) -> None:
     """Remove um time e todos os seus arquivos."""
+    validate_team_name(name)
     from src.cli.team_manager import TeamNotFoundError
 
     # Verifica se é local
@@ -541,6 +547,7 @@ def list_teams() -> None:
 @click.option("--tail", default=0, help="Número de linhas finais a exibir.")
 def logs(name: str, tail: int) -> None:
     """Exibe logs de um time."""
+    validate_team_name(name)
     manager = _get_manager()
 
     if not manager.exists(name):
@@ -562,6 +569,7 @@ def logs(name: str, tail: int) -> None:
 @click.argument("name")
 def status(name: str) -> None:
     """Exibe status das demandas ativas de um time."""
+    validate_team_name(name)
     manager = _get_manager()
 
     if not manager.exists(name):
@@ -615,6 +623,7 @@ def add_agent(
     cmd: str | None,
 ) -> None:
     """Adiciona um novo agente a um time existente."""
+    validate_team_name(team_name)
     manager = _get_manager()
     if not manager.exists(team_name):
         click.echo(f"Erro: Time '{team_name}' não encontrado.", err=True)
@@ -693,6 +702,7 @@ def add_agent(
 @click.confirmation_option(prompt="Tem certeza que deseja remover este agente?")
 def remove_agent(team_name: str, agent_name: str) -> None:
     """Remove um agente de um time."""
+    validate_team_name(team_name)
     manager = _get_manager()
     if not manager.exists(team_name):
         click.echo(f"Erro: Time '{team_name}' não encontrado.", err=True)
@@ -734,6 +744,7 @@ def remove_agent(team_name: str, agent_name: str) -> None:
 @click.argument("team_name")
 def list_agents(team_name: str) -> None:
     """Lista os agentes de um time."""
+    validate_team_name(team_name)
     manager = _get_manager()
     if not manager.exists(team_name):
         click.echo(f"Erro: Time '{team_name}' não encontrado.", err=True)

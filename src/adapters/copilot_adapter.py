@@ -162,7 +162,9 @@ class CopilotAdapter(AIAgentAdapter):
             caption: str = Field(description="Legenda da imagem")
 
         class LearnLessonParams(BaseModel):
-            category: str = Field(description="Categoria: bug, retrabalho, timeout, padrao, processo")
+            category: str = Field(
+                description="Categoria: bug, retrabalho, timeout, padrao, processo"
+            )
             problem: str = Field(description="Descricao do problema")
             solution: str = Field(description="Solucao aplicada")
 
@@ -175,7 +177,9 @@ class CopilotAdapter(AIAgentAdapter):
                 {"agent_name": params.agent_name, "task_description": params.task_description},
             )
 
-        @define_tool(description="Reporta progresso ao usuario. Use para informar o que esta fazendo.")
+        @define_tool(
+            description="Reporta progresso ao usuario. Use para informar o que esta fazendo."
+        )
         async def report_progress(params: ReportProgressParams) -> str:
             return await server.handle_tool_call("report_progress", {"message": params.message})
 
@@ -219,7 +223,11 @@ class CopilotAdapter(AIAgentAdapter):
         async def learn_lesson(params: LearnLessonParams) -> str:
             return await server.handle_tool_call(
                 "learn_lesson",
-                {"category": params.category, "problem": params.problem, "solution": params.solution},
+                {
+                    "category": params.category,
+                    "problem": params.problem,
+                    "solution": params.solution,
+                },
             )
 
         self._tools = [
@@ -338,7 +346,9 @@ class CopilotAdapter(AIAgentAdapter):
             timeout = context.get("timeout", self._timeout)
             logger.info(
                 "[%s] Chamando _execute_copilot (demand=%s, timeout=%s)",
-                agent_name, demand_id, timeout,
+                agent_name,
+                demand_id,
+                timeout,
             )
 
             resultado = await self._execute_copilot(
@@ -381,12 +391,14 @@ class CopilotAdapter(AIAgentAdapter):
             try:
                 logger.info(
                     "[%s] Tentativa %d/%d: criando session...",
-                    agent_name, attempt + 1, self.MAX_RETRIES + 1,
+                    agent_name,
+                    attempt + 1,
+                    self.MAX_RETRIES + 1,
                 )
-                session = await self._get_or_create_session(
-                    demand_id, model, agent_name
+                session = await self._get_or_create_session(demand_id, model, agent_name)
+                logger.info(
+                    "[%s] Session OK, enviando prompt (%d chars)...", agent_name, len(prompt)
                 )
-                logger.info("[%s] Session OK, enviando prompt (%d chars)...", agent_name, len(prompt))
 
                 response = await session.send_and_wait(
                     {"prompt": prompt}, timeout=effective_timeout

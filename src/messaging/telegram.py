@@ -202,7 +202,11 @@ class TelegramMessageBus(MessageBus):
     def _is_authorized(self, chat_id: str) -> bool:
         """Verifica se o chat_id está autorizado a interagir com o bot."""
         if not self._allowed_chat_id:
-            return True
+            logger.warning(
+                "TELEGRAM_CHAT_ID não configurado — rejeitando mensagem de %s",
+                chat_id,
+            )
+            return False
         return chat_id == self._allowed_chat_id
 
     async def _detect_forum_mode(self) -> None:

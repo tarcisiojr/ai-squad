@@ -1,5 +1,6 @@
 """Factory para instanciação de providers via configuração."""
 
+import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -9,6 +10,8 @@ import yaml
 
 from src.adapters.interface import AIAgentAdapter
 from src.messaging.interface import MessageBus
+
+logger = logging.getLogger("ai-squad.factory")
 
 # Prefixo de placeholder para tokens não preenchidos
 _PLACEHOLDER_PREFIX = "PREENCHA_AQUI_"
@@ -313,3 +316,136 @@ class PlatformFactory:
         if config.ai_model and "model" not in kwargs:
             kwargs["model"] = config.ai_model
         return self._ai_adapter_providers[provider](**kwargs)
+
+    @staticmethod
+    def create_adapter_for_provider(
+        config: PlatformConfig,
+        *,
+        working_dir: str,
+        agents_dir: str,
+        global_skills_dir: str,
+        state_dir: str = "",
+        stderr_to_log: bool = False,
+    ) -> AIAgentAdapter:
+        """Cria adapter de IA baseado no provider configurado.
+
+        Realiza import condicional das classes concretas internamente,
+        mantendo o acoplamento com implementações dentro da factory.
+        """
+        kwargs: dict[str, Any] = {
+            "timeout": config.agent_timeout,
+            "working_dir": working_dir,
+            "allowed_tools": ["WebSearchTool"],
+            "agents_dir": agents_dir,
+            "global_skills_dir": global_skills_dir,
+        }
+
+        if config.ai_model:
+            kwargs["model"] = config.ai_model
+
+        provider = config.ai_provider
+
+        if provider == "copilot":
+            return PlatformFactory._create_copilot_adapter(kwargs)
+        elif provider == "agno":
+            return PlatformFactory._create_agno_adapter(kwargs, state_dir=state_dir)
+        else:
+            return PlatformFactory._create_claude_adapter(
+                kwargs,
+                config=config,
+                agents_dir=agents_dir,
+                stderr_to_log=stderr_to_log,
+            )
+
+    @staticmethod
+    def _create_claude_adapter(
+        kwargs: dict[str, Any],
+        *,
+        config: PlatformConfig,
+        agents_dir: str,
+        stderr_to_log: bool = False,
+    ) -> AIAgentAdapter:
+        """Cria adapter Claude Agent SDK."""
+        from src.adapters.claude_agent_sdk import ClaudeAgentSDKAdapter
+
+        logger.info("Usando adapter: Claude Agent SDK (model: %s)", config.ai_model)
+        adapter = ClaudeAgentSDKAdapter(**kwargs)
+
+        # No modo TUI, redireciona stderr do subprocess para log
+        if stderr_to_log:
+            adapter._stderr_to_log = True
+
+        # Configura subagentes nativos do SDK a partir dos AGENTS.md
+        agent_defs = PlatformFactory._build_agent_definitions(config, agents_dir)
+        if agent_defs:
+            adapter.set_agent_definitions(agent_defs)
+            logger.info("Subagentes configurados: %s", list(agent_defs.keys()))
+
+        return adapter
+
+    @staticmethod
+    def _create_copilot_adapter(kwargs: dict[str, Any]) -> AIAgentAdapter:
+        """Cria adapter Copilot SDK (import condicional)."""
+        try:
+            from src.adapters.copilot_adapter import CopilotAdapter
+        except ImportError as e:
+            logger.error(
+                "Provider 'copilot' selecionado mas dependencias nao instaladas. "
+                "Instale com: pip install -e '.[copilot]': %s",
+                e,
+            )
+            raise RuntimeError(
+                "Dependencias do Copilot SDK nao instaladas. Use: pip install -e '.[copilot]'"
+            ) from e
+
+        logger.info("Usando adapter: Copilot SDK")
+        return CopilotAdapter(**kwargs)
+
+    @staticmethod
+    def _create_agno_adapter(kwargs: dict[str, Any], *, state_dir: str = "") -> AIAgentAdapter:
+        """Cria adapter Agno (import condicional)."""
+        try:
+            from src.adapters.agno_adapter import AgnoAdapter
+        except ImportError as e:
+            logger.error(
+                "Provider 'agno' selecionado mas dependencias nao instaladas. "
+                "Instale com: pip install -e '.[agno]': %s",
+                e,
+            )
+            raise RuntimeError(
+                "Dependencias do Agno nao instaladas. Use: pip install -e '.[agno]'"
+            ) from e
+
+        kwargs["state_dir"] = state_dir
+        logger.info("Usando adapter: Agno")
+        return AgnoAdapter(**kwargs)
+
+    @staticmethod
+    def _build_agent_definitions(config: PlatformConfig, agents_dir: str) -> dict:
+        """Constroi AgentDefinition para cada agente a partir dos AGENTS.md."""
+        from claude_agent_sdk import AgentDefinition
+
+        agents_path = Path(agents_dir)
+        defs = {}
+
+        if not config.agents:
+            return defs
+
+        for agent_id, agent_cfg in config.agents.items():
+            agents_md_path = agents_path / agent_id / "AGENTS.md"
+            prompt = ""
+            if agents_md_path.exists():
+                try:
+                    prompt = agents_md_path.read_text(encoding="utf-8")
+                except (OSError, UnicodeDecodeError):
+                    prompt = f"Voce e o agente {agent_cfg.name}."
+
+            if not prompt:
+                prompt = f"Voce e o agente {agent_cfg.name}."
+
+            defs[agent_id] = AgentDefinition(
+                description=f"{agent_cfg.avatar} {agent_cfg.name}",
+                prompt=prompt,
+            )
+
+        return defs

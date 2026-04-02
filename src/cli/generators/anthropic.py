@@ -33,8 +33,7 @@ class AnthropicGenerator(GeneratorProvider):
             import anthropic
         except ImportError:
             raise ImportError(
-                "Pacote 'anthropic' não encontrado. "
-                "Instale com: pip install anthropic"
+                "Pacote 'anthropic' não encontrado. Instale com: pip install anthropic"
             )
 
         client = anthropic.Anthropic(api_key=self._token)
@@ -44,9 +43,7 @@ class AnthropicGenerator(GeneratorProvider):
             messages=[{"role": "user", "content": prompt}],
         )
 
-        return "\n".join(
-            block.text for block in message.content if block.type == "text"
-        )
+        return "\n".join(block.text for block in message.content if block.type == "text")
 
     def _generate_with_claude_sdk(self, prompt: str) -> str:
         """Autenticação via OAuth token usando claude-agent-sdk."""

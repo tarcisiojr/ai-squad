@@ -384,6 +384,36 @@ class PipelineExecutor:
             step_state.agent_status[agent_name] = status
             self._save_state(state)
 
+    def _format_step_state(
+        self,
+        step: StepConfig,
+        step_state: StepState | None,
+    ) -> str:
+        """Formata ícone de um step individual para a barra de progresso.
+
+        Retorna representação compacta como '[✅ Spec]' ou '[🔄 Dev (1/3)]'.
+        """
+        if not step_state:
+            return f"[⏳ {step.name}]"
+
+        status_icon = {
+            "completed": "✅",
+            "running": "🔄",
+            "checkpoint": "⏸️",
+            "failed": "❌",
+            "skipped": "⏭️",
+            "pending": "⏳",
+        }.get(step_state.status, "⏳")
+
+        suffix = "*" if step.is_checkpoint else ""
+        extra = ""
+        if step_state.review_cycle > 0:
+            step_config = self._pipeline.get_step(step.id)
+            max_cycles = step_config.max_review_cycles if step_config else 3
+            extra = f" ({step_state.review_cycle}/{max_cycles})"
+
+        return f"[{status_icon} {step.name}{suffix}{extra}]"
+
     def format_state_for_prompt(self, demand_id: str) -> str:
         """Formata estado do pipeline para injeção no prompt do Squad Lead.
 
@@ -404,31 +434,9 @@ class PipelineExecutor:
         ]
 
         # Barra visual de progresso
-        step_icons = []
-        for step in self._pipeline.steps:
-            ss = state.steps.get(step.id)
-            if not ss:
-                step_icons.append(f"[⏳ {step.name}]")
-                continue
-
-            status_icon = {
-                "completed": "✅",
-                "running": "🔄",
-                "checkpoint": "⏸️",
-                "failed": "❌",
-                "skipped": "⏭️",
-                "pending": "⏳",
-            }.get(ss.status, "⏳")
-
-            suffix = "*" if step.is_checkpoint else ""
-            extra = ""
-            if ss.review_cycle > 0:
-                step_config = self._pipeline.get_step(step.id)
-                max_cycles = step_config.max_review_cycles if step_config else 3
-                extra = f" ({ss.review_cycle}/{max_cycles})"
-
-            step_icons.append(f"[{status_icon} {step.name}{suffix}{extra}]")
-
+        step_icons = [
+            self._format_step_state(step, state.steps.get(step.id)) for step in self._pipeline.steps
+        ]
         lines.append(" → ".join(step_icons))
 
         # Detalhes do step atual

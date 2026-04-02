@@ -150,11 +150,11 @@ class TestTelegramMessageBus:
 class TestTelegramAccessControl:
     """Testes de controle de acesso por chat_id."""
 
-    def test_is_authorized_sem_restricao(self):
-        """Sem allowed_chat_id, qualquer chat é autorizado."""
+    def test_is_authorized_sem_restricao_rejeita(self):
+        """Sem allowed_chat_id configurado, rejeita qualquer chat (fail-closed)."""
         bus = TelegramMessageBus(token="fake-token")
-        assert bus._is_authorized("12345") is True
-        assert bus._is_authorized("99999") is True
+        assert bus._is_authorized("12345") is False
+        assert bus._is_authorized("99999") is False
 
     def test_is_authorized_com_restricao(self):
         """Com allowed_chat_id, apenas o chat configurado é autorizado."""

@@ -91,3 +91,30 @@ class TestStateManager:
 
         state = state_mgr.get_state("demand-1")
         assert state == "dev_working"
+
+    @pytest.mark.parametrize(
+        "demand_id",
+        ["my-demand-123", "test_id", "ABC", "simples", "a1-b2_c3"],
+    )
+    def test_demand_id_valido_aceito(self, state_mgr, demand_id):
+        """Verifica que demand_ids válidos são aceitos sem erro."""
+        state_mgr.set_state(demand_id, "idle")
+        assert state_mgr.get_state(demand_id) == "idle"
+
+    @pytest.mark.parametrize(
+        "demand_id",
+        ["../../etc/passwd", "../hack", "foo/bar", "a b", "id;rm", ""],
+    )
+    def test_demand_id_path_traversal_rejeita(self, state_mgr, demand_id):
+        """Verifica que tentativas de path traversal levantam ValueError."""
+        with pytest.raises(ValueError, match="demand_id inválido"):
+            state_mgr.set_state(demand_id, "idle")
+
+    @pytest.mark.parametrize(
+        "demand_id",
+        ["../../etc/passwd", "../hack", "foo/bar"],
+    )
+    def test_get_state_path_traversal_rejeita(self, state_mgr, demand_id):
+        """Verifica que get_state também rejeita ids maliciosos."""
+        with pytest.raises(ValueError, match="demand_id inválido"):
+            state_mgr.get_state(demand_id)

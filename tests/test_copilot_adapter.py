@@ -1,12 +1,17 @@
 """Testes para CopilotAdapter."""
 
 import asyncio
+import importlib
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from src.adapters.interface import AIAgentAdapter
 from src.models import AgentStatus
+
+# Pula todos os testes se o módulo copilot não está instalado
+_has_copilot = importlib.util.find_spec("copilot") is not None
+pytestmark = pytest.mark.skipif(not _has_copilot, reason="copilot SDK não instalado")
 
 
 # --- Mock do Copilot SDK ---
@@ -444,19 +449,13 @@ class TestCopilotAdapterShutdown:
 
 
 class TestDaemonCopilotAdapter:
-    """Testes de criação do adapter no daemon."""
+    """Testes de criação do adapter via PlatformFactory."""
 
     def test_create_copilot_adapter_sem_dependencia(self):
         """Verifica erro claro quando github-copilot-sdk não está instalado."""
-        from unittest.mock import PropertyMock
-
-        from src.daemon import Daemon
-
-        daemon = Daemon.__new__(Daemon)
-        daemon._config = MagicMock()
-        daemon._config.ai_model = "claude-sonnet-4-6"
+        from src.factory import PlatformFactory
 
         # Simula ImportError
         with patch.dict("sys.modules", {"src.adapters.copilot_adapter": None}):
             with pytest.raises(RuntimeError, match="Copilot SDK"):
-                daemon._create_copilot_adapter({})
+                PlatformFactory._create_copilot_adapter({})

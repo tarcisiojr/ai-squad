@@ -1,9 +1,13 @@
 """Persistência de estado de demandas em JSON com escrita atômica."""
 
 import json
+import re
 from pathlib import Path
 
 from src.orchestrator.atomic_write import write_json_atomic
+
+# Padrão seguro para demand_id: apenas alfanuméricos, hífens e underscores
+_SAFE_ID = re.compile(r"^[a-zA-Z0-9_\-]+$")
 
 
 class StateManager:
@@ -20,8 +24,14 @@ class StateManager:
         self._state_dir = Path(state_dir)
         self._state_dir.mkdir(parents=True, exist_ok=True)
 
+    def _validate_id(self, demand_id: str) -> None:
+        """Valida que demand_id não contém caracteres perigosos (path traversal)."""
+        if not _SAFE_ID.match(demand_id):
+            raise ValueError(f"demand_id inválido: {demand_id!r}")
+
     def _state_path(self, demand_id: str) -> Path:
         """Retorna caminho do arquivo de estado de uma demanda."""
+        self._validate_id(demand_id)
         return self._state_dir / f"{demand_id}.json"
 
     def _load_data(self, path: Path) -> dict:

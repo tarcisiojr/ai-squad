@@ -34,6 +34,8 @@ def _write_atomic(path: Path, content: str) -> None:
         dir=str(path.parent),
         suffix=".tmp",
     )
+    # Restringe permissões antes de escrever conteúdo sensível
+    os.chmod(tmp_path, 0o600)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(content)

@@ -1,8 +1,10 @@
 """Gerenciador de times ai-squad."""
 
+import re
 import shutil
 from pathlib import Path
 
+import click
 import yaml
 
 from src.cli.templates.config import (
@@ -10,6 +12,18 @@ from src.cli.templates.config import (
     PLACEHOLDER_PREFIX,
     get_env_template,
 )
+
+# Padrão seguro para nomes de time: alfanumérico, _ e -, máx 64 caracteres
+_SAFE_TEAM_NAME = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_\-]{0,63}$")
+
+
+def validate_team_name(name: str) -> None:
+    """Valida nome do time para prevenir path traversal e injection."""
+    if not _SAFE_TEAM_NAME.match(name):
+        raise click.BadParameter(
+            f"Nome inválido: '{name}'. Use apenas letras, números, _ e - "
+            f"(máx 64 caracteres, começando com alfanumérico)."
+        )
 
 
 class TeamExistsError(Exception):

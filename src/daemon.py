@@ -9,13 +9,15 @@ import sys
 import unicodedata
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 
 from dotenv import load_dotenv
 
-from src.adapters.claude_agent_sdk import ClaudeAgentSDKAdapter
+if TYPE_CHECKING:
+    from src.path_resolver import PathResolver
+
 from src.adapters.interface import AIAgentAdapter
-from src.factory import AgentConfig, PlatformConfig, SquadLeadConfig
+from src.factory import AgentConfig, PlatformConfig, PlatformFactory, SquadLeadConfig
 from src.messaging.interface import MessageBus
 from src.messaging.registry import get as get_provider
 from src.messaging.registry import load_builtin_providers
@@ -114,106 +116,16 @@ class Daemon:
         return config
 
     def _create_adapter(self) -> AIAgentAdapter:
-        """Cria adapter de IA baseado no provider configurado."""
-        kwargs: dict[str, Any] = {
-            "timeout": self.config.agent_timeout,
-            "working_dir": str(self._paths.workspace),
-            "allowed_tools": ["WebSearchTool"],
-            "agents_dir": str(self._paths.agents_dir),
-            "global_skills_dir": str(self._paths.global_skills_dir),
-        }
-
-        if self.config.ai_model:
-            kwargs["model"] = self.config.ai_model
-
-        # Seleciona adapter baseado no provider configurado
-        creators = {
-            "copilot": self._create_copilot_adapter,
-            "agno": self._create_agno_adapter,
-        }
-        create = creators.get(self.config.ai_provider, self._create_claude_adapter)
-        return create(kwargs)
-
-    def _create_claude_adapter(self, kwargs: dict[str, Any]) -> AIAgentAdapter:
-        """Cria adapter Claude Agent SDK."""
-        logger.info("Usando adapter: Claude Agent SDK (model: %s)", self.config.ai_model)
-        adapter = ClaudeAgentSDKAdapter(**kwargs)
-
-        # No modo TUI, redireciona stderr do subprocess para log
-        if os.environ.get("MESSAGING_PROVIDER") == "tui":
-            adapter._stderr_to_log = True
-
-        # Configura subagentes nativos do SDK a partir dos AGENTS.md
-        agent_defs = self._build_agent_definitions()
-        if agent_defs:
-            adapter.set_agent_definitions(agent_defs)
-            logger.info("Subagentes configurados: %s", list(agent_defs.keys()))
-
-        return adapter
-
-    def _create_copilot_adapter(self, kwargs: dict[str, Any]) -> AIAgentAdapter:
-        """Cria adapter Copilot SDK (import condicional)."""
-        try:
-            from src.adapters.copilot_adapter import CopilotAdapter
-        except ImportError as e:
-            logger.error(
-                "Provider 'copilot' selecionado mas dependencias nao instaladas. "
-                "Instale com: pip install -e '.[copilot]': %s",
-                e,
-            )
-            raise RuntimeError(
-                "Dependencias do Copilot SDK nao instaladas. Use: pip install -e '.[copilot]'"
-            ) from e
-
-        logger.info("Usando adapter: Copilot SDK (model: %s)", self.config.ai_model)
-        return CopilotAdapter(**kwargs)
-
-    def _create_agno_adapter(self, kwargs: dict[str, Any]) -> AIAgentAdapter:
-        """Cria adapter Agno (import condicional)."""
-        try:
-            from src.adapters.agno_adapter import AgnoAdapter
-        except ImportError as e:
-            logger.error(
-                "Provider 'agno' selecionado mas dependencias nao instaladas. "
-                "Instale com: pip install -e '.[agno]': %s",
-                e,
-            )
-            raise RuntimeError(
-                "Dependencias do Agno nao instaladas. Use: pip install -e '.[agno]'"
-            ) from e
-
-        kwargs["state_dir"] = str(self._paths.state_dir)
-        logger.info("Usando adapter: Agno (model: %s)", self.config.ai_model)
-        return AgnoAdapter(**kwargs)
-
-    def _build_agent_definitions(self) -> dict:
-        """Constroi AgentDefinition para cada agente a partir dos AGENTS.md."""
-        from claude_agent_sdk import AgentDefinition
-
-        agents_dir = self._paths.agents_dir
-        defs = {}
-
-        if not self._config or not self.config.agents:
-            return defs
-
-        for agent_id, agent_cfg in self.config.agents.items():
-            agents_md_path = agents_dir / agent_id / "AGENTS.md"
-            prompt = ""
-            if agents_md_path.exists():
-                try:
-                    prompt = agents_md_path.read_text(encoding="utf-8")
-                except (OSError, UnicodeDecodeError):
-                    prompt = f"Voce e o agente {agent_cfg.name}."
-
-            if not prompt:
-                prompt = f"Voce e o agente {agent_cfg.name}."
-
-            defs[agent_id] = AgentDefinition(
-                description=f"{agent_cfg.avatar} {agent_cfg.name}",
-                prompt=prompt,
-            )
-
-        return defs
+        """Cria adapter de IA delegando para PlatformFactory."""
+        stderr_to_log = os.environ.get("MESSAGING_PROVIDER") == "tui"
+        return PlatformFactory.create_adapter_for_provider(
+            config=self.config,
+            working_dir=str(self._paths.workspace),
+            agents_dir=str(self._paths.agents_dir),
+            global_skills_dir=str(self._paths.global_skills_dir),
+            state_dir=str(self._paths.state_dir),
+            stderr_to_log=stderr_to_log,
+        )
 
     def _create_message_bus(self) -> MessageBus:
         """Cria instância de MessageBus via registry."""

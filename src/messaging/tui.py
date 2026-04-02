@@ -212,8 +212,10 @@ class TUIMessageBus(MessageBus):
         self._app: "SquadTUIApp | None" = None
         # Future para aguardar respostas de texto (ask_user/approval)
         self._pending_reply: asyncio.Future | None = None
-        # Personas registradas para exibir no status
+        # Personas registradas para exibir no painel
         self._personas: dict = {}
+        # Status de trabalho de cada agente (key -> label ou "")
+        self._agent_working: dict[str, str] = {}
         # Tasks ativas supervisionadas
         self._active_tasks: set[asyncio.Task] = set()
 
@@ -239,21 +241,14 @@ class TUIMessageBus(MessageBus):
 
         Usa TerminalGuard para garantir restauração do terminal em qualquer
         cenário de saída (erro, timeout, crash, SIGINT).
+
+        Não faz redirecionamento de fds do OS — Textual precisa de acesso
+        direto ao terminal para detectar tamanho e renderizar fullscreen.
         """
         if not self._app:
             return "no_app"
 
-        import logging as _logging
-
-        # Descobre caminho do log para redirecionamento
-        log_path = (
-            getattr(_logging.getLogger().handlers[0], "baseFilename", None)
-            if _logging.getLogger().handlers
-            else None
-        )
-
-        with TerminalGuard() as guard:
-            guard.redirect_fds(log_path)
+        with TerminalGuard():
             try:
                 await self._app.run_async()
             except Exception as e:
@@ -310,11 +305,23 @@ class TUIMessageBus(MessageBus):
         """Exibe mensagem no chat TUI."""
         sender = kwargs.pop("sender", "")
         label = sender or f"{self._persona_avatar} {self._persona_name}"
+        agent_key = self._find_agent_key(sender)
+
         if self._app:
-            # Limpa indicador de typing ao receber mensagem
+            # Feedback de "Trabalhando..." atualiza status line sem poluir chat
+            if agent_key and text.startswith("Trabalhando..."):
+                self._agent_working[agent_key] = text
+                self._app.set_typing(None)
+                return
+
             self._app.set_typing(None)
             self._app.append_chat(label, text)
             self._app.refocus_input()
+
+            # Marca agente como idle ao entregar resultado
+            if agent_key:
+                self._agent_working[agent_key] = ""
+                self._app.set_typing(None)
 
     async def send_approval_request(
         self,
@@ -366,9 +373,22 @@ class TUIMessageBus(MessageBus):
             self._app.append_chat("🔔 Notificação", text)
 
     async def send_typing(self, user_id: str, *, thread_id: str | None = None) -> None:
-        """Mostra indicador de 'trabalhando' na barra de status."""
+        """Mostra indicador de 'trabalhando' no painel de agentes."""
         if self._app:
             self._app.set_typing("Processando...")
+
+    def _find_agent_key(self, sender: str) -> str | None:
+        """Encontra a key do agente pelo nome/avatar no sender label."""
+        if not sender:
+            return None
+        for key, persona in self._personas.items():
+            if key == "squad-lead":
+                continue
+            avatar = getattr(persona, "avatar", "")
+            name = getattr(persona, "name", key)
+            if avatar in sender and name in sender:
+                return key
+        return None
 
     # --- Internals ---
 
@@ -479,7 +499,7 @@ class SquadTUIApp:
             pass
 
     def set_typing(self, label: str | None) -> None:
-        """Atualiza indicador de 'trabalhando' na barra de status."""
+        """Atualiza painel de agentes."""
         if not self._inner_app or not self._inner_app.is_running:
             return
         try:
@@ -491,75 +511,69 @@ class SquadTUIApp:
         """Inicia o app Textual — este é o loop principal do terminal."""
         from textual.app import App, ComposeResult
         from textual.binding import Binding
-        from textual.containers import Horizontal, Vertical
-        from textual.widgets import Footer, Header, Input, RichLog, Static
+        from textual.containers import Horizontal
+        from textual.widgets import Input, RichLog, Static
 
         bus = self._bus
 
         class _InnerTUIApp(App):
-            """App Textual interno."""
+            """App Textual interno — design minimalista."""
 
             ENABLE_COMMAND_PALETTE = False
 
             CSS = """
+            Screen {
+                background: #000000;
+            }
             #chat {
                 height: 1fr;
-                border: solid $primary;
                 padding: 0 1;
+                scrollbar-size: 1 1;
+                background: #000000;
+            }
+            #status-line {
+                height: 1;
+                color: $text-muted;
+                padding: 0 1;
+                background: #000000;
             }
             #input-row {
-                height: 3;
-                dock: bottom;
+                height: auto;
+                max-height: 5;
+                padding: 0 1;
+                background: #000000;
             }
             #input-prompt {
                 width: 3;
-                height: 3;
-                content-align: right middle;
-                padding: 0;
+                height: 1;
+                color: $accent;
             }
             #input-box {
                 width: 1fr;
                 border: none;
+                background: #000000;
             }
             #input-box:focus {
                 border: none;
             }
-            #status-bar {
-                height: 1;
-                dock: bottom;
-                background: $surface;
-                color: $text-muted;
-                padding: 0 1;
-            }
-            #typing-indicator {
-                width: 1fr;
-            }
-            #agents-status {
-                width: auto;
-            }
             """
 
-            TITLE = bus._team_name
+            TITLE = f"ai-squad ({bus._team_name})"
             BINDINGS = [
-                Binding("ctrl+c", "quit", "Sair"),
-                Binding("pageup", "scroll_up", "↑ Chat", show=True),
-                Binding("pagedown", "scroll_down", "↓ Chat", show=True),
+                Binding("ctrl+c", "quit", "Sair", show=False),
+                Binding("pageup", "scroll_up", show=False),
+                Binding("pagedown", "scroll_down", show=False),
             ]
 
             def compose(self) -> ComposeResult:
-                yield Header()
-                with Vertical():
-                    yield RichLog(id="chat", wrap=True, highlight=True, markup=True)
-                    with Horizontal(id="status-bar"):
-                        yield Static("", id="typing-indicator")
-                        yield Static(self._build_agents_status(), id="agents-status")
-                    with Horizontal(id="input-row"):
-                        yield Static("> ", id="input-prompt")
-                        yield Input(id="input-box")
-                yield Footer()
+                yield RichLog(id="chat", wrap=True, highlight=True, markup=True)
+                yield Static(self._build_status_line(), id="status-line")
+                with Horizontal(id="input-row"):
+                    yield Static("❯ ", id="input-prompt")
+                    yield Input(id="input-box", placeholder="Digite sua mensagem...")
 
-            def _build_agents_status(self) -> str:
-                """Monta texto de status dos agentes a partir das personas."""
+            def _build_status_line(self) -> str:
+                """Monta status line com agentes e quem está trabalhando."""
                 personas = bus._personas
                 if not personas:
                     return ""
@@ -569,57 +583,51 @@ class SquadTUIApp:
                         continue
                     avatar = getattr(persona, "avatar", "")
                     name = getattr(persona, "name", key)
-                    parts.append(f"{avatar} {name}")
-                if not parts:
-                    return ""
-                return "Agentes: " + " · ".join(parts)
+                    status = bus._agent_working.get(key, "")
+                    if status:
+                        parts.append(f"{avatar}{name} [italic]⏳[/italic]")
+                    else:
+                        parts.append(f"[dim]{avatar}{name}[/dim]")
+                return " · ".join(parts)
 
             def on_mount(self) -> None:
-                """Foco no input ao iniciar."""
                 self.query_one("#input-box", Input).focus()
                 chat = self.query_one("#chat", RichLog)
-                chat.write("[dim]Bem-vindo ao ai-squad TUI.[/dim]")
-                chat.write("[dim]PageUp/PageDown para rolar · /help · /status · /quit[/dim]\n")
+                team = bus._team_name
+                chat.write(f"[bold]ai-squad[/bold] [dim]({team})[/dim]")
+                chat.write("[dim]PageUp/Down para rolar · /quit para sair[/dim]\n")
 
             async def on_input_submitted(self, event: Input.Submitted) -> None:
-                """Processa input do usuário."""
                 text = event.value.strip()
                 if not text:
                     return
-
                 event.input.clear()
-
                 if text.lower() in ("/quit", "/exit"):
                     self.exit()
                     return
-
                 await bus._on_user_input(text)
 
             def action_scroll_up(self) -> None:
-                """Rola o chat para cima."""
                 self.query_one("#chat", RichLog).scroll_up(animate=False)
 
             def action_scroll_down(self) -> None:
-                """Rola o chat para baixo."""
                 self.query_one("#chat", RichLog).scroll_down(animate=False)
 
             def do_append_chat(self, sender: str, text: str) -> None:
-                """Adiciona mensagem ao RichLog."""
                 chat = self.query_one("#chat", RichLog)
                 chat.write(f"\n[bold]{sender}[/bold]")
                 chat.write(text)
 
             def do_refocus_input(self) -> None:
-                """Recoloca foco no campo de input."""
                 self.query_one("#input-box", Input).focus()
 
             def do_set_typing(self, label: str | None) -> None:
-                """Atualiza indicador de typing na barra de status."""
-                indicator = self.query_one("#typing-indicator", Static)
-                if label:
-                    indicator.update(f"[italic]⏳ {label}[/italic]")
-                else:
-                    indicator.update("")
+                """Atualiza status line com estado dos agentes."""
+                try:
+                    status = self.query_one("#status-line", Static)
+                    status.update(self._build_status_line())
+                except Exception:
+                    pass
 
         self._inner_app = _InnerTUIApp()
         await self._inner_app.run_async()

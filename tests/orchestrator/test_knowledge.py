@@ -327,8 +327,10 @@ class TestKnowledgeStore:
         results = store.search("impressora imprime")
         assert len(results) >= 1
 
-    def test_fallback_fts5_quando_qmd_indisponivel(self, kb_dir):
+    def test_fallback_fts5_quando_qmd_indisponivel(self, kb_dir, monkeypatch):
         """Verifica que use_qmd=True faz fallback para FTS5 quando qmd não está instalado."""
+        # Simula qmd não instalado para evitar subprocess lento
+        monkeypatch.setattr("shutil.which", lambda cmd: None)
         store = KnowledgeStore(kb_dir, use_qmd=True)
         # Deve funcionar mesmo sem qmd (fallback FTS5)
         store.reindex_all()

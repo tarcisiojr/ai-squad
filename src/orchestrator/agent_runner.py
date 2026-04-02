@@ -4,10 +4,13 @@ Responsável por iniciar, monitorar e verificar agentes que rodam
 como asyncio tasks em background.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import time
 from collections.abc import Callable, Coroutine
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Awaitable
 
@@ -31,6 +34,24 @@ from src.orchestrator.tools import RunningAgent
 logger = logging.getLogger("ai-squad.agent-runner")
 
 
+@dataclass(frozen=True)
+class RunnerContext:
+    """Agrupa dependências do AgentRunner para reduzir parâmetros do construtor."""
+
+    adapter: AIAgentAdapter
+    message_bus: MessageBus
+    personas: dict
+    agents_dir: Path
+    workspace: str
+    agent_timeout: int
+    context_collector: WorkspaceContextCollector
+    conversation: ConversationStore
+    journal: JournalStore
+    lessons: LessonsStore
+    daily_notes: DailyNotes
+    state_manager: StateManager
+
+
 class AgentRunner:
     """Gerencia agentes em background: start, retry, verificação e status.
 
@@ -40,33 +61,11 @@ class AgentRunner:
 
     def __init__(
         self,
-        adapter: AIAgentAdapter,
-        message_bus: MessageBus,
-        personas: dict,
-        agents_dir: Path,
-        workspace: str,
-        agent_timeout: int,
-        context_collector: WorkspaceContextCollector,
-        conversation: ConversationStore,
-        journal: JournalStore,
-        lessons: LessonsStore,
-        daily_notes: DailyNotes,
-        state_manager: StateManager,
-        on_squad_lead_trigger: Callable[["RunningAgent", str], Awaitable[None]],
+        ctx: RunnerContext,
+        on_squad_lead_trigger: Callable[[RunningAgent, str], Awaitable[None]],
         keep_typing_callback: Callable[[str, str], Coroutine[Any, Any, None]],
     ) -> None:
-        self._adapter = adapter
-        self._message_bus = message_bus
-        self._personas = personas
-        self._agents_dir = agents_dir
-        self._workspace = workspace
-        self._agent_timeout = agent_timeout
-        self._context_collector = context_collector
-        self._conversation = conversation
-        self._journal = journal
-        self._lessons = lessons
-        self._daily_notes = daily_notes
-        self._state_manager = state_manager
+        self._ctx = ctx
         self._on_squad_lead_trigger = on_squad_lead_trigger
         self._keep_typing_and_feedback = keep_typing_callback
         self._light_model: str | None = None
@@ -130,21 +129,21 @@ class AgentRunner:
 
     def get_agent_label(self, agent_name: str) -> str:
         """Retorna label do agente a partir das personas da config."""
-        return _get_agent_label(agent_name, self._personas)
+        return _get_agent_label(agent_name, self._ctx.personas)
 
     def _get_agent_timeout(self, agent_name: str) -> int:
         """Retorna timeout especifico por agente.
 
         Prioridade: config do agente (timeout no config.yaml) > agent_timeout padrao
         """
-        persona = self._personas.get(agent_name)
+        persona = self._ctx.personas.get(agent_name)
         if persona and hasattr(persona, "timeout") and persona.timeout > 0:
             return persona.timeout
-        return self._agent_timeout
+        return self._ctx.agent_timeout
 
     def _read_agents_md(self, agent_name: str) -> str:
         """Le o AGENTS.md de um agente."""
-        return read_agents_md(agent_name, self._agents_dir)
+        return read_agents_md(agent_name, self._ctx.agents_dir)
 
     @staticmethod
     def _format_elapsed(seconds: int) -> str:
@@ -206,7 +205,7 @@ class AgentRunner:
         timeout = self._get_agent_timeout(agent_name)
 
         # Injeta licoes aprendidas relevantes no prompt do agente
-        lessons = self._lessons.format_for_prompt(prompt)
+        lessons = self._ctx.lessons.format_for_prompt(prompt)
         if lessons:
             agents_md = f"{agents_md}\n\n{lessons}"
 
@@ -226,7 +225,7 @@ class AgentRunner:
         logger.info("[%s] Timeout configurado: %ds", agent_name, timeout)
 
         # Coleta contexto do projeto + submodulos do agente
-        persona = self._personas.get(agent_name)
+        persona = self._ctx.personas.get(agent_name)
         submodule_paths = []
         if persona and hasattr(persona, "submodules") and persona.submodules:
             submodule_paths = [sub.path for sub in persona.submodules if sub.path]
@@ -236,11 +235,11 @@ class AgentRunner:
         context_parts = []
         if submodule_paths:
             for sub_path in submodule_paths:
-                sub_ctx = self._context_collector.collect(submodule_path=sub_path)
+                sub_ctx = self._ctx.context_collector.collect(submodule_path=sub_path)
                 if sub_ctx:
                     context_parts.append(sub_ctx)
         else:
-            base_ctx = self._context_collector.collect()
+            base_ctx = self._ctx.context_collector.collect()
             if base_ctx:
                 context_parts.append(base_ctx)
 
@@ -249,14 +248,14 @@ class AgentRunner:
 
         # Cria diretorio de specs (apenas para agentes de trabalho, não para squad-lead)
         if agent_name != "squad-lead":
-            specs_dir = Path(self._workspace) / "specs" / demand_id
+            specs_dir = Path(self._ctx.workspace) / "specs" / demand_id
             specs_dir.mkdir(parents=True, exist_ok=True)
 
         # Inicia typing + feedback background para este agente
         typing_task = asyncio.create_task(self._keep_typing_and_feedback(user_id, agent_name))
 
         try:
-            resultado = await self._adapter.run(prompt, context)
+            resultado = await self._ctx.adapter.run(prompt, context)
         finally:
             typing_task.cancel()
 
@@ -278,14 +277,14 @@ class AgentRunner:
             logger.info("[%s] Agente concluiu em background", agent_name)
 
             # Registra na nota diária
-            self._daily_notes.add_agent_event(
+            self._ctx.daily_notes.add_agent_event(
                 agent_name,
                 f"Concluiu com sucesso ({running.elapsed_str()})",
             )
 
             # Registra no journal
             if running.demand_id:
-                self._journal.add_decision(
+                self._ctx.journal.add_decision(
                     running.demand_id,
                     f"{agent_name}_completed",
                     f"Agente concluiu em {running.elapsed_str()}",
@@ -297,14 +296,14 @@ class AgentRunner:
 
             # Salva resultado do agente no historico de conversa
             if running.demand_id:
-                self._conversation.save_message(
+                self._ctx.conversation.save_message(
                     running.demand_id,
                     "assistant",
                     f"{agent_name} concluiu: {preview[:500]}",
                     agent_name=agent_name,
                 )
 
-            await self._message_bus.send_message(
+            await self._ctx.message_bus.send_message(
                 user_id,
                 f"Concluido!\n\n{preview}",
                 sender=label,  # type: ignore[call-arg]
@@ -323,13 +322,13 @@ class AgentRunner:
             logger.error("[%s] Agente falhou em background: %s", agent_name, e)
 
             # Registra erro na nota diária
-            self._daily_notes.add_agent_event(
+            self._ctx.daily_notes.add_agent_event(
                 agent_name,
                 f"Erro: {str(e)[:100]}",
             )
 
             # Registra licao aprendida com o erro
-            self._lessons.add(
+            self._ctx.lessons.add(
                 category="bug",
                 problem=f"{agent_name} falhou com erro: {str(e)[:200]}",
                 solution=f"Verificar prerequisitos antes de iniciar {agent_name}",
@@ -337,7 +336,7 @@ class AgentRunner:
                 demand_id=running.demand_id,
             )
 
-            await self._message_bus.send_message(
+            await self._ctx.message_bus.send_message(
                 user_id,
                 f"Erro: {e}",
                 sender=label,  # type: ignore[call-arg]
@@ -351,13 +350,13 @@ class AgentRunner:
 
     def get_status(self) -> str:
         """Retorna status formatado de todos os agentes."""
-        return get_running_agents_status(self._running_agents, self._personas)
+        return get_running_agents_status(self._running_agents, self._ctx.personas)
 
     def get_demand_state_summary(self) -> str:
         """Retorna resumo do estado de todas as demandas ativas."""
         return get_demand_state_summary(
-            self._journal,
-            self._state_manager,
+            self._ctx.journal,
+            self._ctx.state_manager,
             self._running_agents,
-            self._personas,
+            self._ctx.personas,
         )

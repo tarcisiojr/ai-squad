@@ -30,6 +30,7 @@ dependencies = [
     "python-dotenv>=1.0",
     "claude-agent-sdk>=0.1",
     "aiohttp>=3.9",
+    "textual>=0.40",
 ]
 
 [project.urls]
@@ -52,9 +53,6 @@ agno = [
 ]
 copilot = [
     "github-copilot-sdk>=0.1",
-]
-tui = [
-    "textual>=0.40",
 ]
 generate = [
     "anthropic>=0.40",
