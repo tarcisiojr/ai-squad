@@ -454,6 +454,7 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
 
         # Captura stderr do subprocess via callback (evita poluir o terminal no modo TUI)
         if self._stderr_to_log:
+
             def _log_stderr(line: str) -> None:
                 logger.debug("[claude-cli] %s", line.rstrip())
 
@@ -484,10 +485,6 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
         if conversation_id and conversation_id in self._sessions:
             kwargs["resume"] = self._sessions[conversation_id]
             logger.info("Retomando sessao: %s", conversation_id)
-
-        # Subagentes do Squad Lead
-        if self._agent_definitions:
-            kwargs["agents"] = self._agent_definitions
 
         return ClaudeAgentOptions(**kwargs)
 

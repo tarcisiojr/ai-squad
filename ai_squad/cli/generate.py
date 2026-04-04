@@ -126,7 +126,9 @@ def _write_agents(squad_dir: Path, generated: dict[str, Any]) -> None:
         agent_dir = squad_dir / "agents" / agent_name
         agent_dir.mkdir(parents=True)
 
-        agents_md: str = agent_data.get("agents_md", f"# {agent_data.get('display_name', agent_name)}\n")
+        agents_md: str = agent_data.get(
+            "agents_md", f"# {agent_data.get('display_name', agent_name)}\n"
+        )
         (agent_dir / "AGENTS.md").write_text(agents_md, encoding="utf-8")
 
     # Squad Lead (sempre obrigatório)

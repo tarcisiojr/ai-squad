@@ -40,6 +40,12 @@ def read_agents_md(agent_name: str, agents_dir: Path) -> str:
 def get_agents_summary(personas: dict[str, Any], agents_dir: Path) -> str:
     """Gera resumo de todos os agentes para o prompt do Squad Lead."""
     lines = ["## Agentes disponiveis\n"]
+    lines.append(
+        "IMPORTANTE: Para delegar trabalho a qualquer agente abaixo, "
+        "use a tool `start_agent(agent_name, task_description)`. "
+        "NUNCA execute o trabalho dos agentes voce mesmo — "
+        "sempre delegue usando start_agent.\n"
+    )
 
     for agent_id, config in personas.items():
         agents_md = read_agents_md(agent_id, agents_dir)
@@ -306,6 +312,17 @@ def build_squad_lead_prompt(
     # Contexto do projeto
     if workspace_context:
         prompt_parts.append(f"## Contexto do Projeto\n\n{workspace_context}")
+
+    # Regra de delegacao
+    prompt_parts.append(
+        "## Regra de delegacao\n\n"
+        "Voce e o Squad Lead — seu papel e COORDENAR, nao EXECUTAR.\n"
+        "- SEMPRE use a tool `start_agent(agent_name, task_description)` para delegar trabalho.\n"
+        "- NUNCA execute tarefas tecnicas diretamente (analise, codigo, testes, revisao, etc).\n"
+        "- Apos iniciar um agente, use `get_running_agents()` para acompanhar o progresso.\n"
+        "- Aguarde o resultado do agente antes de prosseguir para o proximo passo.\n"
+        "- Voce pode iniciar multiplos agentes em paralelo quando as tarefas sao independentes."
+    )
 
     # Regra de comunicação
     prompt_parts.append(

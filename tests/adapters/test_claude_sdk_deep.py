@@ -139,8 +139,8 @@ class TestBuildOptionsResume:
             kwargs = mock_opts.call_args[1]
             assert "resume" not in kwargs
 
-    def test_options_com_agent_definitions(self):
-        """Agent definitions são passadas nas opções."""
+    def test_options_sem_agent_definitions_nativas(self):
+        """Agent definitions nao sao passadas nas opcoes — delegacao via MCP start_agent."""
         adapter = ClaudeAgentSDKAdapter()
         mock_defs = {"po": MagicMock(), "dev": MagicMock()}
         adapter.set_agent_definitions(mock_defs)
@@ -148,7 +148,7 @@ class TestBuildOptionsResume:
         with patch("ai_squad.adapters.claude_agent_sdk.ClaudeAgentOptions") as mock_opts:
             adapter._build_options()
             kwargs = mock_opts.call_args[1]
-            assert kwargs["agents"] == mock_defs
+            assert "agents" not in kwargs
 
 
 class TestRunWithModelOverride:

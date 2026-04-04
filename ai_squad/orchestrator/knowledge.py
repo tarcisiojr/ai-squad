@@ -186,7 +186,9 @@ class FTS5Backend(KnowledgeBackend):
         meta, body = parse_frontmatter(raw)
         title = _extract_title(body) or doc_path.stem
         raw_tags: Any = meta.get("tags", [])
-        typed_tags: list[Any] = cast(list[Any], raw_tags) if isinstance(raw_tags, list) else [raw_tags]
+        typed_tags: list[Any] = (
+            cast(list[Any], raw_tags) if isinstance(raw_tags, list) else [raw_tags]
+        )
         tags_str: str = " ".join(str(t) for t in typed_tags)
         score = int(meta.get("score", 0))
         rel_path = str(doc_path.relative_to(self._knowledge_dir))

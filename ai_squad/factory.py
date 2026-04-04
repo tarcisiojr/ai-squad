@@ -380,12 +380,6 @@ class PlatformFactory:
         if stderr_to_log:
             adapter.stderr_to_log = True
 
-        # Configura subagentes nativos do SDK a partir dos AGENTS.md
-        agent_defs = PlatformFactory._build_agent_definitions(config, agents_dir)
-        if agent_defs:
-            adapter.set_agent_definitions(agent_defs)
-            logger.info("Subagentes configurados: %s", list(agent_defs.keys()))
-
         return adapter
 
     @staticmethod
