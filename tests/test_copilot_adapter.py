@@ -7,6 +7,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ai_squad.adapters.interface import AIAgentAdapter
+from ai_squad.common.events import (
+    EVENT_GET_PIPELINE_STATE,
+    EVENT_PROGRESS,
+    EVENT_START_AGENT,
+)
 from ai_squad.models import AgentStatus
 
 # Pula todos os testes se o módulo copilot não está instalado
@@ -274,43 +279,31 @@ class TestCopilotAdapterCallbacks:
         """Verifica delegação de progress callback para MCP server."""
         adapter = _create_adapter()
         cb = MagicMock()
-        adapter.set_progress_callback(cb)
-        assert adapter._mcp_server._progress_callback is cb
+        adapter.on(EVENT_PROGRESS, cb)
+        assert adapter._mcp_server._callbacks.has(EVENT_PROGRESS)
 
     def test_set_start_agent_callback_delegado(self):
         """Verifica delegação de start_agent callback para MCP server."""
         adapter = _create_adapter()
         cb = MagicMock()
-        adapter.set_start_agent_callback(cb)
-        assert adapter._mcp_server._start_agent_callback is cb
+        adapter.on(EVENT_START_AGENT, cb)
+        assert adapter._mcp_server._callbacks.has(EVENT_START_AGENT)
 
     def test_set_get_pipeline_state_callback_delegado(self):
         """Verifica delegação de pipeline state callback para MCP server."""
         adapter = _create_adapter()
         cb = MagicMock()
-        adapter.set_get_pipeline_state_callback(cb)
-        assert adapter._mcp_server._get_pipeline_state_callback is cb
+        adapter.on(EVENT_GET_PIPELINE_STATE, cb)
+        assert adapter._mcp_server._callbacks.has(EVENT_GET_PIPELINE_STATE)
 
     def test_todos_callbacks_delegados(self):
-        """Verifica que todos os 11 callbacks são delegados."""
+        """Verifica que adapter tem método on para registrar callbacks."""
         adapter = _create_adapter()
-        callback_methods = [
-            "set_progress_callback",
-            "set_start_agent_callback",
-            "set_get_agents_callback",
-            "set_get_demand_state_callback",
-            "set_read_journal_callback",
-            "set_send_image_callback",
-            "set_learn_lesson_callback",
-            "set_get_pipeline_state_callback",
-            "set_advance_step_callback",
-            "set_skip_step_callback",
-            "set_rerun_step_callback",
-        ]
-        for method_name in callback_methods:
-            cb = MagicMock()
-            getattr(adapter, method_name)(cb)
-        # Se chegou aqui sem erro, todos os métodos existem e aceitam callback
+        assert hasattr(adapter, "on")
+        # Registra um callback para verificar que funciona
+        cb = MagicMock()
+        adapter.on(EVENT_PROGRESS, cb)
+        assert adapter._mcp_server._callbacks.has(EVENT_PROGRESS)
 
 
 # --- Testes de retry ---

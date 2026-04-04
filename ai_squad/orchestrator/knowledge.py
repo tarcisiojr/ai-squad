@@ -18,6 +18,7 @@ import subprocess
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, cast
 
 import yaml
 
@@ -41,20 +42,21 @@ class KnowledgeResult:
     relevance: float = 0.0
 
 
-def parse_frontmatter(content: str) -> tuple[dict, str]:
+def parse_frontmatter(content: str) -> tuple[dict[str, Any], str]:
     """Extrai frontmatter YAML e corpo do documento."""
     match = _FRONTMATTER_RE.match(content)
     if not match:
         return {}, content
+    meta: dict[str, Any] = {}
     try:
         meta = yaml.safe_load(match.group(1)) or {}
     except yaml.YAMLError:
-        meta = {}
+        pass
     body = content[match.end() :]
     return meta, body
 
 
-def update_frontmatter(content: str, updates: dict) -> str:
+def update_frontmatter(content: str, updates: dict[str, Any]) -> str:
     """Atualiza campos do frontmatter mantendo o resto do documento."""
     meta, body = parse_frontmatter(content)
     meta.update(updates)
@@ -183,11 +185,9 @@ class FTS5Backend(KnowledgeBackend):
         content_hash = _content_hash(raw)
         meta, body = parse_frontmatter(raw)
         title = _extract_title(body) or doc_path.stem
-        tags = meta.get("tags", [])
-        if isinstance(tags, list):
-            tags_str = " ".join(str(t) for t in tags)
-        else:
-            tags_str = str(tags)
+        raw_tags: Any = meta.get("tags", [])
+        typed_tags: list[Any] = cast(list[Any], raw_tags) if isinstance(raw_tags, list) else [raw_tags]
+        tags_str: str = " ".join(str(t) for t in typed_tags)
         score = int(meta.get("score", 0))
         rel_path = str(doc_path.relative_to(self._knowledge_dir))
 
@@ -224,7 +224,7 @@ class FTS5Backend(KnowledgeBackend):
             return []
 
         # Prepara query FTS5
-        words = []
+        words: list[str] = []
         for word in query.lower().split():
             clean = "".join(c for c in word if c.isalnum())
             if len(clean) >= 3:
@@ -247,9 +247,9 @@ class FTS5Backend(KnowledgeBackend):
             logger.warning("Query FTS5 inválida: %s", fts_query)
             return []
 
-        results = []
+        results: list[KnowledgeResult] = []
         for row in rows:
-            content = row["content"] or ""
+            content = str(row["content"] or "")
             # Gera snippet: primeiras linhas não-vazias
             snippet_lines = [
                 line.strip()
@@ -260,12 +260,12 @@ class FTS5Backend(KnowledgeBackend):
 
             results.append(
                 KnowledgeResult(
-                    path=row["path"],
-                    title=row["title"] or "",
+                    path=str(row["path"]),
+                    title=str(row["title"] or ""),
                     snippet=snippet,
-                    score=row["score"] or 0,
-                    used_count=row["used_count"] or 0,
-                    relevance=abs(row["rank"]) if row["rank"] else 0.0,
+                    score=int(row["score"] or 0),
+                    used_count=int(row["used_count"] or 0),
+                    relevance=abs(float(row["rank"])) if row["rank"] else 0.0,
                 )
             )
 
@@ -458,13 +458,17 @@ class QmdBackend(KnowledgeBackend):
 
             import json
 
-            data = json.loads(result.stdout)
-            results = []
-            for item in (data if isinstance(data, list) else data.get("results", []))[:limit]:
-                path = item.get("path", item.get("file", ""))
+            data: Any = json.loads(result.stdout)
+            results: list[KnowledgeResult] = []
+            items = cast(
+                list[dict[str, Any]],
+                data if isinstance(data, list) else data.get("results", []),
+            )
+            for item in items[:limit]:
+                item_path = str(item.get("path", item.get("file", "")))
                 # Lê score do frontmatter do arquivo original
                 score = 0
-                full_path = self._knowledge_dir / path
+                full_path = self._knowledge_dir / item_path
                 if full_path.exists():
                     try:
                         content = full_path.read_text(encoding="utf-8")
@@ -475,9 +479,9 @@ class QmdBackend(KnowledgeBackend):
 
                 results.append(
                     KnowledgeResult(
-                        path=path,
-                        title=item.get("title", ""),
-                        snippet=item.get("content", item.get("snippet", ""))[:300],
+                        path=item_path,
+                        title=str(item.get("title", "")),
+                        snippet=str(item.get("content", item.get("snippet", "")))[:300],
                         score=score,
                         relevance=float(item.get("score", 0)),
                     )

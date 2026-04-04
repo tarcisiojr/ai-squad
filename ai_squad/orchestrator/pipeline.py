@@ -8,6 +8,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any, cast
 
 import yaml
 
@@ -30,7 +31,7 @@ class StepConfig:
     name: str
     step_type: str = "agent"  # agent, checkpoint
     agent: str = ""
-    agents: list[str] = field(default_factory=list)
+    agents: list[str] = field(default_factory=lambda: list[str]())
     execution: str = "subagent"  # subagent, inline, background
     model_tier: str = "powerful"  # fast, powerful
     file: str = ""
@@ -39,10 +40,10 @@ class StepConfig:
     depends_on: str = ""
     # Parseado do step file .md
     instructions: str = ""
-    inputs: list[str] = field(default_factory=list)
-    expected_outputs: list[str] = field(default_factory=list)
-    quality_gate: list[QualityCheck] = field(default_factory=list)
-    veto_conditions: list[str] = field(default_factory=list)
+    inputs: list[str] = field(default_factory=lambda: list[str]())
+    expected_outputs: list[str] = field(default_factory=lambda: list[str]())
+    quality_gate: list[QualityCheck] = field(default_factory=lambda: list[QualityCheck]())
+    veto_conditions: list[str] = field(default_factory=lambda: list[str]())
 
     @property
     def all_agents(self) -> list[str]:
@@ -69,7 +70,7 @@ class PipelineConfig:
     """Configuracao completa de um pipeline."""
 
     name: str = ""
-    steps: list[StepConfig] = field(default_factory=list)
+    steps: list[StepConfig] = field(default_factory=lambda: list[StepConfig]())
     description: str = ""
 
     def get_step(self, step_id: str) -> StepConfig | None:
@@ -130,16 +131,17 @@ class PipelineLoader:
             logger.error("pipeline.yaml invalido: esperado dict")
             return None
 
+        cfg = cast(dict[str, Any], data)
         pipeline = PipelineConfig(
-            name=data.get("name", ""),
-            description=data.get("description", ""),
+            name=cfg.get("name", ""),
+            description=cfg.get("description", ""),
         )
 
         # Parseia steps
-        steps_data = data.get("pipeline", {}).get("steps", [])
+        steps_data: list[dict[str, Any]] = cfg.get("pipeline", {}).get("steps", [])
         if not steps_data:
             # Tenta formato alternativo (steps na raiz)
-            steps_data = data.get("steps", [])
+            steps_data = cfg.get("steps", [])
 
         for step_data in steps_data:
             step = self._parse_step_config(step_data)
@@ -155,7 +157,7 @@ class PipelineLoader:
         )
         return pipeline
 
-    def _parse_step_config(self, data: dict) -> StepConfig:
+    def _parse_step_config(self, data: dict[str, Any]) -> StepConfig:
         """Parseia configuração de um step do YAML."""
         agents_raw = data.get("agents", [])
         if isinstance(agents_raw, str):
@@ -200,7 +202,7 @@ class PipelineLoader:
         step.veto_conditions = self._parse_list_section(body, "Veto Conditions")
 
     @staticmethod
-    def _parse_frontmatter(content: str) -> tuple[dict, str]:
+    def _parse_frontmatter(content: str) -> tuple[dict[str, Any], str]:
         """Separa frontmatter YAML do corpo Markdown.
 
         Retorna (frontmatter_dict, body_text).
@@ -217,7 +219,7 @@ class PipelineLoader:
             if not isinstance(frontmatter, dict):
                 return {}, content
             body = parts[2].strip()
-            return frontmatter, body
+            return cast(dict[str, Any], frontmatter), body
         except yaml.YAMLError:
             return {}, content
 
@@ -236,7 +238,7 @@ class PipelineLoader:
             return []
 
         section_content = match.group(1)
-        items = []
+        items: list[str] = []
         for line in section_content.splitlines():
             line = line.strip()
             if line.startswith("- "):
@@ -257,7 +259,7 @@ class PipelineLoader:
         - Resto → semantic (avaliado por LLM)
         """
         items = PipelineLoader._parse_list_section(body, "Quality Gate")
-        checks = []
+        checks: list[QualityCheck] = []
 
         file_keywords = ("existe", "exists", "ausente", "bytes", "arquivo", "file")
         structural_keywords = (

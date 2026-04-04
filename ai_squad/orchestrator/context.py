@@ -37,7 +37,7 @@ class WorkspaceContextCollector:
             if time.time() - ts < self.CACHE_TTL:
                 return content
 
-        partes = []
+        partes: list[str] = []
 
         claude_md = self._read_claude_md()
         if claude_md:
@@ -115,7 +115,7 @@ class WorkspaceContextCollector:
         if not self._workspace.exists():
             return ""
 
-        lines = []
+        lines: list[str] = []
         self._walk_tree(self._workspace, lines, depth=0)
 
         if not lines:
@@ -166,7 +166,7 @@ class WorkspaceContextCollector:
         if not specs_dir.exists() or not specs_dir.is_dir():
             return ""
 
-        demandas = []
+        demandas: list[str] = []
         for demand_dir in sorted(specs_dir.iterdir()):
             if not demand_dir.is_dir():
                 continue

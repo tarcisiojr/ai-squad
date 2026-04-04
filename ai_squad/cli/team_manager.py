@@ -3,6 +3,7 @@
 import re
 import shutil
 from pathlib import Path
+from typing import Any
 
 import click
 import yaml
@@ -82,7 +83,7 @@ class TeamManager:
         """Gera config.yaml dinamicamente a partir dos agentes do preset."""
         agents_dir = self._find_preset_dir(preset, "agents")
 
-        config: dict = {
+        config: dict[str, Any] = {
             "ai_provider": "claude-agent-sdk",
             "messaging_provider": messaging_provider,
             "ai_model": "claude-sonnet-4-20250514",
@@ -267,7 +268,7 @@ class TeamManager:
 
     def list_teams(self) -> list[dict[str, str]]:
         """Lista todos os times com nome e repo path."""
-        teams = []
+        teams: list[dict[str, str]] = []
         if not self._teams_dir.exists():
             return teams
 
@@ -325,14 +326,14 @@ class TeamManager:
         if config_path.exists():
             import yaml
 
-            from ai_squad.factory import _PROVIDER_AI_TOKENS
+            from ai_squad.factory import PROVIDER_AI_TOKENS
 
             with open(config_path, encoding="utf-8") as f:
-                data = yaml.safe_load(f) or {}
+                data: dict[str, Any] = yaml.safe_load(f) or {}
 
             # Token obrigatório do provider de IA
             ai_provider = data.get("ai_provider", "claude-agent-sdk")
-            ai_token = _PROVIDER_AI_TOKENS.get(ai_provider, "CLAUDE_CODE_OAUTH_TOKEN")
+            ai_token = PROVIDER_AI_TOKENS.get(ai_provider, "CLAUDE_CODE_OAUTH_TOKEN")
             if ai_token:
                 required_vars.append(ai_token)
 
@@ -349,7 +350,7 @@ class TeamManager:
                 pass
 
         # Verifica quais obrigatórias estão faltando ou com placeholder
-        missing = []
+        missing: list[str] = []
         for var in required_vars:
             value = env_vars.get(var, "")
             if not value or value.startswith(PLACEHOLDER_PREFIX):

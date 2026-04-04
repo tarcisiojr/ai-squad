@@ -50,6 +50,7 @@ class FakeAIAdapter(AIAgentAdapter):
     """Implementação fake de AIAgentAdapter para testes."""
 
     def __init__(self, **kwargs):
+        super().__init__()
         self._kwargs = kwargs
 
     async def run(self, prompt: str, context: dict) -> str:

@@ -31,6 +31,7 @@ class CopilotAdapter(AIAgentAdapter):
         agents_dir: str | None = None,
         global_skills_dir: str | None = None,
     ) -> None:
+        super().__init__()
         self._timeout = timeout
         self._working_dir = working_dir or ""
         self._model = model
@@ -40,57 +41,16 @@ class CopilotAdapter(AIAgentAdapter):
         self._status = AgentStatus.IDLE
         self._human_needed_callback: Callable | None = None
         self._current_agent_name: str = ""
-
-        # Client do Copilot SDK (lazy init — start() é async)
         self._client: Any = None
         self._client_started = False
-
-        # Sessions ativas: demand_id → session
         self._sessions: dict[str, Any] = {}
-
-        # MCP tools server compartilhado (callbacks do engine)
         self._mcp_server = SquadMCPToolsServer()
-
-        # Tools in-process (construídas na primeira session)
         self._tools: list[Any] | None = None
 
-    # --- Registro de callbacks (delegam para o MCP server) ---
-
-    def set_progress_callback(self, callback: Callable) -> None:
-        self._mcp_server.set_progress_callback(callback)
-
-    def set_start_agent_callback(self, callback: Callable) -> None:
-        self._mcp_server.set_start_agent_callback(callback)
-
-    def set_get_agents_callback(self, callback: Callable) -> None:
-        self._mcp_server.set_get_agents_callback(callback)
-
-    def set_get_demand_state_callback(self, callback: Callable) -> None:
-        self._mcp_server.set_get_demand_state_callback(callback)
-
-    def set_read_journal_callback(self, callback: Callable) -> None:
-        self._mcp_server.set_read_journal_callback(callback)
-
-    def set_send_image_callback(self, callback: Callable) -> None:
-        self._mcp_server.set_send_image_callback(callback)
-
-    def set_learn_lesson_callback(self, callback: Callable) -> None:
-        self._mcp_server.set_learn_lesson_callback(callback)
-
-    def set_get_pipeline_state_callback(self, callback: Callable) -> None:
-        self._mcp_server.set_get_pipeline_state_callback(callback)
-
-    def set_advance_step_callback(self, callback: Callable) -> None:
-        self._mcp_server.set_advance_step_callback(callback)
-
-    def set_skip_step_callback(self, callback: Callable) -> None:
-        self._mcp_server.set_skip_step_callback(callback)
-
-    def set_rerun_step_callback(self, callback: Callable) -> None:
-        self._mcp_server.set_rerun_step_callback(callback)
-
-    def set_query_graph_callback(self, callback: Callable) -> None:
-        self._mcp_server.set_query_graph_callback(callback)
+    def on(self, event: str, callback: Any) -> None:
+        """Registra callback no adapter e no MCP server."""
+        super().on(event, callback)
+        self._mcp_server.on(event, callback)
 
     # --- Client lifecycle ---
 

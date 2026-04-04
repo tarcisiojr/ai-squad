@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -293,7 +294,7 @@ def _start_local(name: str, *, use_tui: bool = False) -> None:
 
     from ai_squad.cli.templates.config import PLACEHOLDER_PREFIX
 
-    required_vars = []
+    required_vars: list[str] = []
     # Lê config para determinar providers
     try:
         import yaml as _yaml
@@ -301,18 +302,18 @@ def _start_local(name: str, *, use_tui: bool = False) -> None:
         config_path = paths.config_path
         if config_path.exists():
             with open(config_path, encoding="utf-8") as _f:
-                _cfg = _yaml.safe_load(_f) or {}
+                _cfg: dict[str, Any] = _yaml.safe_load(_f) or {}
 
             # Tokens do provider de IA (usa mapeamento centralizado)
-            from ai_squad.factory import _PROVIDER_AI_TOKENS
+            from ai_squad.factory import PROVIDER_AI_TOKENS
 
-            ai_provider = _cfg.get("ai_provider", "claude-agent-sdk")
-            ai_token = _PROVIDER_AI_TOKENS.get(ai_provider, "CLAUDE_CODE_OAUTH_TOKEN")
+            ai_provider: str = _cfg.get("ai_provider", "claude-agent-sdk")
+            ai_token = PROVIDER_AI_TOKENS.get(ai_provider, "CLAUDE_CODE_OAUTH_TOKEN")
             if ai_token:
                 required_vars.append(ai_token)
 
             # Tokens do provider de mensageria
-            provider_name = _cfg.get("messaging_provider", "telegram")
+            provider_name: str = _cfg.get("messaging_provider", "telegram")
             from ai_squad.messaging.registry import get as _get_provider
             from ai_squad.messaging.registry import load_builtin_providers
 

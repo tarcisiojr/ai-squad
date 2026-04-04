@@ -8,6 +8,19 @@ import pytest
 
 from ai_squad.adapters.interface import AIAgentAdapter
 from ai_squad.adapters.mcp_tools_server import SquadMCPToolsServer
+from ai_squad.common.events import (
+    EVENT_ADVANCE_STEP,
+    EVENT_GET_AGENTS,
+    EVENT_GET_DEMAND_STATE,
+    EVENT_GET_PIPELINE_STATE,
+    EVENT_LEARN_LESSON,
+    EVENT_PROGRESS,
+    EVENT_READ_JOURNAL,
+    EVENT_RERUN_STEP,
+    EVENT_SEND_IMAGE,
+    EVENT_SKIP_STEP,
+    EVENT_START_AGENT,
+)
 from ai_squad.models import AgentStatus
 
 # Mock de módulos agno que não estão instalados no ambiente de teste
@@ -287,7 +300,7 @@ class TestGenerateTools:
 
         adapter = AgnoAdapter()
         callback = AsyncMock(return_value="Agente iniciado")
-        adapter._mcp_server.set_start_agent_callback(callback)
+        adapter._mcp_server.on(EVENT_START_AGENT, callback)
 
         tools = adapter._generate_tools()
         start_agent_tool = next(t for t in tools if t.__name__ == "start_agent")
@@ -348,38 +361,38 @@ class TestCallbacks:
         adapter = AgnoAdapter()
         callback = AsyncMock()
 
-        adapter.set_progress_callback(callback)
-        assert adapter._mcp_server._progress_callback is callback
+        adapter.on(EVENT_PROGRESS, callback)
+        assert adapter._mcp_server._callbacks.has(EVENT_PROGRESS)
 
-        adapter.set_start_agent_callback(callback)
-        assert adapter._mcp_server._start_agent_callback is callback
+        adapter.on(EVENT_START_AGENT, callback)
+        assert adapter._mcp_server._callbacks.has(EVENT_START_AGENT)
 
-        adapter.set_get_agents_callback(callback)
-        assert adapter._mcp_server._get_agents_callback is callback
+        adapter.on(EVENT_GET_AGENTS, callback)
+        assert adapter._mcp_server._callbacks.has(EVENT_GET_AGENTS)
 
-        adapter.set_get_demand_state_callback(callback)
-        assert adapter._mcp_server._get_demand_state_callback is callback
+        adapter.on(EVENT_GET_DEMAND_STATE, callback)
+        assert adapter._mcp_server._callbacks.has(EVENT_GET_DEMAND_STATE)
 
-        adapter.set_read_journal_callback(callback)
-        assert adapter._mcp_server._read_journal_callback is callback
+        adapter.on(EVENT_READ_JOURNAL, callback)
+        assert adapter._mcp_server._callbacks.has(EVENT_READ_JOURNAL)
 
-        adapter.set_send_image_callback(callback)
-        assert adapter._mcp_server._send_image_callback is callback
+        adapter.on(EVENT_SEND_IMAGE, callback)
+        assert adapter._mcp_server._callbacks.has(EVENT_SEND_IMAGE)
 
-        adapter.set_learn_lesson_callback(callback)
-        assert adapter._mcp_server._learn_lesson_callback is callback
+        adapter.on(EVENT_LEARN_LESSON, callback)
+        assert adapter._mcp_server._callbacks.has(EVENT_LEARN_LESSON)
 
-        adapter.set_get_pipeline_state_callback(callback)
-        assert adapter._mcp_server._get_pipeline_state_callback is callback
+        adapter.on(EVENT_GET_PIPELINE_STATE, callback)
+        assert adapter._mcp_server._callbacks.has(EVENT_GET_PIPELINE_STATE)
 
-        adapter.set_advance_step_callback(callback)
-        assert adapter._mcp_server._advance_step_callback is callback
+        adapter.on(EVENT_ADVANCE_STEP, callback)
+        assert adapter._mcp_server._callbacks.has(EVENT_ADVANCE_STEP)
 
-        adapter.set_skip_step_callback(callback)
-        assert adapter._mcp_server._skip_step_callback is callback
+        adapter.on(EVENT_SKIP_STEP, callback)
+        assert adapter._mcp_server._callbacks.has(EVENT_SKIP_STEP)
 
-        adapter.set_rerun_step_callback(callback)
-        assert adapter._mcp_server._rerun_step_callback is callback
+        adapter.on(EVENT_RERUN_STEP, callback)
+        assert adapter._mcp_server._callbacks.has(EVENT_RERUN_STEP)
 
 
 class TestModelOverride:
@@ -419,7 +432,7 @@ class TestMCPToolsServer:
     @pytest.mark.asyncio
     async def test_report_progress(self, server):
         callback = AsyncMock()
-        server.set_progress_callback(callback)
+        server.on(EVENT_PROGRESS, callback)
         server.current_agent_name = "dev"
 
         result = await server.handle_tool_call("report_progress", {"message": "Testando"})
@@ -429,7 +442,7 @@ class TestMCPToolsServer:
     @pytest.mark.asyncio
     async def test_start_agent(self, server):
         callback = AsyncMock(return_value="Agente iniciado")
-        server.set_start_agent_callback(callback)
+        server.on(EVENT_START_AGENT, callback)
 
         result = await server.handle_tool_call(
             "start_agent",
@@ -450,7 +463,7 @@ class TestMCPToolsServer:
     @pytest.mark.asyncio
     async def test_learn_lesson(self, server):
         callback = AsyncMock()
-        server.set_learn_lesson_callback(callback)
+        server.on(EVENT_LEARN_LESSON, callback)
 
         result = await server.handle_tool_call(
             "learn_lesson",
@@ -461,7 +474,7 @@ class TestMCPToolsServer:
     @pytest.mark.asyncio
     async def test_send_image(self, server):
         callback = AsyncMock()
-        server.set_send_image_callback(callback)
+        server.on(EVENT_SEND_IMAGE, callback)
 
         result = await server.handle_tool_call(
             "send_image",
@@ -481,7 +494,7 @@ class TestMCPToolsServer:
     @pytest.mark.asyncio
     async def test_skip_step(self, server):
         callback = AsyncMock(return_value="Step pulado")
-        server.set_skip_step_callback(callback)
+        server.on(EVENT_SKIP_STEP, callback)
 
         result = await server.handle_tool_call("skip_step", {"step_id": "revisao"})
         assert result == "Step pulado"
@@ -489,7 +502,7 @@ class TestMCPToolsServer:
     @pytest.mark.asyncio
     async def test_rerun_step(self, server):
         callback = AsyncMock(return_value="Step re-executado")
-        server.set_rerun_step_callback(callback)
+        server.on(EVENT_RERUN_STEP, callback)
 
         result = await server.handle_tool_call("rerun_step", {"step_id": "dev"})
         assert result == "Step re-executado"
@@ -497,7 +510,7 @@ class TestMCPToolsServer:
     @pytest.mark.asyncio
     async def test_advance_step(self, server):
         callback = AsyncMock(return_value="Avançado")
-        server.set_advance_step_callback(callback)
+        server.on(EVENT_ADVANCE_STEP, callback)
 
         result = await server.handle_tool_call("advance_step", {})
         assert result == "Avançado"
@@ -505,7 +518,7 @@ class TestMCPToolsServer:
     @pytest.mark.asyncio
     async def test_get_pipeline_state(self, server):
         callback = AsyncMock(return_value="Step 1: done, Step 2: running")
-        server.set_get_pipeline_state_callback(callback)
+        server.on(EVENT_GET_PIPELINE_STATE, callback)
 
         result = await server.handle_tool_call("get_pipeline_state", {})
         assert "Step 1" in result
@@ -513,7 +526,7 @@ class TestMCPToolsServer:
     @pytest.mark.asyncio
     async def test_read_journal(self, server):
         callback = AsyncMock(return_value="Decisão: avançar para dev")
-        server.set_read_journal_callback(callback)
+        server.on(EVENT_READ_JOURNAL, callback)
 
         result = await server.handle_tool_call("read_journal", {})
         assert "Decisão" in result
@@ -521,7 +534,7 @@ class TestMCPToolsServer:
     @pytest.mark.asyncio
     async def test_get_demand_state(self, server):
         callback = AsyncMock(return_value="Demanda ativa: criar-api")
-        server.set_get_demand_state_callback(callback)
+        server.on(EVENT_GET_DEMAND_STATE, callback)
 
         result = await server.handle_tool_call("get_demand_state", {})
         assert "criar-api" in result

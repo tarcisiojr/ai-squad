@@ -172,7 +172,7 @@ class ThreadTracker:
     def get_stale_standby_threads(self) -> list[tuple[str, ThreadInfo]]:
         """Retorna threads em standby cujo timeout expirou."""
         now = time.time()
-        stale = []
+        stale: list[tuple[str, "ThreadInfo"]] = []
         for thread_id, info in self._threads.items():
             if info.state != ThreadState.STANDBY.value:
                 continue

@@ -168,7 +168,7 @@ class TestDaemon:
         daemon = Daemon()
         daemon._bus = _mock_bus()
         daemon._engine = MagicMock()
-        daemon._engine._get_running_agents_status.return_value = "Nenhum agente ativo."
+        daemon._engine.get_running_agents_status.return_value = "Nenhum agente ativo."
 
         await daemon._handle_new_demand("/status")
 
@@ -182,8 +182,7 @@ class TestDaemon:
         daemon = Daemon()
         daemon._bus = _mock_bus()
         daemon._engine = MagicMock()
-        daemon._engine._running_agents = {}
-        daemon._engine._get_agent_label = lambda n: n
+        daemon._engine.get_running_agents.return_value = {}
 
         await daemon._stop_agents("12345", "/stop")
 
@@ -202,16 +201,17 @@ class TestDaemon:
         from ai_squad.orchestrator.tools import RunningAgent
 
         mock_task = MagicMock()
-        daemon._engine._running_agents = {
+        daemon._engine.get_running_agents.return_value = {
             "dev": RunningAgent(
                 agent_name="dev", demand_id="d1", user_id="12345", status="running", task=mock_task
             ),
         }
-        daemon._engine._get_agent_label = lambda n: f"Dev ({n})"
+        daemon._engine.stop_agent.return_value = True
+        daemon._engine.get_agent_label.side_effect = lambda n: f"Dev ({n})"
 
         await daemon._stop_agents("12345", "/stop")
 
-        mock_task.cancel.assert_called_once()
+        daemon._engine.stop_agent.assert_called_once_with("dev")
         daemon._bus.send_message.assert_called_once()
         assert "parados" in daemon._bus.send_message.call_args[0][1].lower()
 

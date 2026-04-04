@@ -24,6 +24,7 @@ class CycleAdapter(AIAgentAdapter):
     """Adapter para teste de ciclo completo."""
 
     def __init__(self):
+        super().__init__()
         self._status = AgentStatus.IDLE
         self._callback = None
 
@@ -110,6 +111,7 @@ class SlowAdapter(AIAgentAdapter):
     """Adapter que demora para responder (simula agente lento)."""
 
     def __init__(self, delay: float = 0.0):
+        super().__init__()
         self._status = AgentStatus.IDLE
         self._callback = None
         self._delay = delay
@@ -517,7 +519,7 @@ class TestAsyncAgentDelegation:
         task = asyncio.create_task(fake_work())
         await task
 
-        await engine._on_agent_done("po", task)
+        await engine._agent_runner.on_agent_done("po", task)
 
         assert engine._running_agents["po"].status == "done"
         # Canal interno: resultado NÃO é enviado direto ao usuário via bus
@@ -546,7 +548,7 @@ class TestAsyncAgentDelegation:
         except RuntimeError:
             pass
 
-        await engine._on_agent_done("dev", task)
+        await engine._agent_runner.on_agent_done("dev", task)
 
         assert engine._running_agents["dev"].status == "error"
         # Canal interno: erro NÃO é enviado direto ao usuário

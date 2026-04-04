@@ -17,8 +17,8 @@ class TestRetryLogic:
         return ClaudeAgentSDKAdapter(timeout=30)
 
     @pytest.mark.asyncio
-    async def test_retry_em_erro_generico(self, adapter):
-        """Verifica retry com backoff em erro genérico."""
+    async def test_retry_em_erro_transiente(self, adapter):
+        """Verifica retry com backoff em erro transiente (overloaded)."""
         call_count = 0
 
         mock_text_block = MagicMock()
@@ -30,7 +30,7 @@ class TestRetryLogic:
             nonlocal call_count
             call_count += 1
             if call_count < 3:
-                raise RuntimeError("Erro temporário")
+                raise RuntimeError("overloaded: servidor sobrecarregado")
             yield mock_message
 
         with (

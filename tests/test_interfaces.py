@@ -63,7 +63,8 @@ class TestAIAgentAdapterABC:
         """Verifica que subclasse sem implementar métodos falha."""
 
         class AdapterIncompleto(AIAgentAdapter):
-            pass
+            def __init__(self):
+                super().__init__()
 
         with pytest.raises(TypeError):
             AdapterIncompleto()

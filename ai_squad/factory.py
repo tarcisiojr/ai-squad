@@ -4,7 +4,7 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 
@@ -17,7 +17,7 @@ logger = logging.getLogger("ai-squad.factory")
 _PLACEHOLDER_PREFIX = "PREENCHA_AQUI_"
 
 # Token obrigatório por provider de IA (vazio = sem token obrigatório)
-_PROVIDER_AI_TOKENS: dict[str, str] = {
+PROVIDER_AI_TOKENS: dict[str, str] = {
     "agno": "GOOGLE_API_KEY",
     "copilot": "",  # autentica via 'copilot auth login', sem token no .env
 }
@@ -42,11 +42,11 @@ class AgentConfig:
     role: str = ""  # papel do agente: spec, dev, review, generic (vazio = inferir)
     timeout: int = 0  # 0 = usa agent_timeout padrao
     tools: list[str] = field(
-        default_factory=list
+        default_factory=lambda: list[str]()
     )  # toolkits extras: web_search, code_execution, shell
     web_search_provider: str = ""  # provider de web search: duckduckgo (default), tavily, serpapi
     submodules: list[SubmoduleConfig] = field(
-        default_factory=list
+        default_factory=lambda: list[SubmoduleConfig]()
     )  # submodulos que o agente trabalha
 
 
@@ -110,7 +110,7 @@ class PlatformConfig:
     squad_lead: SquadLeadConfig = field(default_factory=SquadLeadConfig)
     heartbeat: HeartbeatConfig = field(default_factory=HeartbeatConfig)
     knowledge: KnowledgeConfig = field(default_factory=KnowledgeConfig)
-    agents: dict[str, AgentConfig] = field(default_factory=dict)
+    agents: dict[str, AgentConfig] = field(default_factory=lambda: dict[str, AgentConfig]())
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> "PlatformConfig":
@@ -125,14 +125,17 @@ class PlatformConfig:
         if not isinstance(data, dict):
             raise ValueError("Configuração inválida: formato YAML incorreto")
 
-        if "ai_provider" not in data:
+        # Assegura tipagem após isinstance check
+        cfg = cast(dict[str, Any], data)
+
+        if "ai_provider" not in cfg:
             raise ValueError("Configuração inválida: 'ai_provider' é obrigatório")
 
-        if "messaging_provider" not in data:
+        if "messaging_provider" not in cfg:
             raise ValueError("Configuração inválida: 'messaging_provider' é obrigatório")
 
         # Processar activation_mode
-        activation_mode = data.get("activation_mode", "mention")
+        activation_mode: str = cfg.get("activation_mode", "mention")
         if activation_mode not in VALID_ACTIVATION_MODES:
             raise ValueError(
                 f"Configuração inválida: 'activation_mode' deve ser um de "
@@ -140,7 +143,7 @@ class PlatformConfig:
             )
 
         # Processar thread_tracking
-        tt_data = data.get("thread_tracking", {})
+        tt_data: dict[str, Any] = cfg.get("thread_tracking", {})
         thread_tracking = ThreadTrackingConfig(
             standby_timeout=tt_data.get("standby_timeout", 1800),
             inactive_thread_ttl=tt_data.get("inactive_thread_ttl", 86400),
@@ -148,7 +151,7 @@ class PlatformConfig:
         )
 
         # Processar heartbeat
-        hb_data = data.get("heartbeat", {})
+        hb_data: dict[str, Any] = cfg.get("heartbeat", {})
         heartbeat = HeartbeatConfig(
             enabled=hb_data.get("enabled", True),
             interval=hb_data.get("interval", 300),
@@ -158,7 +161,7 @@ class PlatformConfig:
         )
 
         # Processar knowledge base (helpdesk)
-        kb_data = data.get("knowledge", {})
+        kb_data: dict[str, Any] = cfg.get("knowledge", {})
         knowledge = KnowledgeConfig(
             enabled=kb_data.get("enabled", False),
             use_qmd=kb_data.get("use_qmd", False),
@@ -166,52 +169,54 @@ class PlatformConfig:
         )
 
         # Processar squad_lead
-        sl_data = data.get("squad_lead", {})
+        sl_data: dict[str, Any] = cfg.get("squad_lead", {})
         squad_lead = SquadLeadConfig(
             name=sl_data.get("name", "Squad Lead"),
             avatar=sl_data.get("avatar", "👨‍💼"),
         )
 
         # Processar agents (com fallback para personas)
-        agents_data = data.get("agents", data.get("personas", {}))
-        agents = {}
+        agents_data: dict[str, Any] = cfg.get("agents", cfg.get("personas", {}))
+        agents: dict[str, AgentConfig] = {}
         for nome, config in agents_data.items():
+            agent_cfg = cast(dict[str, Any], config if isinstance(config, dict) else {})
             # Processa submodules (lista opcional)
-            subs_data = config.get("submodules", [])
-            submodules = []
+            subs_data: list[Any] = agent_cfg.get("submodules", [])
+            submodules: list[SubmoduleConfig] = []
             for sub in subs_data:
                 if isinstance(sub, str):
                     submodules.append(SubmoduleConfig(path=sub))
                 elif isinstance(sub, dict):
+                    sub_dict = cast(dict[str, Any], sub)
                     submodules.append(
                         SubmoduleConfig(
-                            path=sub.get("path", ""),
-                            description=sub.get("description", ""),
+                            path=sub_dict.get("path", ""),
+                            description=sub_dict.get("description", ""),
                         )
                     )
 
             agents[nome] = AgentConfig(
-                name=config.get("name", nome),
-                avatar=config.get("avatar", ""),
-                command=config.get("command", f"/{nome}"),
-                role=config.get("role", ""),
-                timeout=config.get("timeout", 0),
-                tools=config.get("tools", []),
-                web_search_provider=config.get("web_search_provider", ""),
+                name=agent_cfg.get("name", nome),
+                avatar=agent_cfg.get("avatar", ""),
+                command=agent_cfg.get("command", f"/{nome}"),
+                role=agent_cfg.get("role", ""),
+                timeout=agent_cfg.get("timeout", 0),
+                tools=agent_cfg.get("tools", []),
+                web_search_provider=agent_cfg.get("web_search_provider", ""),
                 submodules=submodules,
             )
 
         instance = cls(
-            ai_provider=data["ai_provider"],
-            messaging_provider=data["messaging_provider"],
+            ai_provider=cfg["ai_provider"],
+            messaging_provider=cfg["messaging_provider"],
             activation_mode=activation_mode,
             thread_tracking=thread_tracking,
-            agent_timeout=data.get("agent_timeout", 300),
-            state_dir=data.get("state_dir", "state/"),
-            repo_path=data.get("repo_path", ""),
-            ai_model=data.get("ai_model"),
-            light_model=data.get("light_model"),
-            heavy_model=data.get("heavy_model"),
+            agent_timeout=cfg.get("agent_timeout", 300),
+            state_dir=cfg.get("state_dir", "state/"),
+            repo_path=cfg.get("repo_path", ""),
+            ai_model=cfg.get("ai_model"),
+            light_model=cfg.get("light_model"),
+            heavy_model=cfg.get("heavy_model"),
             squad_lead=squad_lead,
             heartbeat=heartbeat,
             knowledge=knowledge,
@@ -252,8 +257,8 @@ class PlatformConfig:
         Verifica tokens comuns + tokens específicos do provider de mensageria.
         Retorna lista de tokens ausentes ou com placeholder.
         """
-        missing = []
-        token_var = _PROVIDER_AI_TOKENS.get(self.ai_provider, "CLAUDE_CODE_OAUTH_TOKEN")
+        missing: list[str] = []
+        token_var = PROVIDER_AI_TOKENS.get(self.ai_provider, "CLAUDE_CODE_OAUTH_TOKEN")
         if token_var:  # vazio = provider sem token obrigatório
             token_val = os.environ.get(token_var, "")
             if not token_val or token_val.startswith(_PLACEHOLDER_PREFIX):
@@ -373,7 +378,7 @@ class PlatformFactory:
 
         # No modo TUI, redireciona stderr do subprocess para log
         if stderr_to_log:
-            adapter._stderr_to_log = True
+            adapter.stderr_to_log = True
 
         # Configura subagentes nativos do SDK a partir dos AGENTS.md
         agent_defs = PlatformFactory._build_agent_definitions(config, agents_dir)
@@ -421,12 +426,12 @@ class PlatformFactory:
         return AgnoAdapter(**kwargs)
 
     @staticmethod
-    def _build_agent_definitions(config: PlatformConfig, agents_dir: str) -> dict:
+    def _build_agent_definitions(config: PlatformConfig, agents_dir: str) -> dict[str, Any]:
         """Constroi AgentDefinition para cada agente a partir dos AGENTS.md."""
         from claude_agent_sdk import AgentDefinition
 
         agents_path = Path(agents_dir)
-        defs = {}
+        defs: dict[str, Any] = {}
 
         if not config.agents:
             return defs

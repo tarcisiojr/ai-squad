@@ -1,7 +1,9 @@
 """Montagem de prompt compartilhada entre adapters de IA."""
 
+from typing import Any
 
-def build_prompt(prompt: str, context: dict) -> str:
+
+def build_prompt(prompt: str, context: dict[str, Any]) -> str:
     """Monta prompt completo incluindo contexto.
 
     Extrai campos especiais do context (workspace_context, system_instructions)
@@ -15,7 +17,7 @@ def build_prompt(prompt: str, context: dict) -> str:
     Returns:
         Prompt completo formatado com seções.
     """
-    partes = []
+    partes: list[str] = []
 
     # Contexto do workspace (CLAUDE.md, estrutura, specs)
     product_ctx = context.pop("workspace_context", None)

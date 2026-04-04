@@ -68,7 +68,7 @@ class AnthropicGenerator(GeneratorProvider):
 
             parts: list[str] = []
             async for message in query(prompt=prompt, options=options):
-                if isinstance(message, ResultMessage):
+                if isinstance(message, ResultMessage) and message.result:
                     parts.append(message.result)
 
             return "\n".join(parts)

@@ -95,7 +95,7 @@ class DailyNotes:
             days = self.DAYS_TO_INJECT
 
         today = datetime.now(timezone.utc).date()
-        partes = []
+        partes: list[str] = []
 
         for i in range(days):
             day = today - timedelta(days=i)

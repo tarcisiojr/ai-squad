@@ -9,6 +9,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from ai_squad.orchestrator.atomic_write import write_json_atomic
 from ai_squad.orchestrator.pipeline import PipelineConfig, StepConfig
@@ -23,17 +24,17 @@ class StepState:
     step_id: str
     name: str
     status: str = "pending"  # pending, running, checkpoint, completed, failed, skipped
-    agents: list[str] = field(default_factory=list)
-    agent_status: dict[str, str] = field(default_factory=dict)
+    agents: list[str] = field(default_factory=lambda: list[str]())
+    agent_status: dict[str, str] = field(default_factory=lambda: dict[str, str]())
     started_at: str = ""
     completed_at: str = ""
     quality_gate_result: str = ""  # passed, failed, skipped
     review_cycle: int = 0
-    review_history: list[dict] = field(default_factory=list)
+    review_history: list[dict[str, Any]] = field(default_factory=lambda: list[dict[str, Any]]())
     retries: int = 0
     error: str = ""
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Serializa para JSON."""
         return {
             "step_id": self.step_id,
@@ -51,7 +52,7 @@ class StepState:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "StepState":
+    def from_dict(cls, data: dict[str, Any]) -> "StepState":
         """Deserializa de JSON."""
         return cls(
             step_id=data.get("step_id", ""),
@@ -79,9 +80,9 @@ class PipelineState:
     current_step: str = ""
     started_at: str = ""
     updated_at: str = ""
-    steps: dict[str, StepState] = field(default_factory=dict)
+    steps: dict[str, StepState] = field(default_factory=lambda: dict[str, StepState]())
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Serializa para JSON."""
         return {
             "demand_id": self.demand_id,
@@ -94,9 +95,9 @@ class PipelineState:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "PipelineState":
+    def from_dict(cls, data: dict[str, Any]) -> "PipelineState":
         """Deserializa de JSON."""
-        steps = {}
+        steps: dict[str, StepState] = {}
         for step_id, step_data in data.get("steps", {}).items():
             steps[step_id] = StepState.from_dict(step_data)
 
@@ -473,7 +474,7 @@ class PipelineExecutor:
 
     def get_active_demands(self) -> list[PipelineState]:
         """Retorna estados de demandas ativas (não concluídas)."""
-        active = []
+        active: list[PipelineState] = []
         if not self._state_dir.exists():
             return active
 

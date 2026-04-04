@@ -14,7 +14,7 @@ class WizardResult:
     provider: str
     token: str
     messaging: str
-    channel_credentials: dict[str, str] = field(default_factory=dict)
+    channel_credentials: dict[str, str] = field(default_factory=lambda: {})
     knowledge_enabled: bool = False
     team_name: str = ""
 

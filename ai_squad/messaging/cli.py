@@ -1,7 +1,7 @@
 """Implementação CLI do barramento de mensageria para testes locais."""
 
 import asyncio
-from typing import Callable
+from typing import Any, Callable
 
 from ai_squad.messaging.interface import MessageBus
 from ai_squad.messaging.registry import register
@@ -16,8 +16,8 @@ class CLIMessageBus(MessageBus):
 
     def __init__(self, **kwargs) -> None:
         # Aceita kwargs extras (persona_name, etc) para compatibilidade com daemon
-        self._message_callback: Callable | None = None
-        self._voice_callback: Callable | None = None
+        self._message_callback: Callable[..., Any] | None = None
+        self._voice_callback: Callable[..., Any] | None = None
 
     # --- Ciclo de vida ---
 
@@ -76,11 +76,11 @@ class CLIMessageBus(MessageBus):
         resposta = await asyncio.to_thread(input, "Sua resposta: ")
         return resposta
 
-    async def receive_message(self, callback: Callable) -> None:
+    async def receive_message(self, callback: Callable[..., Any]) -> None:
         """Registra callback para mensagens de texto."""
         self._message_callback = callback
 
-    async def receive_voice(self, callback: Callable) -> None:
+    async def receive_voice(self, callback: Callable[..., Any]) -> None:
         """Registra callback para mensagens de voz (não suportado no CLI)."""
         self._voice_callback = callback
 

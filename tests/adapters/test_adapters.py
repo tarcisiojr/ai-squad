@@ -33,18 +33,20 @@ class TestClaudeAgentSDKAdapterExtras:
         assert "Voce e o PO." in prompt
 
     def test_set_callbacks(self, adapter):
-        """Verifica que callbacks são configuráveis."""
+        """Verifica que callbacks são configuráveis via on()."""
+        from ai_squad.common.events import EVENT_GET_AGENTS, EVENT_PROGRESS, EVENT_START_AGENT
+
         cb1 = AsyncMock()
         cb2 = AsyncMock()
         cb3 = AsyncMock()
 
-        adapter.set_progress_callback(cb1)
-        adapter.set_start_agent_callback(cb2)
-        adapter.set_get_agents_callback(cb3)
+        adapter.on(EVENT_PROGRESS, cb1)
+        adapter.on(EVENT_START_AGENT, cb2)
+        adapter.on(EVENT_GET_AGENTS, cb3)
 
-        assert adapter._progress_callback is cb1
-        assert adapter._start_agent_callback is cb2
-        assert adapter._get_agents_callback is cb3
+        assert adapter._callbacks.has(EVENT_PROGRESS)
+        assert adapter._callbacks.has(EVENT_START_AGENT)
+        assert adapter._callbacks.has(EVENT_GET_AGENTS)
 
     def test_session_management(self, adapter):
         """Verifica gerenciamento de sessões."""

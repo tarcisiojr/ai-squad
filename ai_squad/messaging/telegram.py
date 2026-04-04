@@ -263,6 +263,8 @@ class TelegramMessageBus(MessageBus):
 
             # Mostra "digitando..." imediatamente
             try:
+                if self._app is None:
+                    return
                 await self._app.bot.send_chat_action(
                     chat_id=chat_id,
                     action="typing",
@@ -486,7 +488,7 @@ class TelegramMessageBus(MessageBus):
 
         # Preserva negrito (**texto**) e italico (_texto_) convertendo para MarkdownV2
         # Primeiro protege as formatacoes existentes
-        protected = []
+        protected: list[str] = []
 
         def protect(match):
             protected.append(match.group(0))

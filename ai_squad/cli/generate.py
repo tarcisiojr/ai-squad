@@ -3,6 +3,7 @@
 import json
 import re
 from pathlib import Path
+from typing import Any
 
 import click
 import yaml
@@ -41,7 +42,7 @@ def generate_team(result: WizardResult) -> Path:
     return squad_dir
 
 
-def _parse_response(raw: str) -> dict:
+def _parse_response(raw: str) -> dict[str, Any]:
     """Extrai JSON da resposta da IA."""
     # Remove blocos de código markdown se presentes
     cleaned = re.sub(r"```(?:json)?\s*", "", raw)
@@ -66,7 +67,7 @@ def _parse_response(raw: str) -> dict:
         raise SystemExit(1)
 
 
-def _create_structure(squad_dir: Path, generated: dict, result: WizardResult) -> None:
+def _create_structure(squad_dir: Path, generated: dict[str, Any], result: WizardResult) -> None:
     """Cria todos os diretórios e arquivos do time."""
     squad_dir.mkdir(parents=True)
     (squad_dir / "state").mkdir()
@@ -91,13 +92,13 @@ def _create_structure(squad_dir: Path, generated: dict, result: WizardResult) ->
         (squad_dir / "knowledge").mkdir()
 
 
-def _write_pipeline(squad_dir: Path, generated: dict) -> None:
+def _write_pipeline(squad_dir: Path, generated: dict[str, Any]) -> None:
     """Escreve pipeline/pipeline.yaml."""
     pipeline_dir = squad_dir / "pipeline"
     pipeline_dir.mkdir()
     (pipeline_dir / "steps").mkdir()
 
-    pipeline_data = generated.get("pipeline", {})
+    pipeline_data: dict[str, Any] = generated.get("pipeline", {})
     pipeline_path = pipeline_dir / "pipeline.yaml"
     pipeline_path.write_text(
         yaml.dump(pipeline_data, default_flow_style=False, allow_unicode=True, sort_keys=False),
@@ -105,10 +106,10 @@ def _write_pipeline(squad_dir: Path, generated: dict) -> None:
     )
 
 
-def _write_steps(squad_dir: Path, generated: dict) -> None:
+def _write_steps(squad_dir: Path, generated: dict[str, Any]) -> None:
     """Escreve os step files em pipeline/steps/."""
     steps_dir = squad_dir / "pipeline" / "steps"
-    steps = generated.get("steps", {})
+    steps: dict[str, str] = generated.get("steps", {})
 
     for filename, content in steps.items():
         # Normaliza o caminho (pode vir como "steps/step-01-nome.md")
@@ -117,31 +118,31 @@ def _write_steps(squad_dir: Path, generated: dict) -> None:
         step_path.write_text(content, encoding="utf-8")
 
 
-def _write_agents(squad_dir: Path, generated: dict) -> None:
+def _write_agents(squad_dir: Path, generated: dict[str, Any]) -> None:
     """Escreve AGENTS.md para cada agente."""
-    agents = generated.get("agents", {})
+    agents: dict[str, dict[str, Any]] = generated.get("agents", {})
 
     for agent_name, agent_data in agents.items():
         agent_dir = squad_dir / "agents" / agent_name
         agent_dir.mkdir(parents=True)
 
-        agents_md = agent_data.get("agents_md", f"# {agent_data.get('display_name', agent_name)}\n")
+        agents_md: str = agent_data.get("agents_md", f"# {agent_data.get('display_name', agent_name)}\n")
         (agent_dir / "AGENTS.md").write_text(agents_md, encoding="utf-8")
 
     # Squad Lead (sempre obrigatório)
     sl_dir = squad_dir / "agents" / "squad-lead"
     sl_dir.mkdir(parents=True, exist_ok=True)
 
-    squad_lead_md = generated.get("squad_lead_md", _default_squad_lead_md())
+    squad_lead_md: str = generated.get("squad_lead_md", _default_squad_lead_md())
     (sl_dir / "AGENTS.md").write_text(squad_lead_md, encoding="utf-8")
 
 
-def _write_config(squad_dir: Path, generated: dict, result: WizardResult) -> None:
+def _write_config(squad_dir: Path, generated: dict[str, Any], result: WizardResult) -> None:
     """Gera config.yaml com agents e configuração do time."""
     provider_config = get_provider_config(result.provider)
     agents = generated.get("agents", {})
 
-    config: dict = {
+    config: dict[str, Any] = {
         "ai_provider": provider_config.ai_provider,
         "messaging_provider": result.messaging,
         "ai_model": "claude-sonnet-4-20250514",
@@ -205,7 +206,7 @@ def _write_env(squad_dir: Path, result: WizardResult) -> None:
     env_path.write_text("\n".join(lines), encoding="utf-8")
 
 
-def _show_summary(generated: dict, team_name: str) -> None:
+def _show_summary(generated: dict[str, Any], team_name: str) -> None:
     """Exibe resumo do time gerado."""
     agents = generated.get("agents", {})
     pipeline = generated.get("pipeline", {})

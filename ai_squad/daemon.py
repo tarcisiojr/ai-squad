@@ -6,8 +6,10 @@ import os
 import re
 import signal
 import sys
+import time
 import unicodedata
 import uuid
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -101,17 +103,23 @@ class Daemon:
                 messaging_provider=os.environ.get("MESSAGING_PROVIDER", "telegram"),
             )
 
-        # Variáveis de ambiente sobrescrevem YAML
-        if os.environ.get("AI_PROVIDER"):
-            config.ai_provider = os.environ["AI_PROVIDER"]
-        if os.environ.get("MESSAGING_PROVIDER"):
-            config.messaging_provider = os.environ["MESSAGING_PROVIDER"]
-        if os.environ.get("AGENT_TIMEOUT"):
-            config.agent_timeout = int(os.environ["AGENT_TIMEOUT"])
-        if os.environ.get("STATE_DIR"):
-            config.state_dir = os.environ["STATE_DIR"]
-        if os.environ.get("REPO_PATH"):
-            config.repo_path = os.environ["REPO_PATH"]
+        # Variáveis de ambiente sobrescrevem YAML (mapeamento declarativo)
+        _ENV_MAP: dict[str, str | tuple[str, type]] = {
+            "AI_PROVIDER": "ai_provider",
+            "MESSAGING_PROVIDER": "messaging_provider",
+            "AI_MODEL": "ai_model",
+            "AGENT_TIMEOUT": ("agent_timeout", int),
+            "LIGHT_MODEL": "light_model",
+            "HEAVY_MODEL": "heavy_model",
+            "STATE_DIR": "state_dir",
+            "REPO_PATH": "repo_path",
+        }
+        for env_key, attr_info in _ENV_MAP.items():
+            if val := os.environ.get(env_key):
+                if isinstance(attr_info, tuple):
+                    setattr(config, attr_info[0], attr_info[1](val))
+                else:
+                    setattr(config, attr_info, val)
 
         return config
 
@@ -135,7 +143,7 @@ class Daemon:
 
         # Instancia o provider — cada um lê suas env vars internamente
         activation_mode = self.config.activation_mode if self._config else "mention"
-        bus = provider_cls(
+        bus: MessageBus = provider_cls(  # type: ignore[call-arg]
             persona_name=f"ai-squad ({self._team_name})",
             persona_avatar="🤖",
             activation_mode=activation_mode,
@@ -150,33 +158,29 @@ class Daemon:
             logger.error("Tokens obrigatórios não configurados: %s", missing)
             sys.exit(1)
 
-    def _setup_components(self) -> None:
-        """Inicializa factory, providers e engine."""
-        self._config = self._load_config()
-        self._validate_tokens()
-
-        # Configura adapter de IA baseado no provider configurado
-        adapter = self._create_adapter()
-        self._adapter = adapter
-
-        # Configura barramento de mensageria via registry
-        self._bus = self._create_message_bus()
-
-        # Configura state manager
-        state_mgr = StateManager(state_dir=str(self._paths.state_dir))
-
-        # Monta dict de personas incluindo squad-lead
-        personas: dict[str, AgentConfig | SquadLeadConfig] = (
-            dict(self.config.agents) if self.config.agents else {}
+    def _setup_logging(self) -> None:
+        """Configura RotatingFileHandler para persistir logs em disco."""
+        logs_dir = self._paths.state_dir.parent / "logs"
+        os.makedirs(logs_dir, exist_ok=True)
+        file_handler = RotatingFileHandler(
+            os.path.join(str(logs_dir), "agent.log"),
+            maxBytes=5 * 1024 * 1024,  # 5MB
+            backupCount=3,
         )
-        if self.config.squad_lead:
-            personas["squad-lead"] = self.config.squad_lead
+        file_handler.setFormatter(
+            logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s")
+        )
+        logging.getLogger("ai-squad").addHandler(file_handler)
 
-        # Registra personas no bus para filtragem de mensagens próprias (OAuth)
-        self._bus.register_personas(personas)
-
-        # Monta o engine de orquestracao
-        self._engine = OrchestrationEngine(
+    def _create_engine(
+        self,
+        adapter: AIAgentAdapter,
+        state_mgr: StateManager,
+        personas: dict[str, "AgentConfig | SquadLeadConfig"],
+    ) -> OrchestrationEngine:
+        """Cria e configura o OrchestrationEngine."""
+        assert self._bus is not None, "MessageBus não inicializado"
+        engine = OrchestrationEngine(
             adapter,
             self._bus,
             state_mgr,
@@ -185,16 +189,6 @@ class Daemon:
             agents_dir=str(self._paths.agents_dir),
             agent_timeout=self.config.agent_timeout,
         )
-
-        self._state_manager = state_mgr
-
-        # Expurga demandas concluídas há mais de 7 dias
-        try:
-            removed = state_mgr.cleanup_expired()
-            if removed:
-                logger.info("Boot: %d demanda(s) expirada(s) removida(s)", removed)
-        except Exception as e:
-            logger.warning("Erro no cleanup de boot: %s", e)
 
         # Inicializa mapeamento thread ↔ demand para threads/tópicos
         self._thread_map = ThreadDemandMap(state_dir=str(self._paths.state_dir))
@@ -208,26 +202,61 @@ class Daemon:
             handoff_message=tt_config.handoff_message,
         )
         self._thread_tracker.load()
+
         # Propaga thread_map e callback de criação de tópico para o engine
-        self._engine._thread_map = self._thread_map
-        self._engine._create_topic_callback = self._create_demand_topic
+        engine.set_thread_map(self._thread_map)
+        engine.set_create_topic_callback(self._create_demand_topic)
 
         # Configura knowledge base se habilitada (preset helpdesk)
         if self.config.knowledge.enabled:
             kb_path = Path(self.config.knowledge.knowledge_dir)
             if kb_path.is_absolute():
-                # Caminho absoluto: usa direto (ex: /dados/knowledge, ~/docs/kb)
                 kb_dir = kb_path.expanduser()
             else:
-                # Caminho relativo: resolve a partir do .ai-squad/ (local) ou /app/ (docker)
                 kb_dir = self._paths.config_path.parent / kb_path
-            self._engine.configure_knowledge(
+            engine.configure_knowledge(
                 str(kb_dir),
                 use_qmd=self.config.knowledge.use_qmd,
             )
-            # Reindexa ao iniciar
-            if self._engine.knowledge:
-                self._engine.knowledge.reindex_all()
+            if engine.knowledge:
+                engine.knowledge.reindex_all()
+
+        return engine
+
+    def _setup_components(self) -> None:
+        """Inicializa factory, providers e engine."""
+        self._config = self._load_config()
+        self._validate_tokens()
+        self._setup_logging()
+
+        # Configura adapter de IA e barramento de mensageria
+        self._adapter = self._create_adapter()
+        self._bus = self._create_message_bus()
+
+        # Configura state manager
+        state_mgr = StateManager(state_dir=str(self._paths.state_dir))
+        self._state_manager = state_mgr
+
+        # Monta dict de personas incluindo squad-lead
+        personas: dict[str, AgentConfig | SquadLeadConfig] = (
+            dict(self.config.agents) if self.config.agents else {}
+        )
+        if self.config.squad_lead:
+            personas["squad-lead"] = self.config.squad_lead
+
+        # Registra personas no bus para filtragem de mensagens próprias (OAuth)
+        self._bus.register_personas(personas)
+
+        # Cria engine (inclui thread_map, thread_tracker, knowledge)
+        self._engine = self._create_engine(self._adapter, state_mgr, personas)
+
+        # Expurga demandas concluídas há mais de 7 dias
+        try:
+            removed = state_mgr.cleanup_expired()
+            if removed:
+                logger.info("Boot: %d demanda(s) expirada(s) removida(s)", removed)
+        except Exception as e:
+            logger.warning("Erro no cleanup de boot: %s", e)
 
         logger.info("Componentes inicializados para time '%s'", self._team_name)
 
@@ -242,12 +271,12 @@ class Daemon:
             return
 
         # Coleta contexto de retomada
-        resume_parts = []
+        resume_parts: list[str] = []
         has_pending = False
 
         # 1. Journal — decisoes anteriores e proxima acao esperada
         try:
-            journal_summary = self.engine._journal.get_active_summaries()
+            journal_summary = self.engine.get_journal().get_active_summaries()
             if journal_summary and journal_summary != "Nenhuma demanda ativa.":
                 resume_parts.append(f"DECISOES ANTERIORES:\n{journal_summary}")
                 has_pending = True
@@ -336,7 +365,7 @@ class Daemon:
 
     def _build_agent_commands(self) -> dict[str, str]:
         """Gera mapeamento comando → agente a partir dos agents da config."""
-        commands = {}
+        commands: dict[str, str] = {}
         if self._config and self.config.agents:
             for agent_id, agent_cfg in self.config.agents.items():
                 cmd = agent_cfg.command or f"/{agent_id}"
@@ -576,25 +605,24 @@ class Daemon:
         parts = text.strip().split(maxsplit=1)
         target = parts[1].strip() if len(parts) > 1 else None
 
-        running = self.engine._running_agents
+        running = self.engine.get_running_agents()
         if not running:
             await self.bus.send_message(chat_id, "Nenhum agente rodando no momento.")
             return
 
-        stopped = []
+        stopped: list[str] = []
         for name, ra in list(running.items()):
             if target and name != target:
                 continue
             if ra.status != "running" or not ra.task:
                 continue
 
-            ra.task.cancel()
-            ra.status = "cancelled"
+            self.engine.stop_agent(name)
             stopped.append(name)
             logger.info("[%s] Agente cancelado pelo usuario", name)
 
         if stopped:
-            labels = ", ".join(self.engine._get_agent_label(n) for n in stopped)
+            labels = ", ".join(self.engine.get_agent_label(n) for n in stopped)
             await self.bus.send_message(chat_id, f"Agentes parados: {labels}", thread_id=thread_id)
         elif target:
             await self.bus.send_message(
@@ -640,16 +668,26 @@ class Daemon:
 
         if demand_id:
             # Filtra agentes desta demanda
-            agents = self.engine._running_agents
-            filtered = {k: v for k, v in agents.items() if v.demand_id == demand_id}
-            if filtered:
-                from ai_squad.orchestrator.prompt_builder import get_running_agents_status
+            parts: list[str] = []
+            engine_status = self.engine.get_status()
 
-                status = get_running_agents_status(filtered, self.engine._personas)
-            else:
-                status = f"Nenhum agente ativo para demanda {demand_id}."
+            # Squad Lead processando para esta demanda?
+            if engine_status.squad_lead_busy and engine_status.current_demand_id == demand_id:
+                elapsed = int(time.time() - engine_status.squad_lead_since)
+                sl_label = self.engine.get_agent_label("squad-lead")
+                parts.append(f"🧠 {sl_label}: processando ({elapsed}s)")
+
+            filtered = {
+                k: v for k, v in engine_status.running_agents.items() if v.demand_id == demand_id
+            }
+            if filtered:
+                parts.append(
+                    self.engine.get_filtered_agents_status(filtered, engine_status.personas)
+                )
+
+            status = "\n".join(parts) if parts else f"Nenhum agente ativo para demanda {demand_id}."
         else:
-            status = self.engine._get_running_agents_status()
+            status = self.engine.get_running_agents_status()
 
         await self.bus.send_message(chat_id, status, thread_id=thread_id)
 
@@ -741,7 +779,7 @@ class Daemon:
             try:
                 stale = self._thread_tracker.get_stale_standby_threads()
                 chat_id = self.bus.default_chat_id
-                for thread_id, info in stale:
+                for thread_id, _ in stale:
                     if chat_id:
                         await self.bus.send_message(
                             chat_id,
@@ -779,8 +817,7 @@ class Daemon:
                 text, image_path=image_path, thread_id=thread_id, user_id=user_id
             )
 
-        if hasattr(self.bus, "receive_photo"):
-            await self.bus.receive_photo(_photo_handler)
+        await self.bus.receive_photo(_photo_handler)
 
         # Registra handler de documentos (helpdesk — ingestão de PDF/DOCX/etc)
         async def _document_handler(
@@ -840,11 +877,29 @@ class Daemon:
         standby_task = asyncio.create_task(self._standby_timeout_loop())
 
         try:
-            # Se o bus implementa run_forever (ex: TUI), usa como loop principal
-            run_forever_result = await self.bus.run_forever()
-            if run_forever_result is None:
-                # Bus padrão (Telegram, GChat) — aguarda sinal de shutdown
-                await self._shutdown_event.wait()
+            # Loop de reconexão com backoff exponencial
+            reconnect_delay = 2  # segundos (dobra até 60s)
+            max_reconnect_delay = 60
+
+            while not self._shutdown_event.is_set():
+                try:
+                    # Se o bus implementa run_forever (ex: TUI), usa como loop principal
+                    run_forever_result = await self.bus.run_forever()
+                    if run_forever_result is None:
+                        # Bus padrão (Telegram, GChat) — aguarda sinal de shutdown
+                        await self._shutdown_event.wait()
+                    # Saída normal
+                    break
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error(
+                        "Conexao com bus perdida: %s. Reconectando em %ds...",
+                        e,
+                        reconnect_delay,
+                    )
+                    await asyncio.sleep(reconnect_delay)
+                    reconnect_delay = min(reconnect_delay * 2, max_reconnect_delay)
         finally:
             health_task.cancel()
             heartbeat_task.cancel()

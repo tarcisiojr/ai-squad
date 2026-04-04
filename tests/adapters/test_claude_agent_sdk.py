@@ -7,6 +7,7 @@ import pytest
 
 from ai_squad.adapters.claude_agent_sdk import ClaudeAgentSDKAdapter
 from ai_squad.adapters.interface import AIAgentAdapter
+from ai_squad.common.events import EVENT_PROGRESS
 from ai_squad.models import AgentStatus
 
 
@@ -205,8 +206,8 @@ class TestClaudeAgentSDKAdapter:
     def test_set_progress_callback(self, adapter):
         """Verifica registro de callback de progresso."""
         callback = AsyncMock()
-        adapter.set_progress_callback(callback)
-        assert adapter._progress_callback is callback
+        adapter.on(EVENT_PROGRESS, callback)
+        assert adapter._callbacks.has(EVENT_PROGRESS)
 
     def test_build_options_inclui_report_progress(self, adapter):
         """Verifica que report_progress esta nos allowed_tools."""

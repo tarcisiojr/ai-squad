@@ -7,8 +7,10 @@ estruturado e salva na knowledge base com frontmatter padrão.
 import logging
 import re
 import unicodedata
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, cast
 
 import yaml
 
@@ -30,7 +32,7 @@ def _slugify(text: str) -> str:
     return slug[:80] or "documento"
 
 
-def _ensure_frontmatter(content: str, meta: dict) -> str:
+def _ensure_frontmatter(content: str, meta: dict[str, Any]) -> str:
     """Adiciona frontmatter se não existir, ou preserva existente."""
     if content.startswith("---\n"):
         return content
@@ -38,7 +40,7 @@ def _ensure_frontmatter(content: str, meta: dict) -> str:
     return f"---\n{yaml_str}---\n{content}"
 
 
-def _default_frontmatter(source: str, original_filename: str) -> dict:
+def _default_frontmatter(source: str, original_filename: str) -> dict[str, Any]:
     """Gera frontmatter padrão para documentos ingeridos."""
     return {
         "score": 0,
@@ -61,7 +63,7 @@ class DocumentIngest:
         self._knowledge_dir.mkdir(parents=True, exist_ok=True)
 
         # Registry de converters por extensão
-        self._converters: dict[str, callable] = {
+        self._converters: dict[str, Callable[[Path], str]] = {
             ".pdf": self._convert_pdf,
             ".docx": self._convert_docx,
             ".doc": self._convert_docx,
@@ -192,10 +194,11 @@ class DocumentIngest:
                 "pdfplumber é necessário para PDF. Instale com: pip install pdfplumber"
             )
 
-        parts = []
-        with pdfplumber.open(path) as pdf:
-            for i, page in enumerate(pdf.pages, 1):
-                text = page.extract_text()
+        parts: list[str] = []
+        pdf = cast(Any, pdfplumber).open(path)
+        with pdf:
+            for i, page in enumerate(cast(list[Any], pdf.pages), 1):
+                text = cast(str, page.extract_text())
                 if text:
                     if i > 1:
                         parts.append(f"\n---\n\n_Página {i}_\n")
@@ -211,20 +214,21 @@ class DocumentIngest:
     def _convert_docx(self, path: Path) -> str:
         """Converte DOCX para Markdown usando python-docx."""
         try:
-            from docx import Document
+            import docx as _docx_mod
         except ImportError:
             raise ImportError(
                 "python-docx é necessário para DOCX. Instale com: pip install python-docx"
             )
 
-        doc = Document(path)
-        parts = []
-        for para in doc.paragraphs:
-            text = para.text.strip()
+        docx_mod = cast(Any, _docx_mod)
+        doc = docx_mod.Document(path)
+        parts: list[str] = []
+        for para in cast(list[Any], doc.paragraphs):
+            text = str(para.text).strip()
             if not text:
                 continue
 
-            style = para.style.name.lower() if para.style else ""
+            style: str = str(para.style.name).lower() if para.style else ""
             if "heading 1" in style:
                 parts.append(f"# {text}")
             elif "heading 2" in style:

@@ -74,7 +74,7 @@ class ConversationStore:
 
         self._write_atomic(path, messages)
 
-    def load(self, demand_id: str) -> list[dict]:
+    def load(self, demand_id: str) -> list[dict[str, Any]]:
         """Carrega histórico de conversa da demanda."""
         path = self._conversation_path(demand_id)
         if not path.exists():
@@ -165,9 +165,9 @@ class ConversationStore:
 
         return False
 
-    def _format_messages_for_summary(self, messages: list[dict]) -> str:
+    def _format_messages_for_summary(self, messages: list[dict[str, Any]]) -> str:
         """Formata lista de mensagens como texto para sumarização."""
-        partes = []
+        partes: list[str] = []
         for msg in messages:
             role_label = msg.get("agent_name") or msg.get("role", "?")
             content = msg.get("content", "")
@@ -177,13 +177,13 @@ class ConversationStore:
             partes.append(f"[{role_label}]: {content}")
         return "\n".join(partes)
 
-    def get_context_messages(self, demand_id: str) -> list[dict]:
+    def get_context_messages(self, demand_id: str) -> list[dict[str, Any]]:
         """Retorna mensagens para injeção no contexto, com resumo se disponível."""
         messages = self.load(demand_id)
 
         # Se há resumo acumulado, injeta como primeira mensagem
         summary = self.load_summary(demand_id)
-        prefix: list[dict] = []
+        prefix: list[dict[str, Any]] = []
         if summary:
             prefix.append(
                 {
@@ -240,7 +240,7 @@ class ConversationStore:
         """Retorna total de mensagens no histórico."""
         return len(self.load(demand_id))
 
-    def _write_atomic(self, path: Path, data: list[dict]) -> None:
+    def _write_atomic(self, path: Path, data: list[dict[str, Any]]) -> None:
         """Escrita atômica via utilitário compartilhado."""
         write_json_atomic(path, data)
 

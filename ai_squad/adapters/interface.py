@@ -1,8 +1,9 @@
 """Interface abstrata do adapter de agente IA."""
 
 from abc import ABC, abstractmethod
-from typing import Callable
+from typing import Any
 
+from ai_squad.common.events import CallbackRegistry
 from ai_squad.models import AgentStatus
 
 
@@ -11,10 +12,25 @@ class AIAgentAdapter(ABC):
 
     Define o contrato para interação com providers de IA
     independente da implementação concreta.
+
+    Usa CallbackRegistry para registro de callbacks:
+        adapter.on("progress", handler)
+        adapter.emit("progress", agent_name, message)
     """
 
+    def __init__(self) -> None:
+        self._callbacks = CallbackRegistry()
+
+    def on(self, event: str, callback: Any) -> None:
+        """Registra callback para um evento."""
+        self._callbacks.on(event, callback)
+
+    def emit(self, event: str, *args: Any, **kwargs: Any) -> Any:
+        """Invoca callback registrado. Retorna None se não registrado."""
+        return self._callbacks.emit(event, *args, **kwargs)
+
     @abstractmethod
-    async def run(self, prompt: str, context: dict) -> str:
+    async def run(self, prompt: str, context: dict[str, Any]) -> str:
         """Executa o agente com o prompt e contexto fornecidos."""
         ...
 
@@ -29,47 +45,9 @@ class AIAgentAdapter(ABC):
         ...
 
     @abstractmethod
-    def on_human_needed(self, callback: Callable) -> None:
+    def on_human_needed(self, callback: Any) -> None:
         """Registra callback para quando intervenção humana é necessária."""
         ...
 
     async def shutdown(self) -> None:
         """Libera recursos do adapter. No-op por padrão."""
-        pass
-
-    # Callbacks opcionais — no-op por padrão, adapter concreto sobrescreve
-    def set_progress_callback(self, callback: Callable) -> None:
-        pass
-
-    def set_start_agent_callback(self, callback: Callable) -> None:
-        pass
-
-    def set_get_agents_callback(self, callback: Callable) -> None:
-        pass
-
-    def set_get_demand_state_callback(self, callback: Callable) -> None:
-        pass
-
-    def set_read_journal_callback(self, callback: Callable) -> None:
-        pass
-
-    def set_send_image_callback(self, callback: Callable) -> None:
-        pass
-
-    def set_learn_lesson_callback(self, callback: Callable) -> None:
-        pass
-
-    def set_get_pipeline_state_callback(self, callback: Callable) -> None:
-        pass
-
-    def set_advance_step_callback(self, callback: Callable) -> None:
-        pass
-
-    def set_skip_step_callback(self, callback: Callable) -> None:
-        pass
-
-    def set_rerun_step_callback(self, callback: Callable) -> None:
-        pass
-
-    def set_query_graph_callback(self, callback: Callable) -> None:
-        pass

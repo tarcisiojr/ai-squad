@@ -39,7 +39,7 @@ def _resolve_tools(
     tools_config: list[str], working_dir: str = "", web_search_provider: str = ""
 ) -> list:
     """Resolve lista de nomes de toolkits para instâncias Agno."""
-    tools = []
+    tools: list[Any] = []
 
     for toolkit_name in tools_config:
         if toolkit_name == "web_search":
@@ -109,6 +109,7 @@ class AgnoAdapter(AIAgentAdapter):
         global_skills_dir: str | None = None,
         state_dir: str = "",
     ) -> None:
+        super().__init__()
         self._timeout = timeout
         self._working_dir = working_dir or ""
         self._model = model
@@ -119,11 +120,7 @@ class AgnoAdapter(AIAgentAdapter):
         self._status = AgentStatus.IDLE
         self._human_needed_callback: Callable | None = None
         self._current_agent_name: str = ""
-
-        # Cache de agentes: agent_name → (Agent, model_id)
         self._agents_cache: dict[str, tuple[Any, str]] = {}
-
-        # DB para sessions (lazy init — só cria se state_dir fornecido)
         self._db: Any = None
         if state_dir:
             try:
@@ -133,53 +130,19 @@ class AgnoAdapter(AIAgentAdapter):
                 self._db = SqliteDb(db_file=str(db_path))
             except ImportError:
                 logger.warning("agno.db.sqlite nao disponivel — sessions sem persistencia")
-
-        # MCP tools server compartilhado
         self._mcp_server = SquadMCPToolsServer()
+        self._generated_tools: list[Any] | None = None
 
-        # Tools geradas dinamicamente (cache — gera uma vez)
-        self._generated_tools: list | None = None
-
-    # --- Registro de callbacks (delegam para o MCP server) ---
-
-    def set_progress_callback(self, callback: Callable) -> None:
-        self._mcp_server.set_progress_callback(callback)
-
-    def set_start_agent_callback(self, callback: Callable) -> None:
-        self._mcp_server.set_start_agent_callback(callback)
-
-    def set_get_agents_callback(self, callback: Callable) -> None:
-        self._mcp_server.set_get_agents_callback(callback)
-
-    def set_get_demand_state_callback(self, callback: Callable) -> None:
-        self._mcp_server.set_get_demand_state_callback(callback)
-
-    def set_read_journal_callback(self, callback: Callable) -> None:
-        self._mcp_server.set_read_journal_callback(callback)
-
-    def set_send_image_callback(self, callback: Callable) -> None:
-        self._mcp_server.set_send_image_callback(callback)
-
-    def set_learn_lesson_callback(self, callback: Callable) -> None:
-        self._mcp_server.set_learn_lesson_callback(callback)
-
-    def set_get_pipeline_state_callback(self, callback: Callable) -> None:
-        self._mcp_server.set_get_pipeline_state_callback(callback)
-
-    def set_advance_step_callback(self, callback: Callable) -> None:
-        self._mcp_server.set_advance_step_callback(callback)
-
-    def set_skip_step_callback(self, callback: Callable) -> None:
-        self._mcp_server.set_skip_step_callback(callback)
-
-    def set_rerun_step_callback(self, callback: Callable) -> None:
-        self._mcp_server.set_rerun_step_callback(callback)
+    def on(self, event: str, callback: Any) -> None:
+        """Registra callback no adapter e no MCP server."""
+        super().on(event, callback)
+        self._mcp_server.on(event, callback)
 
     # --- Skills (Opção B: SKILL.md nativo + fallback AGENTS.md) ---
 
     def _get_skill_dirs(self, agent_name: str) -> list[Path]:
         """Retorna diretórios de skills nos 3 níveis."""
-        dirs = []
+        dirs: list[Path] = []
 
         if agent_name and self._agents_dir:
             agent_path = Path(self._agents_dir) / agent_name
@@ -205,8 +168,8 @@ class AgnoAdapter(AIAgentAdapter):
         except ImportError:
             return self._resolve_skills_fallback_only(agent_name)
 
-        loaders = []
-        instruction_parts = []
+        loaders: list[Any] = []
+        instruction_parts: list[str] = []
 
         for dir_path in self._get_skill_dirs(agent_name):
             skill_md = dir_path / "SKILL.md"
@@ -228,7 +191,7 @@ class AgnoAdapter(AIAgentAdapter):
 
     def _resolve_skills_fallback_only(self, agent_name: str) -> tuple[None, str]:
         """Fallback quando agno.skills não está disponível."""
-        instruction_parts = []
+        instruction_parts: list[str] = []
         for dir_path in self._get_skill_dirs(agent_name):
             agents_md = dir_path / "AGENTS.md"
             if agents_md.exists():
@@ -248,7 +211,7 @@ class AgnoAdapter(AIAgentAdapter):
             return self._generated_tools
 
         server = self._mcp_server
-        tools = []
+        tools: list[Any] = []
 
         for defn in server.get_tool_definitions():
             tool_name = defn["name"]

@@ -5,6 +5,7 @@ import logging
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger("ai-squad.lessons")
 
@@ -158,7 +159,7 @@ class LessonsStore:
 
         logger.info("Licao registrada: [%s] %s", category, problem[:60])
 
-    def get_relevant(self, context: str = "") -> list[dict]:
+    def get_relevant(self, context: str = "") -> list[dict[str, Any]]:
         """Retorna licoes relevantes usando FTS5 para busca full-text."""
         conn = self._get_conn()
 
@@ -168,10 +169,10 @@ class LessonsStore:
                 "SELECT * FROM lessons ORDER BY timestamp DESC LIMIT ?",
                 (self.MAX_CONTEXT_LESSONS,),
             ).fetchall()
-            return [dict(r) for r in rows]
+            return [dict(r) for r in rows]  # type: ignore[arg-type]
 
         # Prepara query FTS5: remove caracteres especiais e curtos
-        words = []
+        words: list[str] = []
         for word in context.lower().split():
             # Remove pontuacao e palavras muito curtas
             clean = "".join(c for c in word if c.isalnum())
@@ -183,7 +184,7 @@ class LessonsStore:
                 "SELECT * FROM lessons ORDER BY timestamp DESC LIMIT ?",
                 (self.MAX_CONTEXT_LESSONS,),
             ).fetchall()
-            return [dict(r) for r in rows]
+            return [dict(r) for r in rows]  # type: ignore[arg-type]
 
         # Busca FTS5 com OR entre termos (encontra qualquer match)
         fts_query = " OR ".join(words[:15])  # Limita termos para performance
@@ -198,7 +199,7 @@ class LessonsStore:
             ).fetchall()
 
             if rows:
-                return [dict(r) for r in rows]
+                return [dict(r) for r in rows]  # type: ignore[arg-type]
         except sqlite3.OperationalError:
             # FTS query invalida — fallback para recentes
             pass
@@ -208,7 +209,7 @@ class LessonsStore:
             "SELECT * FROM lessons ORDER BY timestamp DESC LIMIT ?",
             (self.MAX_CONTEXT_LESSONS,),
         ).fetchall()
-        return [dict(r) for r in rows]
+        return [dict(r) for r in rows]  # type: ignore[arg-type]
 
     def format_for_prompt(self, context: str = "") -> str:
         """Formata licoes para injecao no prompt dos agentes."""

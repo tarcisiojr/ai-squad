@@ -1,0 +1,25 @@
+{
+  "include": ["ai_squad"],
+  "exclude": [
+    "tests",
+    "**/__pycache__",
+    "ai_squad/messaging/telegram.py",
+    "ai_squad/messaging/gchat.py",
+    "ai_squad/messaging/tui.py",
+    "ai_squad/adapters/agno_adapter.py",
+    "ai_squad/adapters/copilot_adapter.py",
+    "ai_squad/cli/generators",
+    "ai_squad/whisper"
+  ],
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "standard",
+  "reportMissingImports": false,
+  "reportMissingTypeStubs": false,
+  "reportPrivateUsage": "warning",
+  "reportUnknownMemberType": "warning",
+  "reportUnknownVariableType": "warning",
+  "reportUnknownArgumentType": "warning",
+  "reportUnknownParameterType": "warning",
+  "reportMissingTypeArgument": "warning",
+  "reportUntypedFunctionDecorator": false
+}

@@ -1,7 +1,8 @@
 """Interface abstrata do barramento de mensageria."""
 
 from abc import ABC, abstractmethod
-from typing import Callable
+from collections.abc import Callable
+from typing import Any
 
 
 class MessageBus(ABC):
@@ -11,6 +12,9 @@ class MessageBus(ABC):
     entre o orquestrador e o usuário humano.
     Suporta thread_id para isolamento de demandas via threads/tópicos.
     """
+
+    def __init__(self, **kwargs: object) -> None:
+        """Inicializa o bus. Subclasses recebem kwargs específicos do provider."""
 
     # --- Ciclo de vida ---
 
@@ -48,11 +52,11 @@ class MessageBus(ABC):
         """Username ou identificador do bot para detecção de menção. Vazio se não aplicável."""
         return ""
 
-    def is_mention(self, message_data: dict) -> bool:
+    def is_mention(self, message_data: dict[str, Any]) -> bool:
         """Verifica se a mensagem menciona o bot. Default: True (sem filtro)."""
         return True
 
-    def is_dm(self, message_data: dict) -> bool:
+    def is_dm(self, message_data: dict[str, Any]) -> bool:
         """Verifica se a mensagem é DM (chat 1:1). Default: False."""
         return False
 
@@ -72,7 +76,7 @@ class MessageBus(ABC):
 
     @abstractmethod
     async def send_message(
-        self, user_id: str, text: str, *, thread_id: str | None = None, **kwargs: str
+        self, user_id: str, text: str, *, thread_id: str | None = None, **kwargs: Any
     ) -> None:
         """Envia mensagem de texto ao usuário."""
         ...
@@ -95,12 +99,12 @@ class MessageBus(ABC):
         ...
 
     @abstractmethod
-    async def receive_message(self, callback: Callable) -> None:
+    async def receive_message(self, callback: Callable[..., Any]) -> None:
         """Registra callback para recebimento de mensagens de texto."""
         ...
 
     @abstractmethod
-    async def receive_voice(self, callback: Callable) -> None:
+    async def receive_voice(self, callback: Callable[..., Any]) -> None:
         """Registra callback para recebimento de mensagens de voz."""
         ...
 
@@ -137,7 +141,7 @@ class MessageBus(ABC):
         """
         return None
 
-    def register_personas(self, personas: dict) -> None:
+    def register_personas(self, personas: dict[str, Any]) -> None:
         """Registra personas dos agentes para filtragem de mensagens próprias.
 
         Usado no modo OAuth (mesma conta) para distinguir mensagens enviadas
@@ -149,14 +153,21 @@ class MessageBus(ABC):
         """Cria tópico/thread no canal. Retorna thread_id ou None se não suportado."""
         return None
 
-    async def receive_document(self, callback: Callable) -> None:
+    async def receive_photo(self, callback: Callable[..., Any]) -> None:
+        """Registra callback para recebimento de fotos.
+
+        Opcional — implementações sem suporte ignoram.
+        Callback recebe: (text, image_path, thread_id, user_id).
+        """
+
+    async def receive_document(self, callback: Callable[..., Any]) -> None:
         """Registra callback para recebimento de documentos (PDF, DOCX, etc).
 
         Opcional — implementações sem suporte ignoram.
         Callback recebe: (caption, file_path, thread_id, user_id).
         """
 
-    async def on_reaction(self, callback: Callable) -> None:
+    async def on_reaction(self, callback: Callable[..., Any]) -> None:
         """Registra callback para reações em mensagens.
 
         Opcional — implementações sem suporte ignoram.

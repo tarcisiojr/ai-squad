@@ -18,6 +18,20 @@ from claude_agent_sdk import (
 
 from ai_squad.adapters.interface import AIAgentAdapter
 from ai_squad.adapters.prompt_builder import build_prompt
+from ai_squad.common.events import (
+    EVENT_ADVANCE_STEP,
+    EVENT_GET_AGENTS,
+    EVENT_GET_DEMAND_STATE,
+    EVENT_GET_PIPELINE_STATE,
+    EVENT_LEARN_LESSON,
+    EVENT_PROGRESS,
+    EVENT_READ_JOURNAL,
+    EVENT_RERUN_STEP,
+    EVENT_SEND_IMAGE,
+    EVENT_SKIP_STEP,
+    EVENT_START_AGENT,
+)
+from ai_squad.common.retry import is_transient_error
 from ai_squad.models import AgentStatus
 
 logger = logging.getLogger("ai-squad.adapter")
@@ -56,6 +70,7 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
         agents_dir: str | None = None,
         global_skills_dir: str | None = None,
     ) -> None:
+        super().__init__()
         self._timeout = timeout
         self._working_dir = working_dir
         self._model = model
@@ -63,83 +78,37 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
         self._agents_dir = agents_dir
         self._global_skills_dir = global_skills_dir
         self._status = AgentStatus.IDLE
-        self._human_needed_callback: Callable | None = None
-        # Sessoes ativas: conversation_id → session_id
+        self._human_needed_callback: Callable[..., Any] | None = None
         self._sessions: dict[str, str] = {}
-        # Definicoes de subagentes para o Squad Lead
         self._agent_definitions: dict[str, AgentDefinition] | None = None
-        # Nome do agente atual (para report_progress saber quem chamou)
         self._current_agent_name: str = ""
-        # Se True, redireciona stderr do subprocess para log (modo TUI)
-        self._stderr_to_log: bool = False
-
-        # Callbacks do engine (registrados via set_*_callback)
-        self._progress_callback: Callable | None = None
-        self._start_agent_callback: Callable | None = None
-        self._get_agents_callback: Callable | None = None
-        self._get_demand_state_callback: Callable | None = None
-        self._read_journal_callback: Callable | None = None
-        self._send_image_callback: Callable | None = None
-        self._learn_lesson_callback: Callable | None = None
-        self._get_pipeline_state_callback: Callable | None = None
-        self._advance_step_callback: Callable | None = None
-        self._skip_step_callback: Callable | None = None
-        self._rerun_step_callback: Callable | None = None
+        self._stderr_to_log: bool = True
 
         # MCP server com todas as tools
         self._mcp_server = self._create_mcp_server()
 
-    # --- Registro de callbacks ---
-
-    def set_progress_callback(self, callback: Callable) -> None:
-        """callback(agent_name: str, message: str) → awaitable"""
-        self._progress_callback = callback
-
-    def set_start_agent_callback(self, callback: Callable) -> None:
-        """callback(agent_name: str, task_description: str) → awaitable[str]"""
-        self._start_agent_callback = callback
-
-    def set_get_agents_callback(self, callback: Callable) -> None:
-        """callback() → awaitable[str]"""
-        self._get_agents_callback = callback
-
-    def set_get_demand_state_callback(self, callback: Callable) -> None:
-        """callback() → awaitable[str]"""
-        self._get_demand_state_callback = callback
-
-    def set_read_journal_callback(self, callback: Callable) -> None:
-        """callback() → awaitable[str]"""
-        self._read_journal_callback = callback
-
-    def set_send_image_callback(self, callback: Callable) -> None:
-        """callback(image_path: str, caption: str) → awaitable"""
-        self._send_image_callback = callback
-
-    def set_learn_lesson_callback(self, callback: Callable) -> None:
-        """callback(category, problem, solution) → awaitable"""
-        self._learn_lesson_callback = callback
-
-    def set_get_pipeline_state_callback(self, callback: Callable) -> None:
-        """callback() → awaitable[str]"""
-        self._get_pipeline_state_callback = callback
-
-    def set_advance_step_callback(self, callback: Callable) -> None:
-        """callback() → awaitable[str]"""
-        self._advance_step_callback = callback
-
-    def set_skip_step_callback(self, callback: Callable) -> None:
-        """callback(step_id: str) → awaitable[str]"""
-        self._skip_step_callback = callback
-
-    def set_rerun_step_callback(self, callback: Callable) -> None:
-        """callback(step_id: str) → awaitable[str]"""
-        self._rerun_step_callback = callback
-
     # --- MCP Server ---
 
     def _create_mcp_server(self) -> Any:
-        """Cria MCP server com todas as tools de delegacao."""
+        """Cria MCP server com tools de delegacao via callback registry."""
         adapter_ref = self
+
+        async def _emit_tool(
+            event: str, args: dict[str, Any], fallback: str = ""
+        ) -> dict[str, Any]:
+            """Handler genérico para tools que delegam via emit."""
+            if not adapter_ref._callbacks.has(event):
+                return {
+                    "content": [
+                        {"type": "text", "text": fallback or "Erro: callback nao configurado"}
+                    ]
+                }
+            try:
+                result = await adapter_ref.emit(event, **args)
+                text = result if isinstance(result, str) else "Ok."
+                return {"content": [{"type": "text", "text": text}]}
+            except Exception as e:
+                return {"content": [{"type": "text", "text": f"Erro: {e}"}]}
 
         @tool(
             "report_progress",
@@ -149,14 +118,11 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
             "Chame sempre que iniciar uma etapa importante.",
             {"message": str},
         )
-        async def report_progress_tool(args: dict) -> dict[str, Any]:
+        async def report_progress_tool(args: dict[str, Any]) -> dict[str, Any]:
             message = args.get("message", "")
-            if adapter_ref._progress_callback and message:
+            if message and adapter_ref._callbacks.has(EVENT_PROGRESS):
                 try:
-                    await adapter_ref._progress_callback(
-                        adapter_ref._current_agent_name,
-                        message,
-                    )
+                    await adapter_ref.emit(EVENT_PROGRESS, adapter_ref._current_agent_name, message)
                 except Exception as e:
                     logger.warning("Erro ao enviar progresso: %s", e)
             return {"content": [{"type": "text", "text": "Progresso reportado."}]}
@@ -165,174 +131,87 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
             "start_agent",
             "Inicia um agente em background para executar uma tarefa. "
             "O agente roda de forma independente e voce recebe o resultado quando ele concluir. "
-            "Use para delegar trabalho ao PO, Dev, QA ou qualquer outro agente do time. "
-            "Exemplo: start_agent('po', 'Especificar demanda: criar site pessoal')",
+            "Use para delegar trabalho ao PO, Dev, QA ou qualquer outro agente do time.",
             {"agent_name": str, "task_description": str},
         )
-        async def start_agent_tool(args: dict) -> dict[str, Any]:
-            agent_name = args.get("agent_name", "")
-            task = args.get("task_description", "")
-            if not adapter_ref._start_agent_callback:
-                return {"content": [{"type": "text", "text": "Erro: callback nao configurado"}]}
-            try:
-                result = await adapter_ref._start_agent_callback(agent_name, task)
-                return {"content": [{"type": "text", "text": result}]}
-            except Exception as e:
-                return {"content": [{"type": "text", "text": f"Erro: {e}"}]}
+        async def start_agent_tool(args: dict[str, Any]) -> dict[str, Any]:
+            return await _emit_tool(
+                EVENT_START_AGENT,
+                {
+                    "agent_name": args.get("agent_name", ""),
+                    "task_description": args.get("task_description", ""),
+                },
+            )
 
-        @tool(
-            "get_running_agents",
-            "Retorna o estado de todos os agentes do time. "
-            "Mostra quais estao rodando, concluidos ou com erro, "
-            "tempo decorrido e resultado resumido.",
-            {},
-        )
-        async def get_running_agents_tool(args: dict) -> dict[str, Any]:
-            if not adapter_ref._get_agents_callback:
-                return {"content": [{"type": "text", "text": "Nenhum agente registrado."}]}
-            try:
-                result = await adapter_ref._get_agents_callback()
-                return {"content": [{"type": "text", "text": result}]}
-            except Exception as e:
-                return {"content": [{"type": "text", "text": f"Erro: {e}"}]}
+        @tool("get_running_agents", "Retorna o estado de todos os agentes do time.", {})
+        async def get_running_agents_tool(args: dict[str, Any]) -> dict[str, Any]:
+            return await _emit_tool(EVENT_GET_AGENTS, {}, "Nenhum agente registrado.")
 
         @tool(
             "get_demand_state",
-            "Retorna o estado de todas as demandas ativas. "
-            "Mostra em qual fase cada demanda esta, qual agente esta rodando, "
-            "se ha demandas paradas e qual a proxima acao esperada. "
-            "Use ANTES de decidir qualquer acao para ter consciencia do contexto.",
+            "Retorna o estado de todas as demandas ativas. Use ANTES de decidir qualquer acao.",
             {},
         )
-        async def get_demand_state_tool(args: dict) -> dict[str, Any]:
-            if not adapter_ref._get_demand_state_callback:
-                return {"content": [{"type": "text", "text": "Nenhuma demanda registrada."}]}
-            try:
-                result = await adapter_ref._get_demand_state_callback()
-                return {"content": [{"type": "text", "text": result}]}
-            except Exception as e:
-                return {"content": [{"type": "text", "text": f"Erro: {e}"}]}
+        async def get_demand_state_tool(args: dict[str, Any]) -> dict[str, Any]:
+            return await _emit_tool(EVENT_GET_DEMAND_STATE, {}, "Nenhuma demanda registrada.")
 
         @tool(
             "read_journal",
-            "Retorna o historico de decisoes do Squad Lead para demandas ativas. "
-            "Mostra quais decisoes foram tomadas, qual o proximo passo esperado "
-            "e notas de contexto. Use para retomar processos parados.",
+            "Retorna o historico de decisoes do Squad Lead para demandas ativas.",
             {},
         )
-        async def read_journal_tool(args: dict) -> dict[str, Any]:
-            if not adapter_ref._read_journal_callback:
-                return {"content": [{"type": "text", "text": "Nenhum journal registrado."}]}
-            try:
-                result = await adapter_ref._read_journal_callback()
-                return {"content": [{"type": "text", "text": result}]}
-            except Exception as e:
-                return {"content": [{"type": "text", "text": f"Erro: {e}"}]}
+        async def read_journal_tool(args: dict[str, Any]) -> dict[str, Any]:
+            return await _emit_tool(EVENT_READ_JOURNAL, {}, "Nenhum journal registrado.")
 
         @tool(
             "send_image",
-            "Envia uma imagem/screenshot para o usuario via Telegram. "
-            "Use apos tirar um screenshot com playwright ou quando precisar "
-            "enviar qualquer imagem ao usuario. "
-            "Exemplo: send_image('/tmp/screenshot.png', 'Screenshot da pagina inicial')",
+            "Envia uma imagem/screenshot para o usuario via Telegram.",
             {"image_path": str, "caption": str},
         )
-        async def send_image_tool(args: dict) -> dict[str, Any]:
-            image_path = args.get("image_path", "")
-            caption = args.get("caption", "")
-            if not adapter_ref._send_image_callback:
-                return {"content": [{"type": "text", "text": "Erro: callback nao configurado"}]}
-            try:
-                await adapter_ref._send_image_callback(image_path, caption)
-                return {"content": [{"type": "text", "text": "Imagem enviada ao usuario."}]}
-            except Exception as e:
-                return {"content": [{"type": "text", "text": f"Erro ao enviar imagem: {e}"}]}
+        async def send_image_tool(args: dict[str, Any]) -> dict[str, Any]:
+            return await _emit_tool(
+                EVENT_SEND_IMAGE,
+                {
+                    "image_path": args.get("image_path", ""),
+                    "caption": args.get("caption", ""),
+                },
+            )
 
         @tool(
             "learn_lesson",
             "Registra uma licao aprendida para evitar o mesmo erro no futuro. "
-            "Use quando: um agente falhou e voce entendeu o porquê, "
-            "um retrabalho foi necessario, ou voce descobriu um padrao importante. "
             "Categorias: bug, retrabalho, timeout, padrao, processo.",
             {"category": str, "problem": str, "solution": str},
         )
-        async def learn_lesson_tool(args: dict) -> dict[str, Any]:
-            category = args.get("category", "")
-            problem = args.get("problem", "")
-            solution = args.get("solution", "")
-            if not adapter_ref._learn_lesson_callback:
-                return {"content": [{"type": "text", "text": "Erro: callback nao configurado"}]}
-            try:
-                await adapter_ref._learn_lesson_callback(category, problem, solution)
-                return {"content": [{"type": "text", "text": "Licao registrada."}]}
-            except Exception as e:
-                return {"content": [{"type": "text", "text": f"Erro: {e}"}]}
+        async def learn_lesson_tool(args: dict[str, Any]) -> dict[str, Any]:
+            return await _emit_tool(
+                EVENT_LEARN_LESSON,
+                {
+                    "category": args.get("category", ""),
+                    "problem": args.get("problem", ""),
+                    "solution": args.get("solution", ""),
+                },
+            )
 
-        @tool(
-            "get_pipeline_state",
-            "Retorna o estado completo do pipeline da demanda ativa. "
-            "Mostra cada step com status (pendente, rodando, concluido, falhou), "
-            "agentes alocados, quality gates e proximos passos. "
-            "Use ANTES de decidir qualquer acao para ter consciencia do fluxo.",
-            {},
-        )
-        async def get_pipeline_state_tool(args: dict) -> dict[str, Any]:
-            if not adapter_ref._get_pipeline_state_callback:
-                return {"content": [{"type": "text", "text": "Pipeline nao configurado."}]}
-            try:
-                result = await adapter_ref._get_pipeline_state_callback()
-                return {"content": [{"type": "text", "text": result}]}
-            except Exception as e:
-                return {"content": [{"type": "text", "text": f"Erro: {e}"}]}
+        @tool("get_pipeline_state", "Retorna o estado completo do pipeline da demanda ativa.", {})
+        async def get_pipeline_state_tool(args: dict[str, Any]) -> dict[str, Any]:
+            return await _emit_tool(EVENT_GET_PIPELINE_STATE, {}, "Pipeline nao configurado.")
 
-        @tool(
-            "advance_step",
-            "Avanca manualmente o pipeline para o proximo step. "
-            "Use quando quiser forcar o avanco sem esperar quality gate automatico.",
-            {},
-        )
-        async def advance_step_tool(args: dict) -> dict[str, Any]:
-            if not adapter_ref._advance_step_callback:
-                return {"content": [{"type": "text", "text": "Pipeline nao configurado."}]}
-            try:
-                result = await adapter_ref._advance_step_callback()
-                return {"content": [{"type": "text", "text": result}]}
-            except Exception as e:
-                return {"content": [{"type": "text", "text": f"Erro: {e}"}]}
+        @tool("advance_step", "Avanca manualmente o pipeline para o proximo step.", {})
+        async def advance_step_tool(args: dict[str, Any]) -> dict[str, Any]:
+            return await _emit_tool(EVENT_ADVANCE_STEP, {}, "Pipeline nao configurado.")
 
-        @tool(
-            "skip_step",
-            "Pula um step do pipeline. Use quando o step nao for necessario "
-            "ou quando quiser avancar sem executar. "
-            "Exemplo: skip_step('revisao') para pular code review.",
-            {"step_id": str},
-        )
-        async def skip_step_tool(args: dict) -> dict[str, Any]:
-            step_id = args.get("step_id", "")
-            if not adapter_ref._skip_step_callback:
-                return {"content": [{"type": "text", "text": "Pipeline nao configurado."}]}
-            try:
-                result = await adapter_ref._skip_step_callback(step_id)
-                return {"content": [{"type": "text", "text": result}]}
-            except Exception as e:
-                return {"content": [{"type": "text", "text": f"Erro: {e}"}]}
+        @tool("skip_step", "Pula um step do pipeline.", {"step_id": str})
+        async def skip_step_tool(args: dict[str, Any]) -> dict[str, Any]:
+            return await _emit_tool(
+                EVENT_SKIP_STEP, {"step_id": args.get("step_id", "")}, "Pipeline nao configurado."
+            )
 
-        @tool(
-            "rerun_step",
-            "Re-executa um step do pipeline. Use apos correcoes quando "
-            "quiser re-rodar um step que falhou. "
-            "Exemplo: rerun_step('implementacao') para re-rodar o dev.",
-            {"step_id": str},
-        )
-        async def rerun_step_tool(args: dict) -> dict[str, Any]:
-            step_id = args.get("step_id", "")
-            if not adapter_ref._rerun_step_callback:
-                return {"content": [{"type": "text", "text": "Pipeline nao configurado."}]}
-            try:
-                result = await adapter_ref._rerun_step_callback(step_id)
-                return {"content": [{"type": "text", "text": result}]}
-            except Exception as e:
-                return {"content": [{"type": "text", "text": f"Erro: {e}"}]}
+        @tool("rerun_step", "Re-executa um step do pipeline.", {"step_id": str})
+        async def rerun_step_tool(args: dict[str, Any]) -> dict[str, Any]:
+            return await _emit_tool(
+                EVENT_RERUN_STEP, {"step_id": args.get("step_id", "")}, "Pipeline nao configurado."
+            )
 
         return create_sdk_mcp_server(
             "ai-squad-tools",
@@ -353,13 +232,22 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
 
     # --- Configuracao ---
 
+    @property
+    def stderr_to_log(self) -> bool:
+        """Se stderr do subprocess deve ser redirecionado para log."""
+        return self._stderr_to_log
+
+    @stderr_to_log.setter
+    def stderr_to_log(self, value: bool) -> None:
+        self._stderr_to_log = value
+
     def set_agent_definitions(self, agents: dict[str, AgentDefinition]) -> None:
         """Define subagentes disponiveis para o Squad Lead."""
         self._agent_definitions = agents
 
     # --- Execucao ---
 
-    async def run(self, prompt: str, context: dict) -> str:
+    async def run(self, prompt: str, context: dict[str, Any]) -> str:
         """Executa Claude Agent SDK com prompt e contexto."""
         context = dict(context)
         self._status = AgentStatus.RUNNING
@@ -410,9 +298,8 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
             if model_override:
                 self._model = original_model
 
-    # Configuração de retry
+    # Configuração de retry (alinhado com common/retry)
     MAX_RETRIES = 3
-    RETRY_BASE_DELAY = 2  # segundos (backoff: 2, 4, 8)
 
     async def _execute_sdk(
         self,
@@ -479,20 +366,20 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
                 if isinstance(e, (asyncio.TimeoutError, TimeoutError)):
                     raise
 
-                # Outros erros: retry com backoff
-                if attempt < self.MAX_RETRIES:
-                    delay = self.RETRY_BASE_DELAY * (2**attempt)
-                    logger.warning(
-                        "[%s] Erro na execucao (tentativa %d/%d): %s. Retry em %ds...",
-                        agent_name,
-                        attempt + 1,
-                        self.MAX_RETRIES + 1,
-                        e,
-                        delay,
-                    )
-                    await asyncio.sleep(delay)
-                else:
+                # Outros erros: retry com backoff se transiente
+                if not is_transient_error(e) or attempt >= self.MAX_RETRIES:
                     raise
+
+                delay = 2 * (2**attempt)  # backoff: 2, 4, 8
+                logger.warning(
+                    "[%s] Erro transiente (tentativa %d/%d): %s. Retry em %ds...",
+                    agent_name,
+                    attempt + 1,
+                    self.MAX_RETRIES + 1,
+                    e,
+                    delay,
+                )
+                await asyncio.sleep(delay)
 
         # Nunca deve chegar aqui, mas para segurança
         raise last_error or RuntimeError("Falha apos todas as tentativas")
@@ -537,7 +424,7 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
         2. Agente: /app/agents/<agent_name>/ (skills + AGENTS.md)
         3. Globais: /app/global-skills/ (compartilhadas)
         """
-        dirs = []
+        dirs: list[str] = []
 
         # Skills do agente
         if agent_name and self._agents_dir:
@@ -560,14 +447,17 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
         agent_name: str = "",
     ) -> ClaudeAgentOptions:
         """Constroi opcoes do SDK. Retoma sessao se existir."""
-        kwargs: dict = {
+        kwargs: dict[str, Any] = {
             "max_turns": max_turns,
             "permission_mode": "bypassPermissions",
         }
 
         # Captura stderr do subprocess via callback (evita poluir o terminal no modo TUI)
         if self._stderr_to_log:
-            kwargs["stderr"] = lambda line: logger.debug("[claude-cli] %s", line.rstrip())
+            def _log_stderr(line: str) -> None:
+                logger.debug("[claude-cli] %s", line.rstrip())
+
+            kwargs["stderr"] = _log_stderr
 
         if self._working_dir:
             kwargs["cwd"] = Path(self._working_dir)
@@ -601,7 +491,7 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
 
         return ClaudeAgentOptions(**kwargs)
 
-    def _build_prompt(self, prompt: str, context: dict) -> str:
+    def _build_prompt(self, prompt: str, context: dict[str, Any]) -> str:
         """Monta prompt completo incluindo contexto."""
         return build_prompt(prompt, context)
 
@@ -621,7 +511,7 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
         """Retorna o status atual do adapter."""
         return self._status
 
-    def on_human_needed(self, callback: Callable) -> None:
+    def on_human_needed(self, callback: Callable[..., Any]) -> None:
         """Registra callback para intervencao humana."""
         self._human_needed_callback = callback
 

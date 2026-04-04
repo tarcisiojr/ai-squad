@@ -7,6 +7,7 @@ Quando o usuário reage com 👍 ou 👎, atualiza o score do documento.
 import logging
 import time
 from collections import OrderedDict
+from typing import Any
 
 logger = logging.getLogger("ai-squad.reactions")
 
@@ -33,7 +34,7 @@ class ReactionTracker:
     Não persiste entre restarts — aceitável porque reações chegam em minutos.
     """
 
-    def __init__(self, knowledge_store=None) -> None:
+    def __init__(self, knowledge_store: Any = None) -> None:
         """Inicializa tracker.
 
         Args:
@@ -108,7 +109,7 @@ class ReactionTracker:
     def _evict_expired(self) -> None:
         """Remove entries expiradas (mais antigas que TTL)."""
         now = time.time()
-        expired = []
+        expired: list[int] = []
         for msg_id, (_doc, timestamp) in self._msg_to_doc.items():
             if now - timestamp > MAPPING_TTL:
                 expired.append(msg_id)

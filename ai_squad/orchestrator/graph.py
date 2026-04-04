@@ -14,7 +14,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 logger = logging.getLogger("ai-squad.graph")
 
@@ -105,8 +105,8 @@ class GraphRelation:
 class TraversalResult:
     """Resultado de traversal no grafo."""
 
-    entities: list[dict] = field(default_factory=list)
-    relations: list[dict] = field(default_factory=list)
+    entities: list[dict[str, Any]] = field(default_factory=lambda: list[dict[str, Any]]())
+    relations: list[dict[str, Any]] = field(default_factory=lambda: list[dict[str, Any]]())
 
 
 class GraphStore:
@@ -381,10 +381,11 @@ class GraphStore:
             (root_id, depth),
         ).fetchall()
 
-        entity_ids = {row["id"] for row in rows}
-        entities = [dict(row) for row in rows]
+        entity_ids: set[Any] = {row["id"] for row in rows}
+        entities: list[dict[str, Any]] = [dict(row) for row in rows]  # type: ignore[arg-type]
 
         # Busca relações entre as entidades encontradas
+        relations: list[dict[str, Any]] = []
         if entity_ids:
             placeholders = ",".join("?" * len(entity_ids))
             rel_rows = conn.execute(
@@ -397,9 +398,7 @@ class GraphStore:
                 f"ORDER BY r.weight DESC",
                 list(entity_ids) + list(entity_ids),
             ).fetchall()
-            relations = [dict(row) for row in rel_rows]
-        else:
-            relations = []
+            relations = [dict(row) for row in rel_rows]  # type: ignore[arg-type]
 
         return TraversalResult(entities=entities, relations=relations)
 
@@ -411,7 +410,7 @@ class GraphStore:
         conn = self._get_conn()
 
         # Prepara query FTS5
-        words = []
+        words: list[str] = []
         for word in text.lower().split():
             clean = "".join(c for c in word if c.isalnum() or c == "-")
             if len(clean) >= 3:
@@ -443,8 +442,8 @@ class GraphStore:
             return TraversalResult()
 
         # Expande cada entidade com traversal depth=2
-        all_entities: dict[int, dict] = {}
-        all_relations: list[dict] = []
+        all_entities: dict[int, dict[str, Any]] = {}
+        all_relations: list[dict[str, Any]] = []
 
         for row in rows:
             result = self.traverse(row["name"], depth=2)
@@ -453,8 +452,8 @@ class GraphStore:
             all_relations.extend(result.relations)
 
         # Deduplica relações
-        seen_rels: set[tuple] = set()
-        unique_relations = []
+        seen_rels: set[tuple[Any, ...]] = set()
+        unique_relations: list[dict[str, Any]] = []
         for rel in all_relations:
             key = (rel["from_id"], rel["to_id"], rel["rel_type"])
             if key not in seen_rels:
@@ -471,7 +470,7 @@ class GraphStore:
             return ""
 
         # Agrupa relações por entidade de origem
-        rel_by_entity: dict[str, list[dict]] = {}
+        rel_by_entity: dict[str, list[dict[str, Any]]] = {}
         for rel in result.relations:
             from_name = rel.get("from_name", "")
             rel_by_entity.setdefault(from_name, []).append(rel)
@@ -500,7 +499,7 @@ class GraphStore:
 
         return "\n".join(parts)
 
-    def stats(self) -> dict:
+    def stats(self) -> dict[str, Any]:
         """Retorna métricas do grafo."""
         conn = self._get_conn()
         entity_count = conn.execute("SELECT COUNT(*) FROM entities").fetchone()[0]
@@ -513,7 +512,7 @@ class GraphStore:
         return {
             "entity_count": entity_count,
             "relation_count": relation_count,
-            "top_entities": [dict(r) for r in top_entities],
+            "top_entities": [dict(r) for r in top_entities],  # type: ignore[arg-type]
         }
 
     # --- Extração via LLM ---
@@ -578,7 +577,7 @@ class GraphStore:
             return ""
         return "\n".join(f"- {r['name']} ({r['type']})" for r in rows)
 
-    def _parse_extraction(self, raw: str) -> dict | None:
+    def _parse_extraction(self, raw: str) -> dict[str, Any] | None:
         """Parseia e valida JSON da extração LLM."""
         # Tenta extrair JSON do texto (pode ter texto antes/depois)
         raw = raw.strip()
@@ -595,36 +594,37 @@ class GraphStore:
             return None
 
         # Valida estrutura
-        entities = data.get("entities", [])
-        relations = data.get("relations", [])
+        entities: list[Any] = data.get("entities", [])
+        relations: list[Any] = data.get("relations", [])
 
         if not isinstance(entities, list) or not isinstance(relations, list):
             logger.warning("Estrutura inválida na extração")
             return None
 
         # Filtra entidades com tipos válidos
-        valid_entities = [
-            e
-            for e in entities
-            if isinstance(e, dict) and e.get("name") and e.get("type") in ENTITY_TYPES
-        ]
+        valid_entities: list[dict[str, Any]] = []
+        for raw_e in entities:
+            if not isinstance(raw_e, dict):
+                continue
+            ent = cast(dict[str, Any], raw_e)
+            if ent.get("name") and ent.get("type") in ENTITY_TYPES:
+                valid_entities.append(ent)
 
         # Filtra relações com tipos válidos
-        valid_relations = [
-            r
-            for r in relations
-            if isinstance(r, dict)
-            and r.get("from")
-            and r.get("to")
-            and r.get("type") in RELATION_TYPES
-        ]
+        valid_relations: list[dict[str, Any]] = []
+        for raw_r in relations:
+            if not isinstance(raw_r, dict):
+                continue
+            rel = cast(dict[str, Any], raw_r)
+            if rel.get("from") and rel.get("to") and rel.get("type") in RELATION_TYPES:
+                valid_relations.append(rel)
 
         if not valid_entities and not valid_relations:
             return None
 
         return {"entities": valid_entities, "relations": valid_relations}
 
-    def _persist_extraction(self, data: dict, demand_id: str) -> None:
+    def _persist_extraction(self, data: dict[str, Any], demand_id: str) -> None:
         """Persiste entidades e relações extraídas."""
         entity_types: dict[str, str] = {}
 

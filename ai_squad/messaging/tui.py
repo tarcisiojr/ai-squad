@@ -590,7 +590,7 @@ class SquadTUIApp:
                 if not personas:
                     return ""
                 frame = _SPINNER_FRAMES[self._spinner_tick % len(_SPINNER_FRAMES)]
-                parts = []
+                parts: list[str] = []
                 for key, persona in personas.items():
                     if key == "squad-lead":
                         continue

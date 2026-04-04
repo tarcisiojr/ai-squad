@@ -19,6 +19,7 @@ class IntegrationMockAdapter(AIAgentAdapter):
     """Adapter mock que simula execução de agentes."""
 
     def __init__(self):
+        super().__init__()
         self._status = AgentStatus.IDLE
         self._callback = None
 

@@ -173,7 +173,7 @@ class GChatMessageBus(MessageBus):
         Os prefixos (ex: '👨‍💼 Squad Lead', '⚙️ Dev Backend') permitem distinguir
         mensagens do bot das mensagens reais do usuário.
         """
-        prefixes = []
+        prefixes: list[str] = []
         for persona in personas.values():
             avatar = getattr(persona, "avatar", "")
             name = getattr(persona, "name", "")
@@ -491,6 +491,9 @@ class GChatMessageBus(MessageBus):
             if thread_id:
                 kwargs["messageReplyOption"] = "REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD"
 
+            if self._service is None:
+                logger.error("GChat service não inicializado")
+                return None
             result = await asyncio.to_thread(
                 self._service.spaces().messages().create(**kwargs).execute
             )
@@ -549,6 +552,8 @@ class GChatMessageBus(MessageBus):
             if thread_id:
                 kwargs["messageReplyOption"] = "REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD"
 
+            if self._service is None:
+                raise RuntimeError("GChat service não inicializado")
             await asyncio.to_thread(self._service.spaces().messages().create(**kwargs).execute)
         except Exception as e:
             logger.error("Erro ao enviar card de aprovação: %s", e)
@@ -617,6 +622,9 @@ class GChatMessageBus(MessageBus):
         }
 
         try:
+            if self._service is None:
+                logger.error("GChat service não inicializado")
+                return None
             result = await asyncio.to_thread(
                 self._service.spaces()
                 .messages()

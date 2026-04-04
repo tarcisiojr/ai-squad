@@ -8,9 +8,10 @@ import json
 import os
 import tempfile
 from pathlib import Path
+from typing import Any
 
 
-def write_json_atomic(path: Path, data: dict[str, object] | list[object]) -> None:
+def write_json_atomic(path: Path, data: dict[str, Any] | list[Any]) -> None:
     """Grava JSON atomicamente: temp + fsync + rename.
 
     Garante que o arquivo nunca fica corrompido mesmo em caso

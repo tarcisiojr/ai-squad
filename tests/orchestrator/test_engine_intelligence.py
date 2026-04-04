@@ -11,6 +11,7 @@ class MockAdapter(AIAgentAdapter):
     """Adapter mock para testes."""
 
     def __init__(self):
+        super().__init__()
         self._status = AgentStatus.IDLE
 
     async def run(self, prompt, context):
