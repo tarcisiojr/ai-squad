@@ -19,6 +19,9 @@ EVENT_ADVANCE_STEP = "advance_step"
 EVENT_SKIP_STEP = "skip_step"
 EVENT_RERUN_STEP = "rerun_step"
 EVENT_QUERY_GRAPH = "query_graph"
+EVENT_QUERY_LESSONS = "query_lessons"
+EVENT_QUERY_JOURNAL = "query_journal"
+EVENT_QUERY_DAILY_NOTES = "query_daily_notes"
 EVENT_HUMAN_NEEDED = "human_needed"
 
 

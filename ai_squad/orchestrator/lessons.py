@@ -244,6 +244,12 @@ class LessonsStore:
         conn = self._get_conn()
         return conn.execute("SELECT COUNT(*) FROM lessons").fetchone()[0]
 
+    def get_categories(self) -> list[str]:
+        """Retorna lista de categorias únicas de lições."""
+        conn = self._get_conn()
+        rows = conn.execute("SELECT DISTINCT category FROM lessons ORDER BY category").fetchall()
+        return [r[0] for r in rows if r[0]]
+
     def close(self) -> None:
         """Fecha conexao com o banco."""
         if self._conn:

@@ -337,6 +337,33 @@ class TestTriggerSquadLeadForAgentDeep:
         engine._agent_runner.schedule_auto_recovery.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_squad_lead_resposta_vazia_agenda_recovery(self, tmp_path):
+        """Resposta vazia do Squad Lead (timeout engolido) agenda auto-recovery."""
+        engine, adapter, bus = _make_engine(tmp_path)
+
+        # Faz run_squad_lead retornar vazio (simula timeout engolido)
+        engine.run_squad_lead = AsyncMock(return_value="")
+
+        running = RunningAgent(
+            agent_name="dev",
+            demand_id="d1",
+            user_id="u1",
+            status="done",
+        )
+
+        # Mock do auto-recovery
+        engine._agent_runner.schedule_auto_recovery = AsyncMock()
+
+        await engine._trigger_squad_lead_for_agent(running, "Resultado do agente")
+        await asyncio.sleep(0.05)
+
+        # Auto-recovery deve ter sido agendado (demanda não deve travar)
+        engine._agent_runner.schedule_auto_recovery.assert_called_once()
+        call_args = engine._agent_runner.schedule_auto_recovery.call_args
+        assert call_args[0][0] is running
+        assert "vazio" in call_args[0][1].lower()
+
+    @pytest.mark.asyncio
     async def test_alimenta_grafo_com_resultado(self, tmp_path):
         """Resultado do agente é ingerido no grafo (linhas 529-531)."""
         engine, _, bus = _make_engine(tmp_path)

@@ -17,7 +17,10 @@ from ai_squad.common.events import (
     EVENT_GET_PIPELINE_STATE,
     EVENT_LEARN_LESSON,
     EVENT_PROGRESS,
+    EVENT_QUERY_DAILY_NOTES,
     EVENT_QUERY_GRAPH,
+    EVENT_QUERY_JOURNAL,
+    EVENT_QUERY_LESSONS,
     EVENT_READ_JOURNAL,
     EVENT_RERUN_STEP,
     EVENT_SEND_IMAGE,
@@ -139,6 +142,31 @@ class SquadMCPToolsServer:
         )
         return "Licao registrada."
 
+    async def _query_lessons(self, args: dict[str, Any]) -> str:
+        if not self._callbacks.has(EVENT_QUERY_LESSONS):
+            return "Nenhuma licao disponivel."
+        return await self._callbacks.emit(
+            EVENT_QUERY_LESSONS,
+            args.get("tema", ""),
+            args.get("limit", 5),
+        )
+
+    async def _query_journal(self, args: dict[str, Any]) -> str:
+        if not self._callbacks.has(EVENT_QUERY_JOURNAL):
+            return "Nenhum journal disponivel."
+        return await self._callbacks.emit(
+            EVENT_QUERY_JOURNAL,
+            args.get("demand_id", None),
+        )
+
+    async def _query_daily_notes(self, args: dict[str, Any]) -> str:
+        if not self._callbacks.has(EVENT_QUERY_DAILY_NOTES):
+            return "Nenhuma nota disponivel."
+        return await self._callbacks.emit(
+            EVENT_QUERY_DAILY_NOTES,
+            args.get("days", 3),
+        )
+
     # Mapeamento tool_name → handler (class-level)
     _handlers: dict[str, Any] = {
         "report_progress": _report_progress,
@@ -153,6 +181,9 @@ class SquadMCPToolsServer:
         "send_image": _send_image,
         "learn_lesson": _learn_lesson,
         "query_knowledge_graph": _query_knowledge_graph,
+        "query_lessons": _query_lessons,
+        "query_journal": _query_journal,
+        "query_daily_notes": _query_daily_notes,
     }
 
 
@@ -256,6 +287,41 @@ _TOOL_DEFINITIONS: list[dict[str, Any]] = [
                 "query": {"type": "string", "description": "Termo para buscar no grafo"},
             },
             "required": ["query"],
+        },
+    },
+    {
+        "name": "query_lessons",
+        "description": "Consulta licoes aprendidas por tema. Retorna licoes relevantes via busca FTS5.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "tema": {"type": "string", "description": "Tema para buscar nas licoes"},
+                "limit": {"type": "integer", "description": "Numero maximo de licoes (padrao: 5)"},
+            },
+            "required": ["tema"],
+        },
+    },
+    {
+        "name": "query_journal",
+        "description": "Consulta decisoes do journal. Sem demand_id retorna resumo de todas as demandas ativas.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "demand_id": {
+                    "type": "string",
+                    "description": "ID da demanda (opcional, sem ele retorna todas)",
+                },
+            },
+        },
+    },
+    {
+        "name": "query_daily_notes",
+        "description": "Consulta notas diarias dos ultimos N dias.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "days": {"type": "integer", "description": "Numero de dias (padrao: 3)"},
+            },
         },
     },
 ]

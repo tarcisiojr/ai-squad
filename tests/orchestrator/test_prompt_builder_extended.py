@@ -119,16 +119,13 @@ def test_build_prompt_inclui_secoes_basicas() -> None:
         squad_md="# Squad Lead",
         agents_summary="## Agentes disponiveis",
         running_status="",
-        demand_state="",
         conversation_history="",
-        journal_summary="",
-        lessons_context="",
-        daily_notes_context="",
-        graph_context="",
+        memory_catalog="",
         knowledge_context="",
         pipeline_state="",
         workspace_context="",
         demand_text="Oi, tudo bem?",
+        unified_demand_state="",
     )
     assert "# Squad Lead" in result
     assert "## Agentes disponiveis" in result
@@ -142,19 +139,15 @@ def test_build_prompt_filtra_pipeline_vazio() -> None:
         squad_md="",
         agents_summary="agentes",
         running_status="",
-        demand_state="Nenhuma demanda ativa.",
         conversation_history="",
-        journal_summary="Nenhuma demanda ativa.",
-        lessons_context="",
-        daily_notes_context="",
-        graph_context="",
+        memory_catalog="",
         knowledge_context="",
         pipeline_state="Nenhuma demanda ativa.",
         workspace_context="",
         demand_text="teste",
+        unified_demand_state="",
     )
     assert "Estado das demandas" not in result
-    assert "Historico de decisoes" not in result
 
 
 def test_build_prompt_filtra_running_status_vazio() -> None:
@@ -163,16 +156,13 @@ def test_build_prompt_filtra_running_status_vazio() -> None:
         squad_md="",
         agents_summary="agentes",
         running_status="Nenhum agente ativo no momento.",
-        demand_state="",
         conversation_history="",
-        journal_summary="",
-        lessons_context="",
-        daily_notes_context="",
-        graph_context="",
+        memory_catalog="",
         knowledge_context="",
         pipeline_state="",
         workspace_context="",
         demand_text="teste",
+        unified_demand_state="",
     )
     assert "Estado atual dos agentes" not in result
 
@@ -183,24 +173,18 @@ def test_build_prompt_inclui_todas_secoes_quando_preenchidas() -> None:
         squad_md="# Squad",
         agents_summary="## Agentes",
         running_status="agente X rodando",
-        demand_state="demanda ativa",
         conversation_history="## Historico",
-        journal_summary="journal ativo",
-        lessons_context="## Licoes aprendidas",
-        daily_notes_context="## Notas diárias",
-        graph_context="## Grafo",
+        memory_catalog="## Memória disponível",
         knowledge_context="## Knowledge",
         pipeline_state="## Pipeline step 1",
         workspace_context="contexto ws",
         demand_text="minha demanda",
+        unified_demand_state="## Estado das demandas\n\ndemanda ativa",
     )
     assert "Estado atual dos agentes" in result
     assert "Estado das demandas" in result
-    assert "Historico de decisoes" in result
     assert "## Historico" in result
-    assert "## Licoes aprendidas" in result
-    assert "## Notas diárias" in result
-    assert "## Grafo" in result
+    assert "## Memória disponível" in result
     assert "## Knowledge" in result
     assert "## Pipeline step 1" in result
     assert "Contexto do Projeto" in result
@@ -214,16 +198,13 @@ def test_build_prompt_sem_squad_md() -> None:
         squad_md="",
         agents_summary="agentes",
         running_status="",
-        demand_state="",
         conversation_history="",
-        journal_summary="",
-        lessons_context="",
-        daily_notes_context="",
-        graph_context="",
+        memory_catalog="",
         knowledge_context="",
         pipeline_state="",
         workspace_context="",
         demand_text="ola",
+        unified_demand_state="",
     )
     # Não deve ter seções vazias consecutivas desnecessárias
     assert result.startswith("agentes")

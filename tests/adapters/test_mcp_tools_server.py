@@ -243,10 +243,10 @@ class TestGetToolDefinitions:
     """Verifica que get_tool_definitions retorna todas as tools."""
 
     def test_retorna_todas_as_tools(self, server: SquadMCPToolsServer) -> None:
-        """Deve retornar definições de todas as 12 tools."""
+        """Deve retornar definições de todas as 15 tools."""
         defs = server.get_tool_definitions()
         assert isinstance(defs, list)
-        assert len(defs) == 12
+        assert len(defs) == 15
 
     def test_cada_definicao_tem_campos_obrigatorios(self, server: SquadMCPToolsServer) -> None:
         """Cada definição deve ter name, description e inputSchema."""

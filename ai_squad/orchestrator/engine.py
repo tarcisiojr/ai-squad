@@ -25,9 +25,10 @@ from ai_squad.orchestrator.pipeline import PipelineLoader
 from ai_squad.orchestrator.pipeline_handler import PipelineHandler
 from ai_squad.orchestrator.pipeline_state import PipelineExecutor
 from ai_squad.orchestrator.prompt_builder import (
+    build_memory_catalog,
     build_squad_lead_prompt,
+    build_unified_demand_state,
     get_agents_summary,
-    get_graph_context,
     get_knowledge_context,
     get_workspace_context_cached,
     read_agents_md_cached,
@@ -189,7 +190,10 @@ class OrchestrationEngine:
             EVENT_GET_PIPELINE_STATE,
             EVENT_LEARN_LESSON,
             EVENT_PROGRESS,
+            EVENT_QUERY_DAILY_NOTES,
             EVENT_QUERY_GRAPH,
+            EVENT_QUERY_JOURNAL,
+            EVENT_QUERY_LESSONS,
             EVENT_READ_JOURNAL,
             EVENT_RERUN_STEP,
             EVENT_SEND_IMAGE,
@@ -210,6 +214,9 @@ class OrchestrationEngine:
         self._adapter.on(EVENT_SKIP_STEP, self._pipeline_handler.handle_skip_step)
         self._adapter.on(EVENT_RERUN_STEP, self._pipeline_handler.handle_rerun_step)
         self._adapter.on(EVENT_QUERY_GRAPH, self._handle_query_graph)
+        self._adapter.on(EVENT_QUERY_LESSONS, self._handle_query_lessons)
+        self._adapter.on(EVENT_QUERY_JOURNAL, self._handle_query_journal)
+        self._adapter.on(EVENT_QUERY_DAILY_NOTES, self._handle_query_daily_notes)
 
         # Registra callback de sumarização no conversation store
         self._conversation.set_summarize_callback(self._summarize_via_llm)
@@ -476,6 +483,46 @@ class OrchestrationEngine:
             return f"Nenhum conhecimento encontrado no grafo para: {query}"
         return result
 
+    async def _handle_query_lessons(self, tema: str, limit: int = 5) -> str:
+        """Callback da MCP tool query_lessons — consulta lições por tema."""
+        if not tema:
+            return "Informe um tema para buscar nas licoes."
+        lessons = self._lessons.get_relevant(tema)
+        if not lessons:
+            return f"Nenhuma licao encontrada sobre: {tema}"
+        lessons = lessons[:limit]
+        partes = [f"Licoes sobre '{tema}' ({len(lessons)} resultado(s)):\n"]
+        for lesson in lessons:
+            agent = lesson.get("agent_name", "")
+            agent_info = f" ({agent})" if agent else ""
+            partes.append(
+                f"- **{lesson['category']}**{agent_info}: "
+                f"{lesson['problem']} → {lesson['solution']}"
+            )
+        return "\n".join(partes)
+
+    async def _handle_query_journal(self, demand_id: str | None = None) -> str:
+        """Callback da MCP tool query_journal — consulta decisões do journal."""
+        if demand_id:
+            journal = self._journal.read(demand_id)
+            if not journal:
+                return f"Nenhum journal encontrado para demanda: {demand_id}"
+            decisions = journal.get("decisions", [])
+            if not decisions:
+                return f"Demanda {demand_id}: nenhuma decisao registrada."
+            lines = [f"Decisoes da demanda {demand_id}:"]
+            for d in decisions[-10:]:
+                lines.append(f"  - {d.get('action', '?')}: {d.get('detail', '')}")
+            return "\n".join(lines)
+        return self._journal.get_active_summaries()
+
+    async def _handle_query_daily_notes(self, days: int = 3) -> str:
+        """Callback da MCP tool query_daily_notes — consulta notas recentes."""
+        result = self._daily_notes.load_recent(days)
+        if not result:
+            return "Nenhuma nota diaria disponivel."
+        return result
+
     async def _handle_send_image(self, image_path: str, caption: str = "") -> None:
         """Callback da MCP tool send_image — envia imagem ao usuario via mensageria.
 
@@ -515,7 +562,11 @@ class OrchestrationEngine:
         running: RunningAgent,
         event_context: str,
     ) -> None:
-        """Dispara Squad Lead com contexto do agente que concluiu."""
+        """Dispara Squad Lead com contexto do agente que concluiu.
+
+        Se o Squad Lead falhar (exceção) ou retornar vazio (timeout engolido),
+        agenda auto-recovery para evitar que a demanda trave.
+        """
         user_id = running.user_id or self._default_user_id
         demand_id = running.demand_id or self._default_demand_id
         thread_id = running.thread_id
@@ -531,7 +582,22 @@ class OrchestrationEngine:
             await self._graph.ingest(agent_text, demand_id)
 
         try:
-            await self.run_squad_lead(demand_id, user_id, event_context, thread_id=thread_id)
+            resposta = await self.run_squad_lead(
+                demand_id, user_id, event_context, thread_id=thread_id
+            )
+            # Resposta vazia = timeout engolido ou falha silenciosa.
+            # O usuário já foi notificado, mas a demanda travaria sem recovery.
+            if not resposta:
+                logger.warning(
+                    "Squad Lead retornou vazio para agente %s — agendando recovery",
+                    running.agent_name,
+                )
+                asyncio.create_task(
+                    self._agent_runner.schedule_auto_recovery(
+                        running,
+                        f"Squad Lead retornou vazio ao processar resultado de {running.agent_name}",
+                    )
+                )
         except Exception as e:
             logger.error("Erro ao disparar Squad Lead para agente %s: %s", running.agent_name, e)
             # NÃO re-raise — run_squad_lead já notificou o usuário.
@@ -585,37 +651,58 @@ class OrchestrationEngine:
         demand_id: str,
         demand_text: str,
     ) -> str:
-        """Wrapper fino — coleta dados e delega ao prompt_builder."""
+        """Monta prompt do Squad Lead usando ContextBudget para controle de tokens."""
+        from ai_squad.orchestrator.context_budget import ContextBudget
+
+        budget = ContextBudget(total_budget=ContextBudget.BUDGET_SQUAD_LEAD)
+
+        # Coleta todos os componentes
         squad_md = read_agents_md_cached("squad-lead", self._agents_dir)
         agents_summary = self._get_agents_summary()
         running_status = self._get_running_agents_status()
-        demand_state = self._get_demand_state_summary()
         conversation_history = self._conversation.format_history_for_prompt(demand_id)
-        journal_summary = self._journal.get_active_summaries()
-        lessons_context = self._lessons.format_for_prompt(demand_text)
-        daily_notes_context = self._daily_notes.load_recent()
-        graph_ctx = get_graph_context(self._graph, demand_text)
         knowledge_ctx = get_knowledge_context(self._knowledge, demand_text)
         pipeline_state = ""
         if self._pipeline_executor:
             pipeline_state = self._pipeline_executor.format_state_for_prompt(demand_id)
         workspace_context = get_workspace_context_cached(self._context_collector, self._workspace)
 
-        return build_squad_lead_prompt(
+        unified_state = build_unified_demand_state(
+            self._journal,
+            self._state_manager,
+            self._agent_runner.running_agents,
+            self._personas,
+        )
+
+        memory_catalog = build_memory_catalog(
+            self._lessons,
+            self._journal,
+            self._daily_notes,
+        )
+
+        # Monta prompt via build_squad_lead_prompt (preserva formato + regras)
+        prompt = build_squad_lead_prompt(
             squad_md=squad_md,
             agents_summary=agents_summary,
             running_status=running_status,
-            demand_state=demand_state,
             conversation_history=conversation_history,
-            journal_summary=journal_summary,
-            lessons_context=lessons_context,
-            daily_notes_context=daily_notes_context,
-            graph_context=graph_ctx,
+            memory_catalog=memory_catalog,
             knowledge_context=knowledge_ctx,
             pipeline_state=pipeline_state,
             workspace_context=workspace_context,
             demand_text=demand_text,
+            unified_demand_state=unified_state,
         )
+
+        # Loga estimativa de tokens para monitoramento
+        estimated = budget.estimate_tokens(prompt)
+        logger.info(
+            "Squad Lead prompt: ~%d tokens estimados (budget: %d)",
+            estimated,
+            budget.total_budget,
+        )
+
+        return prompt
 
     async def run_squad_lead(
         self,
@@ -907,6 +994,17 @@ class OrchestrationEngine:
         last_progress_sent: int = 0
         last_progress_time: float = 0.0
         try:
+            # Feedback imediato para o usuário não esperar 30s sem saber o que está acontecendo
+            try:
+                await self._message_bus.send_message(
+                    user_id,
+                    f"Analisando...",
+                    sender=label,  # type: ignore[call-arg]
+                    thread_id=thread_id,
+                )
+            except Exception:
+                pass
+
             while True:
                 try:
                     if hasattr(self._message_bus, "send_typing"):

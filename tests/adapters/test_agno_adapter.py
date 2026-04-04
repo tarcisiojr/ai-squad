@@ -267,12 +267,12 @@ class TestResolveSkills:
 class TestGenerateTools:
     """Testes para geração dinâmica de tools."""
 
-    def test_gera_12_tools(self):
+    def test_gera_15_tools(self):
         from ai_squad.adapters.agno_adapter import AgnoAdapter
 
         adapter = AgnoAdapter()
         tools = adapter._generate_tools()
-        assert len(tools) == 12
+        assert len(tools) == 15
 
     def test_nomes_corretos(self):
         from ai_squad.adapters.agno_adapter import AgnoAdapter
@@ -484,7 +484,7 @@ class TestMCPToolsServer:
 
     def test_get_tool_definitions(self, server):
         defs = server.get_tool_definitions()
-        assert len(defs) == 12
+        assert len(defs) == 15
         names = {d["name"] for d in defs}
         assert "report_progress" in names
         assert "start_agent" in names

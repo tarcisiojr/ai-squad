@@ -25,6 +25,9 @@ from ai_squad.common.events import (
     EVENT_GET_PIPELINE_STATE,
     EVENT_LEARN_LESSON,
     EVENT_PROGRESS,
+    EVENT_QUERY_DAILY_NOTES,
+    EVENT_QUERY_JOURNAL,
+    EVENT_QUERY_LESSONS,
     EVENT_READ_JOURNAL,
     EVENT_RERUN_STEP,
     EVENT_SEND_IMAGE,
@@ -49,6 +52,9 @@ _TOOL_NAMES = [
     "read_journal",
     "send_image",
     "learn_lesson",
+    "query_lessons",
+    "query_journal",
+    "query_daily_notes",
 ]
 
 
@@ -213,6 +219,42 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
                 EVENT_RERUN_STEP, {"step_id": args.get("step_id", "")}, "Pipeline nao configurado."
             )
 
+        @tool(
+            "query_lessons",
+            "Consulta licoes aprendidas por tema. Retorna licoes relevantes via busca FTS5.",
+            {"tema": str, "limit": int},
+        )
+        async def query_lessons_tool(args: dict[str, Any]) -> dict[str, Any]:
+            return await _emit_tool(
+                EVENT_QUERY_LESSONS,
+                {"tema": args.get("tema", ""), "limit": args.get("limit", 5)},
+                "Nenhuma licao disponivel.",
+            )
+
+        @tool(
+            "query_journal",
+            "Consulta decisoes do journal. Sem demand_id retorna todas as demandas ativas.",
+            {"demand_id": str},
+        )
+        async def query_journal_tool(args: dict[str, Any]) -> dict[str, Any]:
+            return await _emit_tool(
+                EVENT_QUERY_JOURNAL,
+                {"demand_id": args.get("demand_id", None)},
+                "Nenhum journal disponivel.",
+            )
+
+        @tool(
+            "query_daily_notes",
+            "Consulta notas diarias dos ultimos N dias.",
+            {"days": int},
+        )
+        async def query_daily_notes_tool(args: dict[str, Any]) -> dict[str, Any]:
+            return await _emit_tool(
+                EVENT_QUERY_DAILY_NOTES,
+                {"days": args.get("days", 3)},
+                "Nenhuma nota disponivel.",
+            )
+
         return create_sdk_mcp_server(
             "ai-squad-tools",
             tools=[
@@ -227,6 +269,9 @@ class ClaudeAgentSDKAdapter(AIAgentAdapter):
                 read_journal_tool,
                 send_image_tool,
                 learn_lesson_tool,
+                query_lessons_tool,
+                query_journal_tool,
+                query_daily_notes_tool,
             ],
         )
 

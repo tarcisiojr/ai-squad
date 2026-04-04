@@ -6,9 +6,11 @@ from typing import Any
 
 from ai_squad.factory import AgentConfig
 from ai_squad.orchestrator.context import WorkspaceContextCollector
+from ai_squad.orchestrator.daily_notes import DailyNotes
 from ai_squad.orchestrator.graph import GraphStore
 from ai_squad.orchestrator.journal import JournalStore
 from ai_squad.orchestrator.knowledge import KnowledgeStore
+from ai_squad.orchestrator.lessons import LessonsStore
 from ai_squad.orchestrator.state import StateManager
 from ai_squad.orchestrator.tools import RunningAgent
 
@@ -208,6 +210,135 @@ def get_demand_state_summary(
     return "\n".join(lines)
 
 
+def build_unified_demand_state(
+    journal: JournalStore,
+    state_manager: StateManager,
+    running_agents: dict[str, Any],
+    personas: dict[str, Any],
+) -> str:
+    """Monta seção unificada de estado que combina demand_state + journal.
+
+    Substitui as injeções separadas de demand_state e journal_summary,
+    eliminando duplicação de informação no prompt do Squad Lead.
+    Inclui: status atual, decisões-chave (últimas 5) e agentes ativos.
+    """
+    active_journals = journal.get_active_journals()
+
+    if not active_journals:
+        try:
+            pending = state_manager.get_pending_demands()
+            if not pending:
+                return ""
+            lines = ["## Estado das demandas\n", "Demandas ativas:"]
+            for d in pending:
+                state = d.get("state", "?")
+                lines.append(f"  - {d['demand_id']}: {state}")
+            return "\n".join(lines)
+        except Exception:
+            return ""
+
+    lines = [f"## Estado das demandas\n\n{len(active_journals)} demanda(s) ativa(s):\n"]
+    for j in active_journals:
+        demand_id = j.get("demand_id", "?")
+        demand_text = j.get("demand_text", "?")
+        phase = j.get("current_phase", "?")
+        next_expected = j.get("next_expected")
+
+        lines.append(f"### {demand_id}")
+        lines.append(f"  Demanda: {demand_text}")
+        lines.append(f"  Fase: {phase}")
+        if next_expected:
+            desc = next_expected.get("description", "")
+            agent = next_expected.get("agent", "")
+            if desc:
+                lines.append(f"  Proximo: {desc}")
+            if agent:
+                label = get_agent_label(agent, personas)
+                lines.append(f"  Agente esperado: {label}")
+
+        # Agentes rodando para esta demanda
+        running = [
+            ra
+            for ra in running_agents.values()
+            if ra.demand_id == demand_id and ra.status == "running"
+        ]
+        if running:
+            for ra in running:
+                label = get_agent_label(ra.agent_name, personas)
+                lines.append(f"  Agente ativo: {label} ({ra.elapsed_str()})")
+
+        # Decisões-chave (últimas 5 — comprimidas em bullet points)
+        decisions = j.get("decisions", [])
+        if decisions:
+            recent_decisions = decisions[-5:]
+            lines.append("  Decisoes recentes:")
+            for d in recent_decisions:
+                action = d.get("action", "?")
+                detail = d.get("detail", "")
+                if detail:
+                    lines.append(f"    - {action}: {detail[:100]}")
+                else:
+                    lines.append(f"    - {action}")
+
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def build_memory_catalog(
+    lessons: LessonsStore,
+    journal: JournalStore,
+    daily_notes: DailyNotes,
+) -> str:
+    """Gera catálogo mínimo de memória para injeção no prompt.
+
+    Em vez de injetar todo o conteúdo de lessons/journal/daily_notes,
+    lista apenas temas/contagens para que o Squad Lead consulte on-demand
+    via tools query_lessons/query_journal/query_daily_notes.
+    """
+    parts: list[str] = ["## Memória disponível (consulte sob demanda)\n"]
+
+    # Lições: quantidade e categorias disponíveis
+    lesson_count = lessons.count()
+    if lesson_count > 0:
+        categories = lessons.get_categories()
+        cats_str = ", ".join(categories[:10]) if categories else "geral"
+        parts.append(
+            f"- **Lições** ({lesson_count}): temas: {cats_str}. "
+            f"Use `query_lessons(tema)` para detalhes."
+        )
+
+    # Journal: demandas ativas
+    active_journals = journal.get_active_journals()
+    if active_journals:
+        demand_ids = [j.get("demand_id", "?") for j in active_journals]
+        demands_str = ", ".join(f"#{d}" for d in demand_ids[:5])
+        parts.append(
+            f"- **Journal** ({len(active_journals)} ativa(s)): {demands_str}. "
+            f"Use `query_journal(demand_id)` para decisões."
+        )
+
+    # Daily notes: dias disponíveis
+    from datetime import datetime, timedelta, timezone
+
+    today = datetime.now(timezone.utc).date()
+    available_days = 0
+    for i in range(daily_notes.DAYS_TO_INJECT):
+        day = today - timedelta(days=i)
+        if daily_notes.load_day(day):
+            available_days += 1
+    if available_days > 0:
+        parts.append(
+            f"- **Notas diárias** (últimos {available_days} dia(s)). "
+            f"Use `query_daily_notes(days)` para consultar."
+        )
+
+    if len(parts) == 1:
+        return ""
+
+    return "\n".join(parts)
+
+
 def read_agents_md_cached(agent_name: str, agents_dir: Path) -> str:
     """Le o AGENTS.md com cache TTL para evitar I/O repetitivo."""
     key = f"{agent_name}:{agents_dir}"
@@ -245,21 +376,21 @@ def build_squad_lead_prompt(
     squad_md: str,
     agents_summary: str,
     running_status: str,
-    demand_state: str,
     conversation_history: str,
-    journal_summary: str,
-    lessons_context: str,
-    daily_notes_context: str,
-    graph_context: str,
+    memory_catalog: str,
     knowledge_context: str,
     pipeline_state: str,
     workspace_context: str,
     demand_text: str,
+    unified_demand_state: str,
 ) -> str:
     """Monta o prompt completo para o Squad Lead.
 
     Recebe todas as partes de contexto já resolvidas e monta um prompt
     estruturado. Filtra seções vazias automaticamente.
+
+    Contexto de demanda é unificado (demand_state + journal em uma só seção).
+    Memória (lessons, daily_notes, graph) é via catálogo on-demand.
     """
     prompt_parts: list[str] = []
 
@@ -277,33 +408,21 @@ def build_squad_lead_prompt(
     if running_status and running_status != "Nenhum agente ativo no momento.":
         prompt_parts.append(f"## Estado atual dos agentes\n\n{running_status}")
 
-    # Estado de demandas ativas (filtra se vazio)
-    if demand_state and demand_state != "Nenhuma demanda ativa.":
-        prompt_parts.append(f"## Estado das demandas\n\n{demand_state}")
-
-    # Journal (histórico de decisões)
-    if journal_summary and journal_summary != "Nenhuma demanda ativa.":
-        prompt_parts.append(f"## Historico de decisoes (Journal)\n\n{journal_summary}")
+    # Estado de demandas — seção unificada (demand_state + journal + decisões)
+    if unified_demand_state:
+        prompt_parts.append(unified_demand_state)
 
     # Histórico de conversa
     if conversation_history:
         prompt_parts.append(conversation_history)
 
-    # Lições aprendidas
-    if lessons_context:
-        prompt_parts.append(lessons_context)
+    # Catálogo de memória (lessons, journal, daily_notes — consulta on-demand)
+    if memory_catalog:
+        prompt_parts.append(memory_catalog)
 
     # Knowledge base (preset helpdesk)
     if knowledge_context:
         prompt_parts.append(knowledge_context)
-
-    # Grafo de conhecimento
-    if graph_context:
-        prompt_parts.append(graph_context)
-
-    # Notas diárias
-    if daily_notes_context:
-        prompt_parts.append(daily_notes_context)
 
     # Pipeline (filtra se vazio ou sem demanda ativa)
     if pipeline_state and pipeline_state != "Nenhuma demanda ativa.":

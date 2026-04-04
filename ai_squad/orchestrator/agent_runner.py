@@ -32,7 +32,7 @@ from ai_squad.orchestrator.prompt_builder import (
     read_agents_md,
 )
 from ai_squad.orchestrator.state import StateManager
-from ai_squad.orchestrator.tools import RunningAgent
+from ai_squad.orchestrator.tools import RunningAgent, SessionManager
 
 logger = logging.getLogger("ai-squad.agent-runner")
 
@@ -118,6 +118,9 @@ class AgentRunner:
         self._consecutive_failures: int = 0
         self._CIRCUIT_BREAKER_THRESHOLD: int = 3
         self._circuit_open: bool = False
+
+        # Sessões quentes: preserva contexto entre delegações
+        self._session_manager = SessionManager()
 
     @property
     def running_agents(self) -> dict[str, RunningAgent]:
@@ -254,27 +257,59 @@ class AgentRunner:
         demand_id: str,
         user_id: str,
     ) -> str:
-        """Executa o trabalho do agente — roda em background task."""
-        agents_md = self._read_agents_md(agent_name)
+        """Executa o trabalho do agente — roda em background task.
+
+        Usa sessão quente quando disponível: se o agente já foi invocado
+        nesta demanda, reutiliza contexto já carregado em vez de reconstruir.
+        """
+        from ai_squad.orchestrator.context_budget import ContextBudget
+
+        session, is_new = self._session_manager.get_or_create(agent_name, demand_id)
         timeout = self._get_agent_timeout(agent_name)
-
-        # Injeta licoes aprendidas relevantes no prompt do agente
-        lessons = self._ctx.lessons.format_for_prompt(prompt)
-        if lessons:
-            agents_md = f"{agents_md}\n\n{lessons}"
-
-        # Injeta contexto relacional do grafo de conhecimento
-        graph_context = self._ctx.graph.format_for_prompt(prompt)
-        if graph_context:
-            agents_md = f"{agents_md}\n\n{graph_context}"
 
         context: dict[str, Any] = {
             "demand_id": demand_id,
             "agent_name": agent_name,
             "fase": "execucao",
-            "system_instructions": agents_md,
             "timeout": timeout,
         }
+
+        if is_new or not session.context_loaded:
+            # Sessão nova: monta contexto completo
+            agents_md = self._read_agents_md(agent_name)
+            context["system_instructions"] = agents_md
+
+            # Coleta contexto do projeto + submodulos do agente
+            persona = self._ctx.personas.get(agent_name)
+            submodule_paths: list[str] = []
+            if persona and hasattr(persona, "submodules") and persona.submodules:
+                submodule_paths = [sub.path for sub in persona.submodules if sub.path]
+                logger.info("[%s] Submodulos: %s", agent_name, submodule_paths)
+
+            context_parts: list[str] = []
+            if submodule_paths:
+                for sub_path in submodule_paths:
+                    sub_ctx = self._ctx.context_collector.collect(submodule_path=sub_path)
+                    if sub_ctx:
+                        context_parts.append(sub_ctx)
+            else:
+                base_ctx = self._ctx.context_collector.collect()
+                if base_ctx:
+                    context_parts.append(base_ctx)
+
+            if context_parts:
+                context["workspace_context"] = "\n\n".join(context_parts)
+
+            session.context_loaded = True
+            logger.info("[%s] Sessão nova — contexto completo montado", agent_name)
+        else:
+            # Sessão quente: contexto já carregado, envia apenas a tarefa
+            logger.info(
+                "[%s] Sessão quente reutilizada (turn %d, inativo %ds)",
+                agent_name,
+                session.turn_count,
+                int(time.time() - session.last_active),
+            )
 
         # Resolve modelo pelo model_tier do step do pipeline
         model_override = self._resolve_model_for_agent(agent_name, demand_id)
@@ -283,32 +318,27 @@ class AgentRunner:
 
         logger.info("[%s] Timeout configurado: %ds", agent_name, timeout)
 
-        # Coleta contexto do projeto + submodulos do agente
-        persona = self._ctx.personas.get(agent_name)
-        submodule_paths: list[str] = []
-        if persona and hasattr(persona, "submodules") and persona.submodules:
-            submodule_paths = [sub.path for sub in persona.submodules if sub.path]
-            logger.info("[%s] Submodulos: %s", agent_name, submodule_paths)
-
-        # Coleta contexto de cada submodulo
-        context_parts: list[str] = []
-        if submodule_paths:
-            for sub_path in submodule_paths:
-                sub_ctx = self._ctx.context_collector.collect(submodule_path=sub_path)
-                if sub_ctx:
-                    context_parts.append(sub_ctx)
-        else:
-            base_ctx = self._ctx.context_collector.collect()
-            if base_ctx:
-                context_parts.append(base_ctx)
-
-        if context_parts:
-            context["workspace_context"] = "\n\n".join(context_parts)
-
         # Cria diretorio de specs (apenas para agentes de trabalho, não para squad-lead)
         if agent_name != "squad-lead":
             specs_dir = Path(self._ctx.workspace) / "specs" / demand_id
             specs_dir.mkdir(parents=True, exist_ok=True)
+
+        # Loga estimativa de tokens do contexto do agente
+        ctx_size = sum(
+            ContextBudget.estimate_tokens(str(v))
+            for k, v in context.items()
+            if k in ("system_instructions", "workspace_context")
+        )
+        prompt_size = ContextBudget.estimate_tokens(prompt)
+        session_label = "nova" if is_new else f"quente (turn {session.turn_count})"
+        logger.info(
+            "[%s] Prompt: ~%d tok (ctx: ~%d, task: ~%d, sessão: %s)",
+            agent_name,
+            ctx_size + prompt_size,
+            ctx_size,
+            prompt_size,
+            session_label,
+        )
 
         # Inicia typing + feedback background para este agente
         typing_task = asyncio.create_task(self._keep_typing_and_feedback(user_id, agent_name))
